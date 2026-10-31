@@ -4,6 +4,14 @@ Release notes are generated automatically from Conventional Commits.
 
 Historical manually maintained release notes remain in `api/CHANGELOG.md` and `api/DEV-CHANGELOG.md`.
 
+# [2.1.0-dev.2](https://github.com/Jman-Github/Universal-Patch-Manager/compare/v2.1.0-dev.1...v2.1.0-dev.2) (2026-10-31)
+
+
+### Features
+
+* **manager:** refine controls, dialogs, and notifications ([d8e5b94](https://github.com/Jman-Github/Universal-Patch-Manager/commit/d8e5b94650d4036c5e85a7e149278c36d850a74b)), closes [#812](https://github.com/Jman-Github/Universal-Patch-Manager/issues/812) [#813](https://github.com/Jman-Github/Universal-Patch-Manager/issues/813) [#814](https://github.com/Jman-Github/Universal-Patch-Manager/issues/814)
+* **ui:** add action controls and APK browser search ([9e268f9](https://github.com/Jman-Github/Universal-Patch-Manager/commit/9e268f913feed1d81b21b6d0fb4660a7002f0a1f)), closes [#606](https://github.com/Jman-Github/Universal-Patch-Manager/issues/606)
+
 # [2.1.0-dev.1](https://github.com/Jman-Github/Universal-Patch-Manager/compare/v2.0.0...v2.1.0-dev.1) (2026-10-31)
 
 
