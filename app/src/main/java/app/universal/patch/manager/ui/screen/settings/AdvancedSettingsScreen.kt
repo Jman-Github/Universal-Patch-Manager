@@ -3580,7 +3580,7 @@ private fun SelectionActionPreviewRow(
 }
 
 @Composable
-private fun SelectionActionPreviewChip(
+internal fun SelectionActionPreviewChip(
     icon: ImageVector,
     label: String,
     hidden: Boolean = false,

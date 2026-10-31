@@ -21,6 +21,7 @@ abstract class PatcherClassMergerCompatTransform : TransformAction<TransformPara
         val input = inputArtifact.get().asFile
         val affected = setOf(
             "morphe-patcher-2.0.1.jar",
+            "morphe-patcher-2.1.0.jar",
             "revanced-patcher-19.3.1.jar",
             "revanced-patcher-21.1.0-dev.5.jar",
             "patcher-jvm-22.0.2-dev.1.jar"

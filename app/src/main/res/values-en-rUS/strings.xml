@@ -2572,7 +2572,10 @@ Details: %2$s</string>
     <string name="source_search_browser_description">Find an APK using your browser</string>
     <string name="dashboard_apps_actions">Apps tab buttons</string>
     <string name="dashboard_bundles_actions">Patch Bundles tab buttons</string>
-    <string name="dashboard_actions_description">Reorder buttons with the arrows or hide them with the switches</string>
+    <string name="dashboard_actions_description">Touch and hold a button in the preview to reorder it</string>
     <string name="move_action_up">Move up</string>
     <string name="move_action_down">Move down</string>
+    <string name="dashboard_apps_visibility">Hide Apps tab action buttons</string>
+    <string name="dashboard_bundles_visibility">Hide Patch Bundles tab action buttons</string>
+    <string name="dashboard_visibility_description">Choose which action buttons are shown</string>
 </resources>

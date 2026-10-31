@@ -249,6 +249,9 @@ class PatcherWorker(
             .apply {
                 if (progress != null) {
                     applyProgressNotification(
+                        context = applicationContext,
+                        contentTitle = notificationTitle(),
+                        contentText = contentText,
                         max = progress.max,
                         current = progress.current,
                         indeterminate = progress.indeterminate
@@ -2213,7 +2216,6 @@ class PatcherWorker(
             )
             return Notification.Builder(context, ensureNotificationChannel(context))
                 .setContentTitle(title)
-                .setLargeIcon(Icon.createWithResource(context, R.drawable.ic_notification))
                 .setSmallIcon(Icon.createWithResource(context, R.drawable.ic_notification_status))
                 .setContentIntent(pendingIntent)
                 .setCategory(Notification.CATEGORY_SERVICE)
@@ -2248,6 +2250,9 @@ class PatcherWorker(
                 val notification = createNotificationBuilder(context, title)
                     .setContentText(contentText)
                     .applyProgressNotification(
+                        context = context,
+                        contentTitle = title,
+                        contentText = contentText,
                         max = 0,
                         current = 0,
                         indeterminate = true

@@ -35,6 +35,7 @@ dashboard = (BASE / "ui/screen/settings/DashboardActionSettings.kt").read_text(e
 minimal_callback = block(minimal, "onValueChange = { enabled ->").split("->", 1)[1]
 visibility_callback = block(dashboard, "onCheckedChange = { shown ->").split("->", 1)[1]
 move_callback = block(dashboard, "fun moveAction(")
+save_callback = block(dashboard, "fun saveOrder(")
 harness = """
 package regression
 import kotlinx.coroutines.*
@@ -59,13 +60,14 @@ class Actions {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val group = "apps"
     val defaults = listOf("storage", "add", "batch")
-    val order = defaults // Last rendered state, deliberately not refreshed between clicks.
+    val workingOrder = defaults.toMutableList() // Shared preview state, before recomposition.
     val hidden = emptySet<String>()
     val groups = emptySet<String>()
     val orderPref = Preference("storage,add,batch")
     fun minimal(group: String, enabled: Boolean) = %s
     fun visible(id: String, shown: Boolean) = %s
-    fun moveAction(id: String, offset: Int) { %s }
+    fun moveAction(id: String, offset: Int): Boolean { %s }
+    fun saveOrder() { %s }
     suspend fun awaitWrites() { scope.coroutineContext[Job]!!.children.toList().joinAll() }
 }
 fun main() = runBlocking {
@@ -83,17 +85,20 @@ fun main() = runBlocking {
         listOf(actions.visible("add", true), actions.visible("batch", true)).joinAll()
         check(actions.prefs.dashboardHiddenActions.value == setOf("apps:storage"))
 
-        actions.moveAction("batch", -1)
-        actions.moveAction("batch", -1)
+        check(!actions.moveAction("missing", -1))
+        check(!actions.moveAction("storage", -1))
+        check(!actions.moveAction("batch", 1))
+        check(actions.moveAction("batch", -1))
+        check(actions.moveAction("batch", -1))
         actions.awaitWrites()
         check(actions.orderPref.value == "batch,storage,add")
-        repeat(4) { actions.moveAction("batch", -1) }
+        repeat(4) { check(!actions.moveAction("batch", -1)) }
         actions.awaitWrites()
         check(actions.orderPref.value == "batch,storage,add")
         println("Concurrent minimal/visibility changes and repeated reorder callbacks passed.")
     } finally { actions.scope.cancel() }
 }
-""" % (minimal_callback, visibility_callback, move_callback)
+""" % (minimal_callback, visibility_callback, move_callback, save_callback)
 
 discovery = (BASE / "ui/screen/PatchBundleDiscoveryPatchesScreen.kt").read_text(encoding="utf-8")
 local_patch_call = discovery.split("                        PatchItem(", 1)[1].split("\n                        )", 1)[0]

@@ -561,6 +561,8 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.patch_selection_collapse_on_toggle, R.string.patch_selection_collapse_on_toggle_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.minimal_action_buttons_title, R.string.minimal_action_buttons_description, R.string.action_buttons_section, Settings.General),
             SearchEntry(R.string.dashboard_apps_actions, R.string.dashboard_actions_description, R.string.action_buttons_section, Settings.General),
+            SearchEntry(R.string.dashboard_apps_visibility, R.string.dashboard_visibility_description, R.string.action_buttons_section, Settings.General),
+            SearchEntry(R.string.dashboard_bundles_visibility, R.string.dashboard_visibility_description, R.string.action_buttons_section, Settings.General),
             SearchEntry(R.string.dashboard_bundles_actions, R.string.dashboard_actions_description, R.string.action_buttons_section, Settings.General),
             SearchEntry(R.string.patch_selection_action_order_title, R.string.patch_selection_action_order_description, R.string.action_buttons_section, Settings.General),
             SearchEntry(R.string.patch_selection_action_visibility_title, R.string.patch_selection_action_visibility_description, R.string.action_buttons_section, Settings.General),

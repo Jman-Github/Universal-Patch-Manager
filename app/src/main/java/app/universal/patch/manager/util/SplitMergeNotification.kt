@@ -38,10 +38,12 @@ object SplitMergeNotification {
             val notification = Notification.Builder(appContext, ensureChannel(appContext, manager))
                 .setContentTitle(appContext.getText(R.string.merge_split_notification_title))
                 .setContentText(contentText)
-                .setLargeIcon(Icon.createWithResource(appContext, R.drawable.ic_notification))
                 .setSmallIcon(Icon.createWithResource(appContext, R.drawable.ic_notification_status))
                 .setContentIntent(createPendingIntent(appContext))
                 .applyProgressNotification(
+                    context = appContext,
+                    contentTitle = appContext.getText(R.string.merge_split_notification_title),
+                    contentText = contentText,
                     max = progress.max,
                     current = progress.current,
                     indeterminate = progress.indeterminate

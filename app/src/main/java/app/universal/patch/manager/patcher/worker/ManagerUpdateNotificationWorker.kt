@@ -127,7 +127,6 @@ class ManagerUpdateNotificationWorker(
         return Notification.Builder(applicationContext, managerNotificationChannel.id)
             .setContentTitle(title)
             .setContentText(description)
-            .setLargeIcon(Icon.createWithResource(applicationContext, R.drawable.ic_notification))
             .setSmallIcon(Icon.createWithResource(applicationContext, R.drawable.ic_notification_status))
             .setContentIntent(pendingIntent)
             .setOnlyAlertOnce(true)

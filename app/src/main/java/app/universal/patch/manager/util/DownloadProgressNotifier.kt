@@ -159,6 +159,9 @@ class DownloadProgressNotifier(private val app: Application) {
             .setAutoCancel(!ongoing)
             .setTimeoutAfter(timeoutAfter)
             .applyProgressNotification(
+                context = app,
+                contentTitle = title,
+                contentText = contentText,
                 max = PROGRESS_MAX,
                 current = progress,
                 indeterminate = indeterminate,

@@ -163,10 +163,12 @@ fun SelectedAppInfoScreen(
                             notice.patchNames.size
                         )
                     )
-                    LazyColumn(
+                    app.universal.patch.manager.ui.component.LazyColumnWithScrollbar(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(max = 280.dp),
+                        thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+                        reserveScrollbarSpace = true,
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(notice.patchNames) { patchName ->

@@ -19,6 +19,8 @@ JAVAC = JAVA_BIN / "javac.exe"
 
 
 def artifact(group, name, version, extension="jar"):
+    if group == "app.morphe" and name == "morphe-patcher" and os.environ.get("MORPHE_PATCHER_JAR"):
+        return Path(os.environ["MORPHE_PATCHER_JAR"])
     matches = list((CACHE / group / name / version).glob(f"*/*.{extension}"))
     if not matches:
         raise RuntimeError(f"Missing cached artifact: {group}:{name}:{version}")
@@ -58,8 +60,8 @@ with tempfile.TemporaryDirectory(prefix="extension-member-merge-", dir=ROOT / "b
     subprocess.run([str(JAVAC), "--release", "17", "-cp", fix_cp, "-d", str(fix), str(runner)], check=True)
     template = (ROOT / "app/src/test/fixtures/class-merger/ExtensionMembers.java").read_text()
     for module, group, name, version, patcher, extension in (
-        ("upm-patcher-core", "app.morphe", "morphe-patcher", "2.0.1", "app.morphe.patcher", "jar"),
-        ("revanced21-patcher-core", "app.revanced", "revanced-patcher", "21.0.0", "app.revanced.patcher", "jar"),
+        ("upm-patcher-core", "app.morphe", "morphe-patcher", "2.1.0", "app.morphe.patcher", "jar"),
+        ("revanced21-patcher-core", "app.revanced", "revanced-patcher", "21.1.0-dev.5", "app.revanced.patcher", "jar"),
         ("revanced22-patcher-core", "app.revanced", "patcher-jvm", "22.0.2-dev.1", "app.revanced.patcher", "jar"),
         ("revanced22-patcher-core", "app.revanced", "patcher-android", "22.0.2-dev.1", "app.revanced.patcher", "aar"),
         ("revanced-legacy-patcher-core", "app.revanced", "revanced-patcher", "19.3.1", "app.revanced.patcher", "jar"),

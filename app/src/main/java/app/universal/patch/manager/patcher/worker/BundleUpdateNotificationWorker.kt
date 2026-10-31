@@ -344,7 +344,6 @@ class BundleUpdateNotificationWorker(
         val builder = Notification.Builder(applicationContext, channelId)
             .setContentTitle(title)
             .setContentText(description)
-            .setLargeIcon(Icon.createWithResource(applicationContext, R.drawable.ic_notification))
             .setSmallIcon(Icon.createWithResource(applicationContext, R.drawable.ic_notification_status))
             .setContentIntent(pendingIntent)
             .setOnlyAlertOnce(true)
@@ -365,6 +364,9 @@ class BundleUpdateNotificationWorker(
             val total = progress.bytesTotal?.takeIf { it > 0L }
             if (total == null) {
                 builder.applyProgressNotification(
+                    context = applicationContext,
+                    contentTitle = title,
+                    contentText = description,
                     max = 0,
                     current = 0,
                     indeterminate = true,
@@ -374,6 +376,9 @@ class BundleUpdateNotificationWorker(
                 val max = min(total, Int.MAX_VALUE.toLong()).toInt()
                 val current = min(progress.bytesRead, max.toLong()).toInt()
                 builder.applyProgressNotification(
+                    context = applicationContext,
+                    contentTitle = title,
+                    contentText = description,
                     max = max,
                     current = current,
                     indeterminate = false,

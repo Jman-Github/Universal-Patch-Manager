@@ -157,7 +157,6 @@ class AnnouncementNotificationWorker(
             .setContentText(description)
             .setSubText(description)
             .setStyle(BigTextStyle().bigText(description))
-            .setLargeIcon(Icon.createWithResource(applicationContext, R.drawable.ic_notification))
             .setSmallIcon(Icon.createWithResource(applicationContext, R.drawable.ic_notification_status))
             .setContentIntent(pendingIntent)
             .setOnlyAlertOnce(true)
