@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.minimalActionButtons
 import app.universal.patch.manager.util.managerStorageContext
 
 import android.graphics.drawable.ColorDrawable
@@ -1879,7 +1880,7 @@ private fun ProfileActionPill(
                 tint = contentColor,
                 modifier = Modifier.size(14.dp)
             )
-            Text(
+            if (!minimalActionButtons("profiles")) Text(
                 text = text,
                 style = MaterialTheme.typography.labelSmall,
                 color = contentColor,

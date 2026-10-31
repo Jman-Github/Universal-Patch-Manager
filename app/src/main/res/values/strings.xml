@@ -2569,4 +2569,13 @@ Details: %2$s</string>
     <string name="about_donate_description">Donate to Jman-Github through GitHub Sponsors</string>
     <string name="bundle_update_offline">No internet connection. Connect and try again.</string>
     <string name="bundle_update_metered">Updates on metered connections are disabled in settings.</string>
+    <string name="minimal_action_buttons_title">Use minimal action buttons</string>
+    <string name="minimal_action_buttons_description">Show only icons on these action buttons</string>
+    <string name="source_search_browser">Search in browser</string>
+    <string name="source_search_browser_description">Find an APK using your browser</string>
+    <string name="dashboard_apps_actions">Apps tab buttons</string>
+    <string name="dashboard_bundles_actions">Patch Bundles tab buttons</string>
+    <string name="dashboard_actions_description">Reorder buttons with the arrows or hide them with the switches</string>
+    <string name="move_action_up">Move up</string>
+    <string name="move_action_down">Move down</string>
 </resources>

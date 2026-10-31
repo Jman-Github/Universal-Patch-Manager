@@ -460,7 +460,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 val areas = snapshot?.areas.orEmpty()
-                val showUsageShimmer = isLoading || snapshot == null
+                val showUsageShimmer = snapshot == null
                 if (showUsageShimmer) {
                     val placeholderCount = snapshot?.areas?.size ?: STORAGE_AREA_PLACEHOLDER_COUNT
                     repeat(placeholderCount) { index ->

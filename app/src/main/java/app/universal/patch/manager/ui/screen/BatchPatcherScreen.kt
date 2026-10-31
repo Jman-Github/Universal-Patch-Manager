@@ -5,6 +5,7 @@
 
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.minimalActionButtons
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -1085,7 +1086,7 @@ private fun BatchQuickActionButton(
                     modifier = Modifier.size(14.dp)
                 )
             }
-            Text(
+            if (!minimalActionButtons("batch")) Text(
                 text = description,
                 style = MaterialTheme.typography.labelSmall,
                 color = contentColor,

@@ -80,9 +80,7 @@ class UpdatesSettingsViewModel(
         viewModelScope.launch {
             uiSafe(app, R.string.failed_to_check_updates, "Failed to update announcement settings") {
                 announcementSystemEnabled.update(enabled)
-                if (!enabled) {
-                    announcementPushNotificationInterval.update(SearchForUpdatesBackgroundInterval.NEVER)
-                }
+
                 workerRepository.scheduleAnnouncementNotificationWork(
                     if (enabled) {
                         announcementPushNotificationInterval.get()

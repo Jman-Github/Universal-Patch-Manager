@@ -555,6 +555,10 @@ class PreferencesManager(
 
     val pathSelectorSortMode = stringPreference("path_selector_sort_mode", "MODIFIED_DESC")
     val pathSelectorSearchQuery = stringPreference("path_selector_search_query", "")
+    val minimalActionButtonGroups = stringSetPreference("minimal_action_button_groups", emptySet())
+    val dashboardAppsActionOrder = stringPreference("dashboard_apps_action_order", "storage,add,batch")
+    val dashboardBundlesActionOrder = stringPreference("dashboard_bundles_action_order", "discovery,add")
+    val dashboardHiddenActions = stringSetPreference("dashboard_hidden_actions", emptySet())
     // Code adapted from Morphe, see third-party/NOTICE for more information
     // https://github.com/MorpheApp/morphe-manager/commit/205956fa9c9bdf6b4ab13cc2d1880077936bc436
     val pathSelectorShowHiddenFiles = booleanPreference("path_selector_show_hidden_files", false)
@@ -768,6 +772,10 @@ class PreferencesManager(
         // https://github.com/MorpheApp/morphe-manager/commit/46e37e2915dc92b6a655127155935e63c0b04efc
         val pathSelectorSortMode: String? = null,
         val pathSelectorSearchQuery: String? = null,
+        val minimalActionButtonGroups: Set<String>? = null,
+        val dashboardAppsActionOrder: String? = null,
+        val dashboardBundlesActionOrder: String? = null,
+        val dashboardHiddenActions: Set<String>? = null,
         val pathSelectorShowHiddenFiles: Boolean? = null,
         val filePickerLastDirectories: Map<String, String>? = null,
         val appSelectorFilterInstalledOnly: Boolean? = null,
@@ -1038,6 +1046,10 @@ class PreferencesManager(
             // https://github.com/MorpheApp/morphe-manager/commit/46e37e2915dc92b6a655127155935e63c0b04efc
             pathSelectorSortMode = pathSelectorSortMode.value,
             pathSelectorSearchQuery = pathSelectorSearchQuery.value,
+            minimalActionButtonGroups = minimalActionButtonGroups.value,
+            dashboardAppsActionOrder = dashboardAppsActionOrder.value,
+            dashboardBundlesActionOrder = dashboardBundlesActionOrder.value,
+            dashboardHiddenActions = dashboardHiddenActions.value,
             pathSelectorShowHiddenFiles = pathSelectorShowHiddenFiles.value,
             filePickerLastDirectories = filePickerDirectoryPreferences.mapValues { (_, preference) ->
                 preference.value
@@ -1340,6 +1352,10 @@ class PreferencesManager(
             val preference = filePickerDirectoryPreferences[name] ?: return@forEach
             sanitizeImportedPickerDirectory(directory)?.let { preference.value = it }
         }
+        snapshot.minimalActionButtonGroups?.let { minimalActionButtonGroups.value = it }
+        snapshot.dashboardAppsActionOrder?.let { dashboardAppsActionOrder.value = it }
+        snapshot.dashboardBundlesActionOrder?.let { dashboardBundlesActionOrder.value = it }
+        snapshot.dashboardHiddenActions?.let { dashboardHiddenActions.value = it }
         snapshot.pathSelectorShowHiddenFiles?.let { pathSelectorShowHiddenFiles.value = it }
         snapshot.appSelectorFilterInstalledOnly?.let { appSelectorFilterInstalledOnly.value = it }
         snapshot.appSelectorFilterPatchesAvailable?.let { appSelectorFilterPatchesAvailable.value = it }

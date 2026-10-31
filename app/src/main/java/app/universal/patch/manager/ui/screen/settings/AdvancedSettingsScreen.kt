@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.screen.settings
 
+import app.universal.patch.manager.ui.component.minimalActionButtons
 import android.Manifest
 import android.app.ActivityManager
 import android.content.ClipData
@@ -1719,142 +1720,6 @@ fun AdvancedSettingsScreen(
                 }
             }
 
-            val splitMergeAutoExpandRunningStepsEnabled by
-                viewModel.prefs.splitMergeAutoExpandRunningSteps.getAsState()
-            val splitMergeAutoExpandRunningStepsExclusive by
-                viewModel.prefs.splitMergeAutoExpandRunningStepsExclusive.getAsState()
-
-            SettingsSearchHighlight(
-                targetKey = R.string.merge_split_flow_section,
-                activeKey = highlightTarget,
-                onHighlightComplete = { highlightTarget = null }
-            ) { highlightModifier ->
-                GroupHeader(
-                    stringResource(R.string.merge_split_flow_section),
-                    icon = SettingsSectionIcons.PatchingFlow,
-                    modifier = highlightModifier
-                )
-            }
-            ExpressiveSettingsCard(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
-            ) {
-                SettingsSearchHighlight(
-                    targetKey = R.string.skip_split_merge_signing,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        preference = viewModel.prefs.skipSplitMergeSigning,
-                        coroutineScope = viewModel.viewModelScope,
-                        headline = R.string.skip_split_merge_signing,
-                        description = R.string.skip_split_merge_signing_description,
-                    )
-                }
-                ExpressiveSettingsDivider()
-                val mergerGraphsEnabled by viewModel.prefs.showSplitMergeMemoryUsageGraph.getAsState()
-                val mergerGraphsCompact by viewModel.prefs.compactSplitMergeResourceGraphs.getAsState()
-                SettingsSearchHighlight(
-                    targetKey = R.string.merge_split_memory_usage_graph_title,
-                    activeKey = highlightTarget,
-                    extraKeys = setOf(R.string.merger_resource_graph_options_title),
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    ExpandableBooleanItem(
-                        modifier = highlightModifier,
-                        preference = viewModel.prefs.showSplitMergeMemoryUsageGraph,
-                        coroutineScope = viewModel.viewModelScope,
-                        headline = R.string.merge_split_memory_usage_graph_title,
-                        description = R.string.merge_split_memory_usage_graph_description,
-                        contentEnabled = mergerGraphsEnabled && !mergerGraphsCompact,
-                        expandForSearch = highlightTarget == R.string.merger_resource_graph_options_title
-                    ) { childEnabled ->
-                        BooleanItem(
-                            preference = viewModel.prefs.showSplitMergeResourceGraphExtraInfo,
-                            coroutineScope = viewModel.viewModelScope,
-                            headline = R.string.resource_graph_extra_info_title,
-                            description = R.string.resource_graph_extra_info_description,
-                            enabled = childEnabled
-                        )
-                    }
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.merger_resource_graphs_compact_title,
-                    activeKey = highlightTarget,
-                    extraKeys = setOf(R.string.merger_compact_resource_graph_options_title),
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    ExpandableBooleanItem(
-                        modifier = highlightModifier,
-                        preference = viewModel.prefs.compactSplitMergeResourceGraphs,
-                        coroutineScope = viewModel.viewModelScope,
-                        headline = R.string.merger_resource_graphs_compact_title,
-                        description = R.string.merger_resource_graphs_compact_description,
-                        enabled = mergerGraphsEnabled,
-                        contentEnabled = mergerGraphsCompact,
-                        expandForSearch = highlightTarget == R.string.merger_compact_resource_graph_options_title
-                    ) { childEnabled ->
-                        BooleanItem(
-                            preference = viewModel.prefs.showCompactSplitMergeResourceGraphExtraInfo,
-                            coroutineScope = viewModel.viewModelScope,
-                            headline = R.string.resource_graph_extra_info_title,
-                            description = R.string.resource_graph_extra_info_description,
-                            enabled = childEnabled
-                        )
-                    }
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.merge_split_auto_collapse_steps,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        preference = viewModel.prefs.splitMergeAutoCollapseSteps,
-                        coroutineScope = viewModel.viewModelScope,
-                        headline = R.string.merge_split_auto_collapse_steps,
-                        description = R.string.merge_split_auto_collapse_steps_description,
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.merge_split_auto_expand_steps,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        preference = viewModel.prefs.splitMergeAutoExpandRunningSteps,
-                        coroutineScope = viewModel.viewModelScope,
-                        headline = R.string.merge_split_auto_expand_steps,
-                        description = R.string.merge_split_auto_expand_steps_description,
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.merge_split_auto_expand_running_steps_exclusive,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        value = splitMergeAutoExpandRunningStepsEnabled &&
-                            splitMergeAutoExpandRunningStepsExclusive,
-                        onValueChange = { value ->
-                            viewModel.viewModelScope.launch {
-                                viewModel.prefs.splitMergeAutoExpandRunningStepsExclusive.update(value)
-                            }
-                        },
-                        headline = R.string.merge_split_auto_expand_running_steps_exclusive,
-                        description = R.string.merge_split_auto_expand_running_steps_exclusive_description,
-                        enabled = splitMergeAutoExpandRunningStepsEnabled
-                    )
-                }
-            }
-
             SettingsSearchHighlight(
                 targetKey = R.string.saved_apps_section,
                 activeKey = highlightTarget,
@@ -2002,6 +1867,141 @@ fun AdvancedSettingsScreen(
                         headline = R.string.patch_selection_option_previews_title,
                         description = R.string.patch_selection_option_previews_description,
                         enabled = !minimalPatchSelectionView
+                    )
+                }
+            }
+            val splitMergeAutoExpandRunningStepsEnabled by
+                viewModel.prefs.splitMergeAutoExpandRunningSteps.getAsState()
+            val splitMergeAutoExpandRunningStepsExclusive by
+                viewModel.prefs.splitMergeAutoExpandRunningStepsExclusive.getAsState()
+
+            SettingsSearchHighlight(
+                targetKey = R.string.merge_split_flow_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.merge_split_flow_section),
+                    icon = SettingsSectionIcons.PatchingFlow,
+                    modifier = highlightModifier
+                )
+            }
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.skip_split_merge_signing,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.skipSplitMergeSigning,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.skip_split_merge_signing,
+                        description = R.string.skip_split_merge_signing_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                val mergerGraphsEnabled by viewModel.prefs.showSplitMergeMemoryUsageGraph.getAsState()
+                val mergerGraphsCompact by viewModel.prefs.compactSplitMergeResourceGraphs.getAsState()
+                SettingsSearchHighlight(
+                    targetKey = R.string.merge_split_memory_usage_graph_title,
+                    activeKey = highlightTarget,
+                    extraKeys = setOf(R.string.merger_resource_graph_options_title),
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpandableBooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.showSplitMergeMemoryUsageGraph,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.merge_split_memory_usage_graph_title,
+                        description = R.string.merge_split_memory_usage_graph_description,
+                        contentEnabled = mergerGraphsEnabled && !mergerGraphsCompact,
+                        expandForSearch = highlightTarget == R.string.merger_resource_graph_options_title
+                    ) { childEnabled ->
+                        BooleanItem(
+                            preference = viewModel.prefs.showSplitMergeResourceGraphExtraInfo,
+                            coroutineScope = viewModel.viewModelScope,
+                            headline = R.string.resource_graph_extra_info_title,
+                            description = R.string.resource_graph_extra_info_description,
+                            enabled = childEnabled
+                        )
+                    }
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.merger_resource_graphs_compact_title,
+                    activeKey = highlightTarget,
+                    extraKeys = setOf(R.string.merger_compact_resource_graph_options_title),
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpandableBooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.compactSplitMergeResourceGraphs,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.merger_resource_graphs_compact_title,
+                        description = R.string.merger_resource_graphs_compact_description,
+                        enabled = mergerGraphsEnabled,
+                        contentEnabled = mergerGraphsCompact,
+                        expandForSearch = highlightTarget == R.string.merger_compact_resource_graph_options_title
+                    ) { childEnabled ->
+                        BooleanItem(
+                            preference = viewModel.prefs.showCompactSplitMergeResourceGraphExtraInfo,
+                            coroutineScope = viewModel.viewModelScope,
+                            headline = R.string.resource_graph_extra_info_title,
+                            description = R.string.resource_graph_extra_info_description,
+                            enabled = childEnabled
+                        )
+                    }
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.merge_split_auto_collapse_steps,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.splitMergeAutoCollapseSteps,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.merge_split_auto_collapse_steps,
+                        description = R.string.merge_split_auto_collapse_steps_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.merge_split_auto_expand_steps,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.splitMergeAutoExpandRunningSteps,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.merge_split_auto_expand_steps,
+                        description = R.string.merge_split_auto_expand_steps_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.merge_split_auto_expand_running_steps_exclusive,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = splitMergeAutoExpandRunningStepsEnabled &&
+                            splitMergeAutoExpandRunningStepsExclusive,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.splitMergeAutoExpandRunningStepsExclusive.update(value)
+                            }
+                        },
+                        headline = R.string.merge_split_auto_expand_running_steps_exclusive,
+                        description = R.string.merge_split_auto_expand_running_steps_exclusive_description,
+                        enabled = splitMergeAutoExpandRunningStepsEnabled
                     )
                 }
             }
@@ -2438,7 +2438,8 @@ internal fun ActionButtonSettings(
 
     LaunchedEffect(highlightTarget) {
         when (highlightTarget) {
-            R.string.patch_selection_action_visibility_title -> actionsExpanded = true
+            R.string.patch_selection_action_visibility_title,
+            R.string.minimal_action_buttons_title -> actionsExpanded = true
             R.string.patch_bundle_action_visibility_title -> bundleActionsExpanded = true
             R.string.batch_result_action_visibility_title -> batchResultActionsExpanded = true
             R.string.saved_app_action_visibility_title -> savedActionsExpanded = true
@@ -2447,8 +2448,21 @@ internal fun ActionButtonSettings(
         }
     }
     Column {
+        DashboardActionSettings(
+            viewModel.prefs,
+            bundles = false,
+            highlightTarget = highlightTarget,
+            onHighlightComplete = onHighlightComplete
+        )
+        DashboardActionSettings(
+            viewModel.prefs,
+            bundles = true,
+            highlightTarget = highlightTarget,
+            onHighlightComplete = onHighlightComplete
+        )
         SettingsSearchHighlight(
                 targetKey = R.string.patch_selection_action_order_title,
+                extraKeys = setOf(R.string.minimal_action_buttons_title),
                 activeKey = highlightTarget,
                 onHighlightComplete = onHighlightComplete
             ) { highlightModifier ->
@@ -2467,6 +2481,7 @@ internal fun ActionButtonSettings(
             }
 
             if (actionsExpanded) {
+                MinimalActionSettings(viewModel.prefs, "selection")
                 ExpressiveSettingsDivider()
                 Box(
                         modifier = Modifier
@@ -2825,6 +2840,7 @@ internal fun ActionButtonSettings(
                 }
 
                 if (bundleActionsExpanded) {
+                MinimalActionSettings(viewModel.prefs, "bundles")
                     ExpressiveSettingsDivider()
                 Box(
                     modifier = Modifier
@@ -2947,6 +2963,7 @@ internal fun ActionButtonSettings(
             }
 
             if (batchResultActionsExpanded) {
+                MinimalActionSettings(viewModel.prefs, "batch")
                 ExpressiveSettingsDivider()
                 Box(
                     modifier = Modifier
@@ -3071,6 +3088,7 @@ internal fun ActionButtonSettings(
             }
 
             if (savedActionsExpanded) {
+                MinimalActionSettings(viewModel.prefs, "saved")
                 ExpressiveSettingsDivider()
                 Box(
                     modifier = Modifier
@@ -3188,6 +3206,7 @@ internal fun ActionButtonSettings(
             }
 
             if (profileActionsExpanded) {
+                MinimalActionSettings(viewModel.prefs, "profiles")
                 ExpressiveSettingsDivider()
                 Box(
                     modifier = Modifier
@@ -3310,6 +3329,7 @@ internal fun ActionButtonSettings(
             }
 
             if (lsposedActionsExpanded) {
+                MinimalActionSettings(viewModel.prefs, "lsposed")
                 ExpressiveSettingsDivider()
                 Box(
                     modifier = Modifier
@@ -3443,7 +3463,7 @@ private fun PatchSelectionActionPreview(
     ) {
         Box(
             modifier = Modifier.fillMaxWidth(),
-            contentAlignment = if (centerContent) Alignment.Center else Alignment.CenterEnd
+            contentAlignment = if (centerContent || minimalActionButtons("selection")) Alignment.Center else Alignment.CenterEnd
         ) {
             Surface(
                 shape = RoundedCornerShape(18.dp),
@@ -3529,7 +3549,10 @@ private fun SelectionActionPreviewRow(
             .height(48.dp),
         state = state,
         userScrollEnabled = userScrollEnabled,
-        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End)
+        horizontalArrangement = Arrangement.spacedBy(
+            6.dp,
+            if (minimalActionButtons("selection")) Alignment.CenterHorizontally else Alignment.End
+        )
     ) {
         items(
             items = keys,
@@ -3566,6 +3589,7 @@ private fun SelectionActionPreviewChip(
     highlighted: Boolean = false,
     ghost: Boolean = false,
     floating: Boolean = false,
+    group: String = "selection",
     onBoundsChanged: ((Rect) -> Unit)? = null
 ) {
     var layoutCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -3617,12 +3641,12 @@ private fun SelectionActionPreviewChip(
         ) {
             Icon(
                 imageVector = icon,
-                contentDescription = null,
+                contentDescription = label,
                 modifier = Modifier
                     .size(16.dp)
                     .offset(y = iconOffset)
             )
-            Text(
+            if (!minimalActionButtons(group)) Text(
                 text = label,
                 style = labelStyle,
                 maxLines = 1
@@ -3729,6 +3753,11 @@ private fun PatchBundleActionPreviewRow(
             .fillMaxWidth()
             .height(48.dp),
         state = state,
+        horizontalArrangement = if (minimalActionButtons("bundles")) {
+            Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally)
+        } else {
+            Arrangement.Start
+        },
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(
@@ -3743,6 +3772,7 @@ private fun PatchBundleActionPreviewRow(
                     contentAlignment = Alignment.Center
                 ) {
                     SelectionActionPreviewChip(
+                        group = "bundles",
                         icon = previewIconForBundleAction(key),
                         label = stringResource(key.labelRes),
                         dragging = isDragging,
@@ -3832,6 +3862,11 @@ private fun BatchResultActionPreviewRow(
             .fillMaxWidth()
             .height(48.dp),
         state = state,
+        horizontalArrangement = if (minimalActionButtons("batch")) {
+            Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally)
+        } else {
+            Arrangement.Start
+        },
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(
@@ -3846,6 +3881,7 @@ private fun BatchResultActionPreviewRow(
                     contentAlignment = Alignment.Center
                 ) {
                     SelectionActionPreviewChip(
+                        group = "batch",
                         icon = previewIconForBatchResultAction(key),
                         label = stringResource(key.labelRes),
                         dragging = isDragging,
@@ -3933,6 +3969,11 @@ private fun SavedAppActionPreviewRow(
             .fillMaxWidth()
             .height(48.dp),
         state = state,
+        horizontalArrangement = if (minimalActionButtons("saved")) {
+            Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally)
+        } else {
+            Arrangement.Start
+        },
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(
@@ -3947,6 +3988,7 @@ private fun SavedAppActionPreviewRow(
                     contentAlignment = Alignment.Center
                 ) {
                     SelectionActionPreviewChip(
+                        group = "saved",
                         icon = previewIconForSavedAppAction(key),
                         label = stringResource(key.labelRes),
                         dragging = isDragging,
@@ -4033,6 +4075,11 @@ private fun PatchProfileActionPreviewRow(
             .fillMaxWidth()
             .height(48.dp),
         state = state,
+        horizontalArrangement = if (minimalActionButtons("profiles")) {
+            Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally)
+        } else {
+            Arrangement.Start
+        },
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(
@@ -4047,6 +4094,7 @@ private fun PatchProfileActionPreviewRow(
                     contentAlignment = Alignment.Center
                 ) {
                     SelectionActionPreviewChip(
+                        group = "profiles",
                         icon = previewIconForProfileAction(key),
                         label = stringResource(key.labelRes),
                         dragging = isDragging,
@@ -4138,6 +4186,11 @@ private fun LsposedModuleActionPreviewRow(
             .fillMaxWidth()
             .height(48.dp),
         state = state,
+        horizontalArrangement = if (minimalActionButtons("lsposed")) {
+            Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally)
+        } else {
+            Arrangement.Start
+        },
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(
@@ -4152,6 +4205,7 @@ private fun LsposedModuleActionPreviewRow(
                     contentAlignment = Alignment.Center
                 ) {
                     SelectionActionPreviewChip(
+                        group = "lsposed",
                         icon = previewIconForLsposedModuleAction(key),
                         label = stringResource(key.labelRes),
                         dragging = isDragging,

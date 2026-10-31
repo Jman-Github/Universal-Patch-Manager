@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.util.openUrl
 import android.content.pm.PackageInfo
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -1306,6 +1307,9 @@ internal fun AppSourceSelectorDialog(
     onSelectLocal: (() -> Unit)?,
     onSelect: (SelectedApp) -> Unit,
 ) {
+    val browserContext = LocalContext.current
+    val browserPrefs: app.universal.patch.manager.domain.manager.PreferencesManager = org.koin.compose.koinInject()
+    val browserSearchHost by browserPrefs.searchEngineHost.getAsState()
     val canSelect = activeSearchJob == null
     val hasDownloadedApps = downloadedApps.isNotEmpty()
     val hasPlugins = plugins.isNotEmpty()
@@ -1416,6 +1420,28 @@ internal fun AppSourceSelectorDialog(
                             colors = transparentListItemColors
                         )
                     }
+                }
+
+                item(key = "browser_search") {
+                    ListItem(
+                        modifier = Modifier.clickable(enabled = canSelect) {
+                            val query = listOfNotNull(
+                                searchApp.packageName,
+                                (requiredVersion ?: searchApp.version)?.takeIf { it.isNotBlank() }?.let {
+                                    if (it.startsWith("v", ignoreCase = true)) it else "v$it"
+                                },
+                                android.os.Build.SUPPORTED_ABIS.firstOrNull()
+                            ).joinToString(" ")
+                            val host = browserSearchHost.trim().removePrefix("https://")
+                                .removePrefix("http://").substringBefore('/').substringBefore('?')
+                                .substringBefore('#').trim().ifBlank { "google.com" }
+                            browserContext.openUrl("https://$host/search?q=" + android.net.Uri.encode(query))
+                            onDismissRequest()
+                        },
+                        headlineContent = { Text(stringResource(R.string.source_search_browser)) },
+                        supportingContent = { Text(stringResource(R.string.source_search_browser_description)) },
+                        colors = transparentListItemColors
+                    )
                 }
 
                 items(apkDownloadHelpers, key = { it.id }) { helper ->

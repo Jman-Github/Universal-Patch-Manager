@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.minimalActionButtons
 import android.content.pm.PackageInfo
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -726,7 +727,7 @@ private fun AppActionPill(
                 tint = contentColor,
                 modifier = Modifier.size(14.dp)
             )
-            Text(
+            if (!minimalActionButtons("saved")) Text(
                 text = text,
                 style = MaterialTheme.typography.labelSmall,
                 color = contentColor,
