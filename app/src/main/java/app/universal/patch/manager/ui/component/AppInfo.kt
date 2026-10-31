@@ -22,6 +22,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.core.content.pm.PackageInfoCompat
 import app.universal.patch.manager.R
+import app.universal.patch.manager.domain.repository.appNamePackagePattern
 
 @Composable
 fun AppInfo(
@@ -32,6 +33,7 @@ fun AppInfo(
     placeholderMetaLines: Int = 1,
     showExtraContentWhenLoading: Boolean = false,
     isLoading: Boolean = appInfo == null,
+    packageName: String? = appInfo?.packageName ?: placeholderLabel?.takeIf(appNamePackagePattern::matches),
     extraContent: @Composable () -> Unit = {}
 ) {
     Column(
@@ -41,7 +43,16 @@ fun AppInfo(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         if (appInfo == null && !isLoading) {
-            Icon(
+            if (packageName != null || iconOverride != null) {
+                AppIcon(null, null, Modifier.size(100.dp).padding(bottom = 5.dp),
+                    iconOverride = iconOverride, packageName = packageName)
+                if (packageName != null) {
+                    AppLabel(null, labelOverride = labelOverride, packageName = packageName,
+                        defaultText = placeholderLabel ?: packageName,
+                        modifier = Modifier.padding(top = 16.dp),
+                        style = MaterialTheme.typography.titleLarge, centered = true)
+                }
+            } else Icon(
                 imageVector = Icons.Default.Close,
                 contentDescription = stringResource(R.string.app_info_unavailable),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -51,18 +62,22 @@ fun AppInfo(
                     .padding(20.dp)
             )
         } else if (appInfo == null) {
-            ShimmerBox(
-                modifier = Modifier
-                    .size(100.dp)
-                    .padding(bottom = 5.dp),
-                shape = CircleShape
-            )
-            ShimmerBox(
-                modifier = Modifier
-                    .padding(top = 16.dp)
-                    .width(200.dp)
-                    .height(22.dp)
-            )
+            if (packageName != null || iconOverride != null) {
+                AppIcon(null, null, Modifier.size(100.dp).padding(bottom = 5.dp),
+                    iconOverride = iconOverride, packageName = packageName)
+            } else {
+                ShimmerBox(Modifier.size(100.dp).padding(bottom = 5.dp), shape = CircleShape)
+            }
+            if (packageName != null) {
+                AppLabel(null, labelOverride = labelOverride, packageName = packageName,
+                    defaultText = placeholderLabel ?: packageName,
+                    modifier = Modifier.padding(top = 16.dp),
+                    style = MaterialTheme.typography.titleLarge, centered = true)
+            } else {
+                ShimmerBox(
+                    modifier = Modifier.padding(top = 16.dp).width(200.dp).height(22.dp)
+                )
+            }
             val placeholderLineCount = if (showExtraContentWhenLoading) {
                 placeholderMetaLines.coerceAtLeast(0)
             } else {

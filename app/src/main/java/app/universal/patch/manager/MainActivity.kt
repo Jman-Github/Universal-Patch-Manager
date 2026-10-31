@@ -441,6 +441,18 @@ private fun ReVancedManager(
         }
     }
 
+    EventEffect(vm.patchedAppsRequestFlow) { packages ->
+        // Recreate Dashboard so a previously selected tab cannot hide the Apps tab.
+        navController.navigate(Dashboard) {
+            popUpTo(Dashboard) { inclusive = true }
+        }
+        packages.singleOrNull()?.let { packageName ->
+            navController.navigate(InstalledApplicationInfo(packageName)) {
+                launchSingleTop = true
+            }
+        }
+    }
+
     NavHost(
         navController = navController,
         startDestination = Dashboard,

@@ -313,7 +313,8 @@ fun PatchBundleDiscoveryPatchesScreen(
                             expandOptions,
                             onExpandOptions = { expandOptions = !expandOptions },
                             searchEngineHost = searchEngineHost,
-                            appMetadata = viewModel.appMetadata
+                            appMetadata = viewModel.appMetadata,
+                            allowAppMetadataLookup = false
                         )
                     }
                 }

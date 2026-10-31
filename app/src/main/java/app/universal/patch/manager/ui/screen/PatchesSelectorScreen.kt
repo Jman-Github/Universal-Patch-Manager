@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.minimalActionButtons
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.EaseInOut
@@ -2788,6 +2789,7 @@ private fun PatchProfileNameDialog(
                     )
 
                     LazyColumnWithScrollbar(
+                        thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(max = 240.dp),
@@ -2877,7 +2879,7 @@ private fun PatchSelectionActionChip(
                 contentDescription = stringResource(spec.contentDescription),
                 modifier = Modifier.size(16.dp)
             )
-            Text(
+            if (!minimalActionButtons("selection")) Text(
                 text = stringResource(spec.label),
                 style = MaterialTheme.typography.labelMedium,
                 maxLines = 1

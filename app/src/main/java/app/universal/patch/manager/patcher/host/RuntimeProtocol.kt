@@ -72,7 +72,10 @@ object RuntimeProtocol {
     }
 
     fun run(requestPath: String, eventPath: String, execute: (Map<String, Any?>, (String, Map<String, Any?>) -> Unit) -> String?) {
-        File(eventPath).bufferedWriter().use { writer ->
+        // app_process stdout may be a socket, which cannot be reopened through /proc.
+        val output = if (eventPath == "-") java.io.FileOutputStream(java.io.FileDescriptor.out)
+            else File(eventPath).outputStream()
+        output.bufferedWriter().use { writer ->
             var stallWatch: StallWatch? = null
             val send: (String, Map<String, Any?>) -> Unit = { type, values ->
                 stallWatch?.onEvent(type)

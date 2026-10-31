@@ -6,6 +6,8 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.patch.manager.data.platform.Filesystem
+import app.universal.patch.manager.data.platform.SharedApkFiles
+import app.universal.patch.manager.domain.storage.CacheCleanupGuard
 import app.universal.patch.manager.data.room.profile.PatchProfilePayload
 import app.universal.patch.manager.data.room.options.Option.SerializedValue as StoredOptionSerializedValue
 import app.universal.patch.manager.domain.bundles.PatchBundleSource
@@ -476,63 +478,66 @@ class PatchProfilesViewModel(
 
     suspend fun updateProfileApk(profileId: Int, file: File?): ApkSelectionResult =
         withContext(Dispatchers.IO) {
-            val profile = patchProfileRepository.getProfile(profileId)
-                ?: return@withContext ApkSelectionResult.PROFILE_NOT_FOUND
-            if (file == null) {
-                profile.apkPath?.let { File(it).delete() }
-                patchProfileRepository.updateProfileApk(
+            CacheCleanupGuard.withCacheInUse {
+                val profile = patchProfileRepository.getProfile(profileId)
+                    ?: return@withCacheInUse ApkSelectionResult.PROFILE_NOT_FOUND
+                if (file == null) {
+                    profile.apkPath?.let { File(it).delete() }
+                    patchProfileRepository.updateProfileApk(
+                        profileId,
+                        null,
+                        null,
+                        null,
+                        appVersion = if (profile.useSelectedApkVersion) null else profile.appVersion,
+                        useSelectedApkVersion = false
+                    )
+                    return@withCacheInUse ApkSelectionResult.CLEARED
+                }
+                val source = SharedApkFiles.resolve(file)
+                if (!source.isFile) return@withCacheInUse ApkSelectionResult.INVALID_FILE
+
+                val extension = file.extension.lowercase(Locale.ROOT)
+                    .takeIf { it in APK_FILE_EXTENSIONS }
+                    ?: "apk"
+
+                val destination = filesystem.getPatchProfileInputFile(profileId, extension)
+                try {
+                    destination.parentFile?.mkdirs()
+                    Files.copy(source.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                } catch (error: Exception) {
+                    Log.e(tag, "Failed to copy patch profile APK", error)
+                    destination.delete()
+                    return@withCacheInUse ApkSelectionResult.FAILED
+                }
+
+                val packageInfo = resolvePackageInfo(destination)
+                if (packageInfo == null) {
+                    destination.delete()
+                    return@withCacheInUse ApkSelectionResult.INVALID_FILE
+                }
+                if (packageInfo.packageName != profile.packageName) {
+                    destination.delete()
+                    return@withCacheInUse ApkSelectionResult.PACKAGE_MISMATCH
+                }
+
+                val version = packageInfo.versionName?.takeIf { it.isNotBlank() } ?: profile.appVersion.orEmpty()
+                val updated = patchProfileRepository.updateProfileApk(
                     profileId,
-                    null,
-                    null,
-                    null,
-                    appVersion = if (profile.useSelectedApkVersion) null else profile.appVersion,
-                    useSelectedApkVersion = false
+                    destination.absolutePath,
+                    version,
+                    file.absolutePath,
+                    appVersion = profile.appVersion,
+                    useSelectedApkVersion = true
                 )
-                return@withContext ApkSelectionResult.CLEARED
+                if (updated == null) {
+                    destination.delete()
+                    return@withCacheInUse ApkSelectionResult.FAILED
+                }
+                profile.apkPath
+                    ?.takeIf { it != destination.absolutePath }
+                    ?.let { File(it).delete() }
+                ApkSelectionResult.SUCCESS
             }
-            if (!file.exists()) return@withContext ApkSelectionResult.INVALID_FILE
-
-            val extension = file.extension.lowercase(Locale.ROOT)
-                .takeIf { it in APK_FILE_EXTENSIONS }
-                ?: "apk"
-
-            val destination = filesystem.getPatchProfileInputFile(profileId, extension)
-            try {
-                destination.parentFile?.mkdirs()
-                Files.copy(file.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
-            } catch (error: Exception) {
-                Log.e(tag, "Failed to copy patch profile APK", error)
-                destination.delete()
-                return@withContext ApkSelectionResult.FAILED
-            }
-
-            val packageInfo = resolvePackageInfo(destination)
-            if (packageInfo == null) {
-                destination.delete()
-                return@withContext ApkSelectionResult.INVALID_FILE
-            }
-            if (packageInfo.packageName != profile.packageName) {
-                destination.delete()
-                return@withContext ApkSelectionResult.PACKAGE_MISMATCH
-            }
-
-            val version = packageInfo.versionName?.takeIf { it.isNotBlank() } ?: profile.appVersion.orEmpty()
-            val updated = patchProfileRepository.updateProfileApk(
-                profileId,
-                destination.absolutePath,
-                version,
-                file.absolutePath,
-                appVersion = profile.appVersion,
-                useSelectedApkVersion = true
-            )
-            if (updated == null) {
-                destination.delete()
-                return@withContext ApkSelectionResult.FAILED
-            }
-            profile.apkPath
-                ?.takeIf { it != destination.absolutePath }
-                ?.let { File(it).delete() }
-            ApkSelectionResult.SUCCESS
         }
 
     suspend fun updateProfileSignatureWorkflow(

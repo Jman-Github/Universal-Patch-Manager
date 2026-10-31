@@ -20,9 +20,10 @@ compiler = [artifact("org.jetbrains.kotlin", name, version) for name in
 compiler += [artifact("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm"), artifact("org.jetbrains", "annotations")]
 deps = [artifact("org.jetbrains.kotlin", name, version) for name in
         ("kotlin-stdlib", "kotlin-test", "kotlin-test-junit")]
-deps += [artifact("junit", "junit", "4.13.2"), artifact("org.hamcrest", "hamcrest-core")]
-names = ["patcher/runtime/JvmTuning", "patcher/runtime/RuntimePreparationCache",
-         "domain/repository/RuntimePluginCompatibility"]
+deps += [artifact("junit", "junit", "4.13.2"), artifact("org.hamcrest", "hamcrest-core"),
+         artifact("org.jetbrains.kotlinx", "kotlinx-serialization-core-jvm")]
+names = ["patcher/runtime/JvmTuning", "patcher/runtime/RuntimePreparationCache", "patcher/runtime/ArtHeapPolicy",
+         "domain/repository/RuntimePluginCompatibility", "patcher/PatcherSessionInfo"]
 with tempfile.TemporaryDirectory(prefix="runtime-startup-", dir=ROOT / "build") as directory:
     main = ROOT / "app/src/main/java/app/universal/patch/manager"
     tests = ROOT / "app/src/test/java/app/universal/patch/manager"

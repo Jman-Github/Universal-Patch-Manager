@@ -10,6 +10,8 @@ import io.ktor.client.call.body
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
+import io.ktor.client.request.prepareRequest
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.request
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
@@ -19,7 +21,9 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readAvailable
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -28,8 +32,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.io.OutputStream
 import java.io.RandomAccessFile
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
 
@@ -39,6 +46,9 @@ import kotlin.math.abs
 class HttpService(
     val json: Json,
     val http: HttpClient,
+    private val downloadWarning: (String, Throwable) -> Unit = { message, error ->
+        Log.w("HttpService", message, error)
+    },
 ) {
     suspend inline fun <reified T> request(crossinline builder: HttpRequestBuilder.() -> Unit = {}): APIResponse<T> {
         var body: String? = null
@@ -66,6 +76,7 @@ class HttpService(
                         body = try {
                             response.bodyAsText()
                         } catch (t: Throwable) {
+                            if (t is CancellationException) throw t
                             null
                         }
 
@@ -77,6 +88,8 @@ class HttpService(
                     }
                 } catch (t: TooManyRequestsException) {
                     throw t
+                } catch (cancel: CancellationException) {
+                    throw cancel
                 } catch (t: Throwable) {
                     Log.e(tag, "Failed to fetch: error: $t, body: $body")
                     APIResponse.Failure(APIFailure(t, body))
@@ -101,7 +114,9 @@ class HttpService(
                             throw TooManyRequestsException(httpResponse.retryAfterMillis())
                         }
                         httpResponse.status.isSuccess() -> {
+                            val encoding = httpResponse.headers[HttpHeaders.ContentEncoding]
                             val contentLength = httpResponse.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+                                ?.takeIf { encoding == null || encoding.equals("identity", true) }
                             val channel: ByteReadChannel = httpResponse.body()
                             withContext(Dispatchers.IO) {
                                 var bytesRead = 0L
@@ -124,6 +139,9 @@ class HttpService(
                                     outputStream.write(buffer, 0, count)
                                     bytesRead += count.toLong()
                                     reportProgress()
+                                }
+                                if (contentLength != null && bytesRead != contentLength) {
+                                    throw IOException("Incomplete download: $bytesRead of $contentLength bytes")
                                 }
                                 reportProgress(force = true)
                             }
@@ -185,33 +203,45 @@ class HttpService(
         builder: HttpRequestBuilder.() -> Unit,
         onProgress: ((bytesRead: Long, contentLength: Long?) -> Unit)? = null
     ) {
-        val probe = probeRangeSupport(builder)
-        val totalSize = probe.contentLength
-        val canParallelize = threads > 1 &&
-            probe.supportsRanges &&
-            totalSize != null &&
-            totalSize >= MIN_MULTIPART_SIZE
-
-        if (!canParallelize) {
-            val fallbackProgress: ((bytesRead: Long, contentLength: Long?) -> Unit)? =
-                onProgress?.let { progress ->
-                    { bytesRead, contentLength ->
-                        progress(bytesRead, contentLength ?: totalSize)
+        withContext(Dispatchers.IO) {
+            val destination = saveLocation.absoluteFile
+            destination.parentFile?.mkdirs()
+            // Keep a previous export intact until a complete replacement is ready.
+            val partial = File.createTempFile("upm-download-", ".tmp", destination.parentFile)
+            val workers = threads.coerceIn(1, MAX_DOWNLOAD_THREADS)
+            try {
+                val probe = if (workers > 1) probeRangeSupport(builder) else RangeProbe(false, null)
+                val totalSize = probe.contentLength
+                val parallelComplete = if (probe.supportsRanges && totalSize != null && totalSize >= MIN_MULTIPART_SIZE) {
+                    try {
+                        downloadConcurrent(partial, totalSize, workers, probe.validator, builder, onProgress)
+                        true
+                    } catch (cancel: CancellationException) {
+                        throw cancel
+                    } catch (failure: IOException) {
+                        // coroutineScope has joined every range worker before this file is truncated.
+                        downloadWarning("Parallel download failed; restarting with one stream", failure)
+                        false
+                    } catch (failure: HttpException) {
+                        downloadWarning("Parallel download rejected; restarting with one stream", failure)
+                        false
+                    }
+                } else false
+                if (!parallelComplete) {
+                    onProgress?.invoke(0L, null)
+                    FileOutputStream(partial, false).use { output ->
+                        streamTo(output, {
+                            builder()
+                            header(HttpHeaders.AcceptEncoding, "identity")
+                            timeout { socketTimeoutMillis = DOWNLOAD_IDLE_TIMEOUT_MS }
+                        }, onProgress)
                     }
                 }
-            FileOutputStream(saveLocation, false).use { outputStream ->
-                streamTo(outputStream, builder, fallbackProgress)
+                Files.move(partial.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            } finally {
+                partial.delete()
             }
-            return
         }
-
-        downloadConcurrent(
-            saveLocation = saveLocation,
-            totalSize = totalSize,
-            threads = threads,
-            builder = builder,
-            onProgress = onProgress
-        )
     }
 
     class HttpException(status: HttpStatusCode) : Exception("Failed to fetch: http status: $status")
@@ -241,60 +271,67 @@ class HttpService(
         return headerValue.toLongOrNull()?.coerceAtLeast(0)?.times(1000)
     }
 
-    private data class RangeProbe(val supportsRanges: Boolean, val contentLength: Long?)
+    private data class RangeProbe(
+        val supportsRanges: Boolean,
+        val contentLength: Long?,
+        val validator: String? = null,
+    )
 
-    private suspend fun probeRangeSupport(builder: HttpRequestBuilder.() -> Unit): RangeProbe {
-        val headResult = runCatching {
-            runWith429Retry("rangeProbeHead") {
-                http.request {
-                    method = HttpMethod.Head
-                    builder()
-                }.also { response ->
-                    if (response.status == HttpStatusCode.TooManyRequests) {
-                        throw TooManyRequestsException(response.retryAfterMillis())
-                    }
-                }
-            }
-        }.getOrNull()
+    private data class ContentRange(val start: Long, val end: Long, val total: Long)
 
-        val headLength = headResult?.headers?.get(HttpHeaders.ContentLength)?.toLongOrNull()
-        val headAcceptRanges = headResult?.headers?.get(HttpHeaders.AcceptRanges)
-            ?.contains("bytes", ignoreCase = true) == true
-        if (headAcceptRanges && headLength != null) {
-            return RangeProbe(supportsRanges = true, contentLength = headLength)
-        }
-
-        val rangeResult = runCatching {
-            runWith429Retry("rangeProbeGet") {
-                http.prepareGet {
-                    header(HttpHeaders.Range, "bytes=0-0")
-                    builder()
-                }.execute { response ->
-                    if (response.status == HttpStatusCode.TooManyRequests) {
-                        throw TooManyRequestsException(response.retryAfterMillis())
-                    }
-                    if (response.status == HttpStatusCode.PartialContent) {
-                        val total = parseContentRangeTotal(response.headers[HttpHeaders.ContentRange])
-                        return@execute RangeProbe(supportsRanges = total != null, contentLength = total)
-                    }
-                    RangeProbe(supportsRanges = false, contentLength = headLength)
-                }
-            }
-        }.getOrNull()
-
-        return rangeResult ?: RangeProbe(false, headLength)
+    private fun parseContentRange(value: String?): ContentRange? {
+        val match = CONTENT_RANGE.matchEntire(value?.trim() ?: return null) ?: return null
+        val (start, end, total) = match.destructured
+        val parsed = ContentRange(start.toLongOrNull() ?: return null,
+            end.toLongOrNull() ?: return null, total.toLongOrNull() ?: return null)
+        return parsed.takeIf { it.start <= it.end && it.end < it.total }
     }
 
-    private fun parseContentRangeTotal(contentRange: String?): Long? {
-        if (contentRange.isNullOrBlank()) return null
-        val parts = contentRange.substringAfter('/').trim()
-        return parts.toLongOrNull()
+    private suspend fun probeRangeSupport(builder: HttpRequestBuilder.() -> Unit): RangeProbe {
+        // Probes are optional optimizations: do not spend the download's retry budget on them.
+        suspend fun probe(block: suspend () -> RangeProbe?): RangeProbe? = try {
+            withTimeoutOrNull(RANGE_PROBE_TIMEOUT_MS) { block() }
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Exception) {
+            null
+        }
+        val head = probe {
+            http.prepareRequest {
+                builder()
+                method = HttpMethod.Head
+                header(HttpHeaders.AcceptEncoding, "identity")
+            }.execute { response ->
+                val length = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()?.takeIf { it > 0 }
+                RangeProbe(response.status.isSuccess() &&
+                    response.headers[HttpHeaders.AcceptRanges].equals("bytes", true) && length != null,
+                    length.takeIf { response.status.isSuccess() },
+                    response.headers[HttpHeaders.ETag]?.takeUnless { it.startsWith("W/") }
+                        ?: response.headers[HttpHeaders.LastModified])
+            }
+        }
+        if (head?.supportsRanges == true) return head
+        return probe {
+            http.prepareGet {
+                builder()
+                header(HttpHeaders.Range, "bytes=0-0")
+                header(HttpHeaders.AcceptEncoding, "identity")
+            }.execute { response ->
+                val range = parseContentRange(response.headers[HttpHeaders.ContentRange])
+                RangeProbe(response.status == HttpStatusCode.PartialContent &&
+                    range?.start == 0L && range.end == 0L,
+                    range?.total,
+                    response.headers[HttpHeaders.ETag]?.takeUnless { it.startsWith("W/") }
+                        ?: response.headers[HttpHeaders.LastModified])
+            }
+        } ?: RangeProbe(false, head?.contentLength)
     }
 
     private suspend fun downloadConcurrent(
         saveLocation: File,
         totalSize: Long,
         threads: Int,
+        validator: String?,
         builder: HttpRequestBuilder.() -> Unit,
         onProgress: ((bytesRead: Long, contentLength: Long?) -> Unit)?,
     ) = coroutineScope {
@@ -341,24 +378,40 @@ class HttpService(
             async(Dispatchers.IO) {
                 runWith429Retry("downloadRange") {
                     http.prepareGet {
-                        header(HttpHeaders.Range, "bytes=$start-$end")
                         builder()
+                        header(HttpHeaders.Range, "bytes=$start-$end")
+                        header(HttpHeaders.AcceptEncoding, "identity")
+                        validator?.let { header(HttpHeaders.IfRange, it) }
+                        timeout { socketTimeoutMillis = DOWNLOAD_IDLE_TIMEOUT_MS }
                     }.execute { httpResponse ->
                         when {
                             httpResponse.status == HttpStatusCode.TooManyRequests ->
                                 throw TooManyRequestsException(httpResponse.retryAfterMillis())
                             httpResponse.status == HttpStatusCode.PartialContent -> {
+                                val expected = end - start + 1
+                                if (parseContentRange(httpResponse.headers[HttpHeaders.ContentRange]) !=
+                                    ContentRange(start, end, totalSize)) {
+                                    throw IOException("Server returned an unexpected byte range")
+                                }
                                 val channel: ByteReadChannel = httpResponse.body()
                                 RandomAccessFile(saveLocation, "rw").use { raf ->
                                     raf.seek(start)
                                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                                    var received = 0L
                                     while (true) {
                                         val count = channel.readAvailable(buffer)
                                         if (count == -1) break
                                         if (count == 0) continue
+                                        if (count > expected - received) {
+                                            throw IOException("Server exceeded the requested byte range")
+                                        }
                                         raf.write(buffer, 0, count)
+                                        received += count
                                         totalRead.addAndGet(count.toLong())
                                         reportProgress()
+                                    }
+                                    if (received != expected) {
+                                        throw IOException("Incomplete byte range: $received of $expected bytes")
                                     }
                                 }
                             }
@@ -378,5 +431,9 @@ class HttpService(
         private const val MAX_RETRY_DELAY_MS = 30_000L
         private const val DEFAULT_DOWNLOAD_THREADS = 5
         private const val MIN_MULTIPART_SIZE = 1024L * 1024L
+        private const val MAX_DOWNLOAD_THREADS = 8
+        private const val RANGE_PROBE_TIMEOUT_MS = 5_000L
+        private const val DOWNLOAD_IDLE_TIMEOUT_MS = 15_000L
+        private val CONTENT_RANGE = Regex("bytes ([0-9]+)-([0-9]+)/([0-9]+)", RegexOption.IGNORE_CASE)
     }
 }

@@ -1,5 +1,6 @@
 package app.universal.patch.manager.domain.repository
 
+import app.universal.patch.manager.network.downloader.toDownloaderMainName
 import android.app.Application
 import android.content.Context
 import android.content.ContextWrapper
@@ -406,8 +407,7 @@ class DownloaderPluginRepository(
         val entries = readSourceEntries().map { entry ->
             if (entry.id == id) {
                 entry.copy(
-                    latest = enabled,
-                    prerelease = if (enabled) false else entry.prerelease
+                    latest = enabled
                 )
             } else {
                 entry
@@ -971,7 +971,7 @@ class DownloaderPluginRepository(
         if (tempFile.exists()) tempFile.delete()
         val progressNotification = downloadProgressNotifier.begin(
             _sourceStates.value[entry.id]?.name?.let {
-                app.getString(R.string.downloader_download_title, it)
+                app.getString(R.string.downloader_download_title, it.toDownloaderMainName())
             } ?: asset.name
         )
 
@@ -985,7 +985,7 @@ class DownloaderPluginRepository(
             )
             val packageInfo = readArchivePackageInfo(tempFile)
             pm.getArchiveLabel(tempFile, packageInfo)?.let { name ->
-                progressNotification.updateTitle(app.getString(R.string.downloader_download_title, name))
+                progressNotification.updateTitle(app.getString(R.string.downloader_download_title, name.toDownloaderMainName()))
             }
             if (entry.trustedSignatureHex != null) {
                 when (val trust = verifyArchiveTrust(entry, packageInfo)) {

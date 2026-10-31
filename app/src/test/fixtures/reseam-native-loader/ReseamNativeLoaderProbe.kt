@@ -35,6 +35,17 @@ object ReseamNativeLoaderProbe {
             println("PASS: concurrent process snapshot publication")
             return
         }
+        if (arguments.getOrNull(1) == "metadata") {
+            val files = prepareReseamRuntimeFiles(a, root.resolve("metadata-runtime"), Build.SUPPORTED_ABIS.toList())
+            val loader = DexClassLoader(files.apkFile.path, root.path,
+                files.nativeLibraryDirectory.path, ReseamNativeLoaderProbe::class.java.classLoader!!.parent)
+            val method = loader.loadClass("app.universal.patch.manager.reseam.runtime.ReseamRuntimeEntry")
+                .getMethod("loadMetadataForBundle", String::class.java)
+            repeat(20) { check((method.invoke(null, arguments[2]) as List<*>).isNotEmpty()) }
+            check(Runtime.getRuntime().maxMemory() / 1048576 == 1024L)
+            println("PASS: real Reseam metadata decoded 20 times with 1024 MB ART heap and JIT workaround")
+            return
+        }
         val b = root.resolve("source-b.apk")
         val abis = Build.SUPPORTED_ABIS.toList()
         val parent = ReseamNativeLoaderProbe::class.java.classLoader!!.parent

@@ -541,7 +541,8 @@ class JsonPatchBundle(
         searchUpdate,
         lastNotifiedVersion,
         enabled,
-        channel == RepositoryBundleReleaseChannel.PRERELEASE,
+        if (channel == RepositoryBundleReleaseChannel.LATEST) usePrereleases
+        else channel == RepositoryBundleReleaseChannel.PRERELEASE,
         channel == RepositoryBundleReleaseChannel.LATEST,
         useSpecificVersion,
         selectedVersion,
@@ -1006,9 +1007,9 @@ class ExternalGraphqlPatchBundle(
             if (metadata.downloadUrl != asset.downloadUrl || metadata.version != asset.version) {
                 metadata = metadata.copy(
                     downloadUrl = safeArtifactUrl(asset.downloadUrl) ?: metadata.downloadUrl,
-                    signatureDownloadUrl = asset.signatureDownloadUrl ?: metadata.signatureDownloadUrl,
+                    signatureDownloadUrl = asset.signatureDownloadUrl,
                     version = asset.version.ifBlank { metadata.version },
-                    fileHash = asset.fileHash ?: metadata.fileHash,
+                    fileHash = asset.fileHash,
                     createdAt = asset.createdAt.toString(),
                     description = asset.description.ifBlank { metadata.description }
                 )

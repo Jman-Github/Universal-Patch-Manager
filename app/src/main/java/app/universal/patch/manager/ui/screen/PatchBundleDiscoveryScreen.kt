@@ -864,9 +864,10 @@ fun PatchBundleDiscoveryScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    listOf("all" to R.string.catalog_all, "latest" to R.string.patch_bundle_discovery_latest,
+                                    listOf("all" to R.string.catalog_all,
                                         "release" to R.string.patch_bundle_discovery_release,
-                                        "prerelease" to R.string.patch_bundle_discovery_prerelease).forEach { (value, label) ->
+                                        "prerelease" to R.string.patch_bundle_discovery_prerelease,
+                                        "latest" to R.string.patch_bundle_discovery_latest).forEach { (value, label) ->
                                         CheckedFilterChip(
                                             selected = releaseSelection == value,
                                             onClick = { viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(release = value) } },

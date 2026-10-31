@@ -74,6 +74,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.universal.patch.manager.ui.component.settings.SettingsSearchHighlight
+import kotlinx.coroutines.flow.first
 import app.universal.patch.manager.R
 import app.universal.patch.manager.network.runtime.PatcherRuntimeKind
 import app.universal.patch.manager.network.runtime.PatcherRuntimePluginSourceState
@@ -109,6 +111,18 @@ fun PatcherRuntimePluginsSettingsScreen(
     val pluginStates by viewModel.runtimePluginStates.collectAsStateWithLifecycle(emptyMap())
     val sourceStates by viewModel.runtimePluginSourceStates.collectAsStateWithLifecycle(emptyMap())
     val loadedRuntimes by viewModel.loadedRuntimes.collectAsStateWithLifecycle(emptyMap())
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
+    var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
+    LaunchedEffect(searchTarget) {
+        val target = searchTarget
+        if (target?.destination == app.universal.patch.manager.ui.model.navigation.Settings.PatcherRuntimes) {
+            val itemCount = androidx.compose.runtime.snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > 0 }
+            listState.scrollToItem((if (target.targetId == R.string.patcher_runtime_available) 0 else 2).coerceAtMost(itemCount - 1))
+            highlightTarget = target.targetId
+            SettingsSearchState.clear()
+        }
+    }
     val remoteSourceBusyState = viewModel.remoteSourceBusyState
     var showImportUrlDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -146,13 +160,22 @@ fun PatcherRuntimePluginsSettingsScreen(
             modifier = Modifier.padding(padding)
         ) {
             LazyColumnWithScrollbar(
+                thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+                state = listState,
                 modifier = Modifier.fillMaxSize()
             ) {
                 item {
-                    GroupHeader(
-                        title = stringResource(R.string.patcher_runtime_available),
-                        icon = SettingsSectionIcons.PatchingEngine
-                    )
+                    SettingsSearchHighlight(
+                        targetKey = R.string.patcher_runtime_available,
+                        activeKey = highlightTarget,
+                        onHighlightComplete = { highlightTarget = null }
+                    ) { highlightModifier ->
+                        GroupHeader(
+                            stringResource(R.string.patcher_runtime_available),
+                            icon = SettingsSectionIcons.PatchingEngine,
+                            modifier = highlightModifier
+                        )
+                    }
                 }
                 item {
                     RuntimeSummaryCard(
@@ -161,10 +184,19 @@ fun PatcherRuntimePluginsSettingsScreen(
                     )
                 }
                 item {
-                    GroupHeader(
-                        title = stringResource(R.string.patcher_runtime_plugins_section),
-                        icon = SettingsSectionIcons.DownloaderPlugins
-                    )
+                    SettingsSearchHighlight(
+                        targetKey = R.string.patcher_runtime_plugins_section,
+                        extraKeys = setOf(R.string.patcher_runtime_plugins, R.string.patcher_runtime_import_url,
+                            R.string.patcher_runtime_managed_sources, R.string.patcher_runtime_installed_plugins),
+                        activeKey = highlightTarget,
+                        onHighlightComplete = { highlightTarget = null }
+                    ) { highlightModifier ->
+                        GroupHeader(
+                            stringResource(R.string.patcher_runtime_plugins_section),
+                            icon = SettingsSectionIcons.DownloaderPlugins,
+                            modifier = highlightModifier
+                        )
+                    }
                 }
                 item {
                     RuntimeImportCard(

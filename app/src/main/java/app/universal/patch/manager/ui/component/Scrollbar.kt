@@ -23,11 +23,13 @@ import com.gigamole.composescrollbars.scrolltype.knobtype.ScrollbarsStaticKnobTy
 fun Scrollbar(
     scrollState: ScrollState,
     modifier: Modifier = Modifier,
-    prominent: Boolean = false
+    prominent: Boolean = false,
+    thumbLength: Dp? = null
 ) {
     Scrollbar(
         ScrollbarsScrollType.Scroll(
-            knobType = ScrollbarsStaticKnobType.Auto(),
+            knobType = thumbLength?.let { ScrollbarsStaticKnobType.Exact(size = it) }
+                ?: ScrollbarsStaticKnobType.Auto(),
             state = scrollState
         ),
         modifier,

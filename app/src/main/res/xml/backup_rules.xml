@@ -6,6 +6,7 @@
     <exclude domain="root" path="app_original-apps" />
     <exclude domain="root" path="app_patched-apps" />
     <exclude domain="root" path="app_downloaded-apps" />
+    <exclude domain="root" path="app_shared-apks" />
     <exclude domain="root" path="app_patch_bundles" />
     <exclude domain="root" path="app_batch-patch-outputs" />
     <exclude domain="root" path="app_ephemeral" />

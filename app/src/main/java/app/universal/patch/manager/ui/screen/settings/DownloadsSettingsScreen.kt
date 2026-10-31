@@ -76,6 +76,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -95,6 +96,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.patch.manager.domain.installer.InstallerManager
 import app.universal.patch.manager.domain.manager.PreferencesManager
+import kotlinx.coroutines.flow.first
 import app.universal.patch.manager.R
 import app.universal.patch.manager.data.room.apps.downloaded.DownloadedApp
 import app.universal.patch.manager.data.platform.Filesystem
@@ -175,6 +177,7 @@ fun DownloadsSettingsScreen(
     }
     val remoteSourceBusyState = viewModel.remoteSourceBusyState
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     var showHelpDialog by rememberSaveable { mutableStateOf(false) } // From PR #37: https://github.com/Jman-Github/Universal-Patch-Manager/pull/37
@@ -278,6 +281,17 @@ fun DownloadsSettingsScreen(
     LaunchedEffect(searchTarget) {
         val target = searchTarget
         if (target?.destination == Settings.Downloads) {
+            val itemCount = androidx.compose.runtime.snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > 0 }
+            val index = when (target.targetId) {
+                R.string.download_behavior_section, R.string.downloader_auto_save_title,
+                R.string.downloader_auto_save_latest_only_title -> 0
+                R.string.downloader_plugins -> 2
+                else -> 4 + sourceStates.size + pluginStates.size +
+                    apkDownloadHelpers.filterNot { it.packageName in managedHelperPackages }
+                        .distinctBy { it.packageName }.size +
+                    (if (pluginStates.isEmpty() && sourceStates.isEmpty() && apkDownloadHelpers.isEmpty()) 1 else 0)
+            }
+            listState.scrollToItem(index.coerceIn(0, itemCount - 1))
             highlightTarget = target.targetId
             SettingsSearchState.clear()
         }
@@ -587,13 +601,22 @@ fun DownloadsSettingsScreen(
             modifier = Modifier.padding(paddingValues)
         ) {
             LazyColumnWithScrollbar(
+                thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+                state = listState,
                 modifier = Modifier.fillMaxSize()
             ) {
                 item {
-                    GroupHeader(
-                        stringResource(R.string.download_behavior_section),
-                        icon = SettingsSectionIcons.DownloadBehavior
-                    )
+                    SettingsSearchHighlight(
+                        targetKey = R.string.download_behavior_section,
+                        activeKey = highlightTarget,
+                        onHighlightComplete = { highlightTarget = null }
+                    ) { highlightModifier ->
+                        GroupHeader(
+                            stringResource(R.string.download_behavior_section),
+                            icon = SettingsSectionIcons.DownloadBehavior,
+                            modifier = highlightModifier
+                        )
+                    }
                 }
                 item {
                     ExpressiveSettingsCard(
@@ -1123,7 +1146,7 @@ fun DownloadsSettingsScreen(
                     SettingsSearchHighlight(
                         targetKey = R.string.downloaded_apps,
                         activeKey = highlightTarget,
-                        extraKeys = setOf(R.string.downloaded_apps_export),
+                        extraKeys = setOf(R.string.downloaded_apps_export, R.string.download_export_section),
                         onHighlightComplete = { highlightTarget = null }
                     ) { highlightModifier ->
                         GroupHeader(
@@ -1227,6 +1250,7 @@ private fun DownloadedAppCard(
                 }
                 AppIcon(
                     packageInfo = displayInfo?.packageInfo,
+                    packageName = app.packageName,
                     contentDescription = null,
                     iconOverride = displayInfo?.icon,
                     modifier = Modifier.size(32.dp)
@@ -1737,7 +1761,7 @@ private fun DownloaderSourceSettingsDialog(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f).alpha(if (source.entry.latest) 0.38f else 1f)
                             ) {
                                 Text(
                                     text = stringResource(R.string.downloader_source_prerelease),

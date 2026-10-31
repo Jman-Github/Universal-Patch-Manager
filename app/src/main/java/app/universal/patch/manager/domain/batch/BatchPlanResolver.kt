@@ -5,6 +5,7 @@
 
 package app.universal.patch.manager.domain.batch
 
+import app.universal.patch.manager.data.platform.SharedApkFiles
 import androidx.core.content.pm.PackageInfoCompat
 import app.universal.patch.manager.data.platform.Filesystem
 import app.universal.patch.manager.data.room.apps.installed.InstallType
@@ -172,7 +173,7 @@ class BatchPlanResolver(
         val rememberedSourceFile = installedRecord
             ?.repatchSourcePath
             ?.takeIf(String::isNotBlank)
-            ?.let(::File)
+            ?.let { SharedApkFiles.resolve(File(it)) }
             ?.takeIf(File::isFile)
         val rememberedSourceInfo = rememberedSourceFile?.let { file ->
             if (SplitApkPreparer.isSplitArchive(file)) {

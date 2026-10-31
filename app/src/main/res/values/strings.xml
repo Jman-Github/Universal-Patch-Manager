@@ -778,9 +778,9 @@ Patch profiles are not affected.</string>
     <string name="downloader_import_url_hint">https://github.com/...</string>
     <string name="downloader_no_url_sources">No URL sources added.</string>
     <string name="downloader_source_auto_update">Auto update</string>
-    <string name="downloader_source_latest">Latest</string>
+    <string name="downloader_source_latest">Use latest</string>
     <string name="downloader_source_latest_description">Use the newest release from this repository, whether it is stable or pre-release</string>
-    <string name="downloader_source_prerelease">Pre-release</string>
+    <string name="downloader_source_prerelease">Use pre-releases</string>
     <string name="downloader_source_prerelease_description">Use pre-release versions from this repository when checking for updates</string>
     <string name="downloader_source_repo_url">Repository URL</string>
     <string name="downloader_source_settings_title">%1$s settings</string>
@@ -881,7 +881,7 @@ Patch profiles are not affected.</string>
     <string name="storage_retained_originals_description">Original APKs retained for future batch patching</string>
     <string name="storage_clear_retained_originals_warning_description">This removes original APKs retained for future batch patching. You may need to select those APKs again</string>
     <string name="storage_repatch_inputs">Repatch APK sources</string>
-    <string name="storage_repatch_inputs_description">Private APK copies retained for Repatch and pending patch results</string>
+    <string name="storage_repatch_inputs_description">References to original APKs kept for Repatch and pending results. APK bytes are listed under Shared APK files. Unused sources are removed automatically.</string>
     <string name="storage_clear_repatch_inputs_warning_description">This removes all APK sources retained for Repatch. Existing patched apps are not removed. Temporary source copies still needed by pending patch results are kept, and you may need to select an APK source again the next time you Repatch an existing app.</string>
     <string name="storage_patch_profile_inputs">Patch profile inputs</string>
     <string name="storage_patch_profile_inputs_description">APK inputs saved for patch profiles</string>
@@ -892,7 +892,7 @@ Patch profiles are not affected.</string>
     <string name="storage_ui_temporary_workspace">UI temporary workspace</string>
     <string name="storage_ui_temporary_workspace_description">Temporary files kept for active UI flows</string>
     <string name="storage_other_internal_data">Other internal data</string>
-    <string name="storage_other_internal_data_description">Private app data not listed in another storage row</string>
+    <string name="storage_other_internal_data_description">Private app data not listed elsewhere. Clearing cache does not remove it. Android app settings applies to the whole app.</string>
     <string name="storage_external_cache">External cache</string>
     <string name="storage_external_cache_description">Cache files stored in external app folders</string>
     <string name="storage_external_files">External files</string>
@@ -923,7 +923,9 @@ Patch profiles are not affected.</string>
     <string name="storage_clear_external_files_warning_description">This deletes files UP Manager stored in its external app folders, except the signing backup. These files may be visible outside the app and UP Manager cannot restore them automatically. This cannot be undone</string>
     <string name="storage_cache_in_use">Storage is currently in use. Try again after the active operation finishes</string>
     <string name="storage_area_cleared">Cleared %1$s: %2$s</string>
-    <string name="storage_manage_area">Manage</string>
+    <string name="storage_shared_apks">Shared APK files</string>
+    <string name="storage_shared_apks_description">Original APKs shared by downloads and Repatch. Files are removed automatically when no saved download, repatch source or pending result needs them.</string>
+    <string name="storage_manage_area">Open Android app settings</string>
     <string name="storage_cache_cleared">Cleared %1$s from cache</string>
     <string name="storage_cache_clear_failed">Could not clear cache</string>
     <string name="storage_open_app_storage_settings">Open Android app storage settings</string>
@@ -983,7 +985,7 @@ Patch profiles are not affected.</string>
     <string name="patcher_memory_usage_graph_description">Show live memory, CPU and storage I/O usage above the patcher progress steps</string>
     <string name="patcher_auto_collapse_steps">Auto-collapse completed patcher steps</string>
     <string name="patcher_auto_collapse_steps_description">Automatically collapse each patcher progress widget after all of its steps finish</string>
-    <string name="patcher_auto_expand_steps">Auto-expand running steps</string>
+    <string name="patcher_auto_expand_steps">Auto-expand running patcher steps</string>
     <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
     <string name="patcher_auto_expand_running_steps_exclusive">Only auto-expand active main category</string>
     <string name="patcher_auto_expand_running_steps_exclusive_description">When auto-expand is enabled, keep only the currently running main patcher category expanded and do not auto-expand sub-steps</string>
@@ -1547,11 +1549,11 @@ Patch profiles are not affected.</string>
     <!-- Code adapted from Morphe, see third-party/NOTICE for more information -->
     <!-- https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/res/values/strings.xml -->
     <string name="separate_processes_section">Separate processes</string>
-    <string name="process_memory_limit">Separate process memory limit</string>
-    <string name="process_memory_limit_subtitle">Memory available to separate-process tools and runtimes</string>
-    <string name="process_memory_limit_description">Applies to patching runtimes, split merging, and other separate-process tools</string>
-    <string name="process_memory_limit_warning">A low memory limit may cause memory-intensive tools and runtimes to fail</string>
-    <string name="process_memory_limit_high_warning">A memory limit above 1280 MB may be too high for this device and can cause separate processes to fail</string>
+    <string name="process_memory_limit">ART memory limit</string>
+    <string name="process_memory_limit_subtitle">Memory available for ART patching</string>
+    <string name="process_memory_limit_description">Increase this if ART patching runs out of memory. Higher limits use more RAM. Requires Android 11 or newer; some devices may use a lower limit. JVM memory is separate</string>
+    <string name="process_memory_limit_warning">Too little memory can cause patching to fail</string>
+    <string name="process_memory_limit_high_warning">Higher limits may fail if your device does not have enough available memory</string>
     <string name="process_memory_limit_value">%1$d MB</string>
     <string name="process_memory_limit_oom_title">Separate process ran out of memory</string>
     <string name="process_memory_limit_adjusted_message">The separate process memory limit was reduced from %1$d MB to %2$d MB for future attempts. Try again.</string>
@@ -2303,7 +2305,7 @@ Details: %2$s</string>
     <string name="patcher_runtime_uninstall_description">Are you sure you want to uninstall %1$s?</string>
     <string name="patcher_runtime_uninstall_success">Uninstalled %1$s</string>
     <string name="patcher_runtime_uninstall_failed">Failed to uninstall %1$s</string>
-    <string name="patcher_runtime_type_label">Type:</string>
+    <string name="patcher_runtime_type_label">Plugin type:</string>
     <string name="patcher_runtime_trust_dialog_title">Trust</string>
     <string name="patcher_runtime_trust_dialog_body">Continuing will allow this runtime plugin to run patcher code inside UP Manager.\n\nOnly enable this runtime plugin if you trust it. Runtime plugins can execute arbitrary code and may compromise your device.</string>
     <string name="import_button">Import</string>
@@ -2559,4 +2561,21 @@ Details: %2$s</string>
     <string name="manager_rebrand_notice_description">URV has been rebranded in this update to UPM (Universal Patch Manager).\n\nUPM installs as a second app because its package name is different. It will not replace URV, and your data will not move automatically.\n\nIn URV, open %1$s &gt; %2$s &gt; %3$s and save the backup. In UPM, open %1$s &gt; %2$s &gt; %4$s and select that backup.\n\nExport everything does not include your signing keystore. Use %5$s in URV and %6$s in UPM on the same settings page if you want to keep signing APKs with the same key.\n\nKeep URV installed until you have checked that your data and signing key were imported successfully.</string>
     <string name="manager_rebrand_continue_countdown">Continue (%1$d)</string>
     <string name="manager_update_unexpected_package">The downloaded APK is not a supported manager update.</string>
+    <string name="art_memory_description">Choose how much memory Reseam and other ART patching runs can use</string>
+    <string name="art_memory_search_keywords">ART memory RAM heap Reseam fallback 2 GB</string>
+    <string name="patcher_heap_memory_usage">Heap memory</string>
+    <string name="patcher_heap_process_detail">Total process memory, including native: %1$d MB</string>
+    <string name="about_donate">Support UP Manager</string>
+    <string name="about_donate_description">Donate to Jman-Github through GitHub Sponsors</string>
+    <string name="bundle_update_offline">No internet connection. Connect and try again.</string>
+    <string name="bundle_update_metered">Updates on metered connections are disabled in settings.</string>
+    <string name="minimal_action_buttons_title">Use minimal action buttons</string>
+    <string name="minimal_action_buttons_description">Show only icons on these action buttons</string>
+    <string name="source_search_browser">Search in browser</string>
+    <string name="source_search_browser_description">Find an APK using your browser</string>
+    <string name="dashboard_apps_actions">Apps tab buttons</string>
+    <string name="dashboard_bundles_actions">Patch Bundles tab buttons</string>
+    <string name="dashboard_actions_description">Reorder buttons with the arrows or hide them with the switches</string>
+    <string name="move_action_up">Move up</string>
+    <string name="move_action_down">Move down</string>
 </resources>

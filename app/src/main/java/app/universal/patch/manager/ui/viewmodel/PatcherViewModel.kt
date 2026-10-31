@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.viewmodel
 
+import app.universal.patch.manager.data.platform.SharedApkFiles
 import app.universal.patch.manager.patcher.runtime.PatcherJvm
 import android.app.Activity
 
@@ -513,8 +514,9 @@ class PatcherViewModel(
             version = sourceVersionName,
             versionCode = sourceVersionCode
         )
-        val repatchSource = patchedRepatchSourcePath?.let(::File)
+        val repatchSource = patchedRepatchSourcePath?.let { SharedApkFiles.resolve(File(it)) }
         return (sequenceOf(inputFile, repatchSource).filterNotNull() + retainedOriginals.asSequence())
+            .map(SharedApkFiles::resolve)
             .distinctBy { it.absolutePath }
             .toList()
     }
@@ -887,6 +889,7 @@ class PatcherViewModel(
 
     val fallbackInputSizeBytes: Long?
         get() = (inputFile ?: (selectedApp as? SelectedApp.Local)?.file)
+            ?.let(SharedApkFiles::resolve)
             ?.takeIf(File::isFile)
             ?.length()
 
@@ -999,7 +1002,14 @@ class PatcherViewModel(
         prePatchPreparationJob = viewModelScope.launch {
             val preparationJob = currentCoroutineContext()[Job]
             splitSelectionPreparationError = null
+            var cacheUseToken: AutoCloseable? = null
             try {
+                // Idle migration may replace an old APK path with a shared-file reference.
+                // Keep the file stable throughout inspection and split preparation.
+                withContext(Dispatchers.IO) {
+                    currentCoroutineContext().ensureActive()
+                    cacheUseToken = CacheCleanupGuard.begin()
+                }
                 val chooseSplitApks = prefs.chooseSplitApksBeforePatching.get()
                 if (chooseSplitApks) {
                     isPreparingSplitSelection = true
@@ -1023,6 +1033,7 @@ class PatcherViewModel(
                 splitSelectionPreparationError =
                     error.simpleMessage() ?: error.javaClass.simpleName
             } finally {
+                cacheUseToken?.close()
                 if (prePatchPreparationJob === preparationJob) {
                     isPreparingSplitSelection = false
                     prePatchDownloadProgress = null
@@ -1038,7 +1049,9 @@ class PatcherViewModel(
             return
         }
 
-        val localInput = input.selectedApp as? SelectedApp.Local
+        val localInput = (input.selectedApp as? SelectedApp.Local)?.let {
+            it.copy(file = SharedApkFiles.resolve(it.file))
+        }
         val localSplitEntryNames = localInput?.let { selected ->
             withContext(Dispatchers.IO) {
                 SplitApkPreparer.splitApkEntryNames(selected.file)
@@ -1183,8 +1196,9 @@ class PatcherViewModel(
             }
 
             is SelectedApp.Local -> {
-                val needsSplit = SplitApkPreparer.isSplitArchive(selected.file)
-                DownloadResult(selected.file, needsSplit = needsSplit)
+                val file = SharedApkFiles.resolve(selected.file)
+                val needsSplit = SplitApkPreparer.isSplitArchive(file)
+                DownloadResult(file, needsSplit = needsSplit)
             }
 
             is SelectedApp.Installed -> prepareInstalledInputBeforePatching(selected.packageName)
@@ -3821,7 +3835,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         check(packageInfo.packageName == packageName) {
             app.getString(R.string.root_mount_renamed_package_not_supported)
         }
-        val originalInput = inputFile
+        val originalInput = inputFile?.let(SharedApkFiles::resolve)
         val selectedApp = input.selectedApp
         val sourceVersionNameHint = patchedSourceVersionName
         val sourceVersionCodeHint = patchedSourceVersionCode
@@ -4669,10 +4683,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private fun originalSignatureSource(): File? = sequenceOf(
-        patchedRepatchSourcePath?.let(::File),
+        patchedRepatchSourcePath?.let { SharedApkFiles.resolve(File(it)) },
         inputFile,
         (input.selectedApp as? SelectedApp.Local)?.file
-    ).filterNotNull().firstOrNull { it.isFile && it.length() > 0L }
+    ).filterNotNull().map(SharedApkFiles::resolve).firstOrNull { it.isFile && it.length() > 0L }
 
     private suspend fun hasOriginalSignatureMetadata(): Boolean {
         val source = originalSignatureSource() ?: return false
@@ -5723,7 +5737,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun initialSplitRequirement(selectedApp: SelectedApp): Boolean =
         when (selectedApp) {
-            is SelectedApp.Local -> SplitApkPreparer.isSplitArchive(selectedApp.file)
+            is SelectedApp.Local -> SplitApkPreparer.isSplitArchive(SharedApkFiles.resolve(selectedApp.file))
             else -> false
         }
 

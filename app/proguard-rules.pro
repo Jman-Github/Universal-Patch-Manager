@@ -41,3 +41,5 @@
 
 # JNI entry point adapted from Morphe PR #1202.
 -keep class app.universal.patch.manager.patcher.runtime.jvm.EmbeddedJvm { *; }
+
+-keep class app.universal.patch.manager.patcher.runtime.ArtProcessMain { public static void main(java.lang.String[]); }

@@ -47,6 +47,7 @@ For runtime behavior, memory limits, and troubleshooting, see the [patching runt
   <li><strong>Full changelog history:</strong> View cached patch bundle changelog history with configurable loading and storage limits, plus release links when available.</li>
   <li><strong>Bundle organization:</strong> Rename imported bundles, reorder them, preserve metadata and timestamps, and export/import bundle configurations.</li>
   <li><strong>Built-in runtimes:</strong> Morphe and Reseam patching runtimes are bundled with UPM. Morphe supports JVM or ART execution; Reseam uses its native Android runtime.</li>
+  <li><strong>Configurable ART memory:</strong> Reseam and ART fallbacks support a separate 512-2048 MB heap slider (default 1024 MB), while JVM remains preferred where supported. Android 11+ uses fresh ART workers with heap overrides; Android 8-10 retains Android-managed workers. Requests are capped at 1024 MB in 32-bit processes. If startup needs a smaller heap, UPM retries that run without changing your saved setting. Logs report the actual heap limit. Native memory is additional to the Java/Kotlin heap.</li>
   <li><strong>ReVanced v21 runtime plugin:</strong> Add the supported ReVanced v21 runtime plugin from a local APK or GitHub source and manage its trust, update channel, installed version, and stored plugin files.</li>
   <li><strong>ReVanced v22 runtime plugin:</strong> Add the ReVanced v22 plugin with the same trust and update controls as v21. Both JVM and ART execution are supported.</li>
 </ul>

@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.component.bundle
 
+import app.universal.patch.manager.ui.component.minimalActionButtons
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -583,7 +584,7 @@ private fun BundleActionPill(
                 tint = contentColor,
                 modifier = Modifier.size(14.dp)
             )
-            Text(
+            if (!minimalActionButtons("bundles")) Text(
                 text = text,
                 style = MaterialTheme.typography.labelSmall,
                 color = contentColor,

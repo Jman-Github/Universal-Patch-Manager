@@ -19,7 +19,11 @@ ROOT = Path(__file__).resolve().parents[4]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--emulator")
 parser.add_argument("--runtime", "--plugin", dest="plugin", type=Path, default=ROOT / "reseam-runtime/build/outputs/apk/release/reseam-runtime.apk")
+parser.add_argument("--metadata-bundle", type=Path)
+parser.add_argument("--manager-apk", type=Path)
 args = parser.parse_args()
+if args.metadata_bundle and not (args.emulator and args.manager_apk):
+    parser.error("--metadata-bundle requires --emulator and --manager-apk")
 java_home = Path(os.environ.get("JAVA_HOME", r"C:\Program Files\Java\jdk-17"))
 java = java_home / "bin" / ("java.exe" if os.name == "nt" else "java")
 caches = [ROOT / ".gradle-user-home/caches/modules-2/files-2.1"]
@@ -105,6 +109,23 @@ with tempfile.TemporaryDirectory(prefix="reseam-native-loader-", dir=ROOT / "bui
                 print(output, end="")
                 assert publisher.returncode == 0, output
             run(probe, timeout=180)
+            if args.metadata_bundle:
+                # The ownership probe deliberately deletes its original APK.
+                run(device + ["push", args.plugin, remote + "/source-a.apk"])
+                run(device + ["push", args.metadata_bundle, remote + "/metadata.reseam"])
+                with zipfile.ZipFile(args.manager_apk) as manager:
+                    for name in ("libprop_override.so", "libc++_shared.so"):
+                        library = work / name
+                        library.write_bytes(manager.read("lib/x86_64/" + name))
+                        run(device + ["push", library, remote + "/" + name])
+                run(device + ["shell", "env", "LD_LIBRARY_PATH=" + remote,
+                    "LD_PRELOAD=" + remote + "/libprop_override.so",
+                    "PROP_dalvik.vm.heapsize=1024M", "PROP_dalvik.vm.heapgrowthlimit=1024M",
+                    "PROP_dalvik.vm.usejit=false", "PROP_dalvik.vm.usejitprofiles=false",
+                    "CLASSPATH=" + remote + "/harness.zip", "app_process64", "/system/bin",
+                    "app.universal.patch.manager.patcher.reseam.ReseamNativeLoaderProbe", remote,
+                    "metadata", remote + "/metadata.reseam"], timeout=180)
+
         finally:
             resolved = subprocess.check_output(list(map(str, device + ["shell", "readlink", "-f", remote])), text=True).strip()
             if resolved == remote and remote.startswith("/data/local/tmp/upm-reseam-native-"):

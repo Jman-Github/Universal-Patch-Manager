@@ -396,6 +396,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         ColumnWithScrollbar(
+            thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
             modifier = Modifier
                 .padding(paddingValues)
                 .fillMaxSize()
@@ -459,7 +460,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 val areas = snapshot?.areas.orEmpty()
-                val showUsageShimmer = isLoading || snapshot == null
+                val showUsageShimmer = snapshot == null
                 if (showUsageShimmer) {
                     val placeholderCount = snapshot?.areas?.size ?: STORAGE_AREA_PLACEHOLDER_COUNT
                     repeat(placeholderCount) { index ->
@@ -700,6 +701,24 @@ private fun StorageAreaItem(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (area.clearTarget == null) {
+                    TextButton(
+                        onClick = onManage,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Settings,
+                            contentDescription = null,
+                            modifier = Modifier.width(18.dp).height(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(R.string.storage_manage_area),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
             }
         },
         trailingContent = {
@@ -729,12 +748,8 @@ private fun StorageAreaItem(
                         )
                     }
                 }
-                when (val clearTarget = area.clearTarget) {
-                    null -> StorageAreaActionButton(
-                        text = stringResource(R.string.storage_manage_area),
-                        onClick = onManage
-                    )
-                    else -> StorageAreaActionButton(
+                area.clearTarget?.let { clearTarget ->
+                    StorageAreaActionButton(
                         text = stringResource(R.string.clear),
                         enabled = !isLoading && (area.clearableBytes ?: area.stats.bytes) > 0L
                     ) { onClear(clearTarget) }
@@ -1040,6 +1055,7 @@ private suspend fun loadStorageSnapshot(
     val downloaderPluginsDir = context.privateAppDir("managed_downloader_plugins")
     val patcherRuntimePluginsDir = context.privateAppDir("managed_patcher_runtime_plugins")
     val patchedAppsDir = context.privateAppDir("patched-apps")
+    val sharedApksStats = context.privateAppDir("shared-apks").directoryStats()
     val retainedOriginalsDir = context.privateAppDir("original-apps")
     val repatchInputsDir = context.privateAppDir("repatch-inputs")
     val repatchInputStagingDir = context.privateAppDir("repatch-input-staging")
@@ -1102,6 +1118,7 @@ private suspend fun loadStorageSnapshot(
         patcherRuntimePluginsStats,
         patchedAppsStats,
         retainedOriginalsStats,
+        sharedApksStats,
         repatchInputsStats,
         patchProfileInputsStats,
         temporaryWorkspaceStats,
@@ -1140,6 +1157,13 @@ private suspend fun loadStorageSnapshot(
     )
 
     val areas = listOf(
+        StorageAreaUsage(
+            targetKey = R.string.storage_shared_apks,
+            title = context.getString(R.string.storage_shared_apks),
+            description = context.getString(R.string.storage_shared_apks_description),
+            stats = sharedApksStats,
+            clearTarget = null
+        ),
         StorageAreaUsage(
             targetKey = R.string.storage_internal_cache,
             title = context.getString(R.string.storage_internal_cache),

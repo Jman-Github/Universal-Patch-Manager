@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.screen.settings
 
+import app.universal.patch.manager.ui.component.minimalActionButtons
 import android.Manifest
 import android.app.ActivityManager
 import android.content.ClipData
@@ -344,11 +345,6 @@ fun AdvancedSettingsScreen(
     var autoPatchShizukuConflictOptionsExpanded by rememberSaveable {
         mutableStateOf(false)
     }
-    LaunchedEffect(highlightTarget) {
-        if (highlightTarget == R.string.auto_patch_shizuku_uninstall_on_conflict) {
-            autoPatchShizukuConflictOptionsExpanded = true
-        }
-    }
     val appLanguage by viewModel.prefs.appLanguage.getAsState()
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
     var pendingLanguageRestart by rememberSaveable { mutableStateOf<String?>(null) }
@@ -483,6 +479,7 @@ fun AdvancedSettingsScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         ColumnWithScrollbar(
+            thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
@@ -494,10 +491,17 @@ fun AdvancedSettingsScreen(
             val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
             val announcementSystemEnabled by viewModel.prefs.announcementSystemEnabled.getAsState()
             var showSearchEngineDialog by rememberSaveable { mutableStateOf(false) }
-            GroupHeader(
-                stringResource(R.string.app_behavior_section),
-                icon = SettingsSectionIcons.AppBehavior
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.app_behavior_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.app_behavior_section),
+                    icon = SettingsSectionIcons.AppBehavior,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -574,10 +578,17 @@ fun AdvancedSettingsScreen(
                 }
             }
 
-            GroupHeader(
-                stringResource(R.string.network_integrations_section),
-                icon = SettingsSectionIcons.NetworkIntegrations
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.network_integrations_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.network_integrations_section),
+                    icon = SettingsSectionIcons.NetworkIntegrations,
+                    modifier = highlightModifier
+                )
+            }
 
             val apiUrl by viewModel.prefs.api.getAsState()
             val gitHubPat by viewModel.prefs.gitHubPat.getAsState()
@@ -668,10 +679,17 @@ fun AdvancedSettingsScreen(
                 }
             }
 
-            GroupHeader(
-                stringResource(R.string.installer_section),
-                icon = SettingsSectionIcons.Installer
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.installer_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.installer_section),
+                    icon = SettingsSectionIcons.Installer,
+                    modifier = highlightModifier
+                )
+            }
             val installTarget = InstallerManager.InstallTarget.PATCHER
             val primaryPreference by viewModel.prefs.installerPrimary.getAsState()
             val fallbackPreference by viewModel.prefs.installerFallback.getAsState()
@@ -684,6 +702,13 @@ fun AdvancedSettingsScreen(
                 viewModel.prefs.autoPatchInstallWithShizuku.getAsState()
             val autoPatchUninstallOnConflictWithShizuku by
                 viewModel.prefs.autoPatchUninstallOnConflictWithShizuku.getAsState()
+            LaunchedEffect(autoPatchEnabled, autoPatchInstallWithShizuku, highlightTarget) {
+                if (!autoPatchEnabled || !autoPatchInstallWithShizuku) {
+                    autoPatchShizukuConflictOptionsExpanded = false
+                } else if (highlightTarget == R.string.auto_patch_shizuku_uninstall_on_conflict) {
+                    autoPatchShizukuConflictOptionsExpanded = true
+                }
+            }
             val autoPatchRequiresCharging by viewModel.prefs.autoPatchRequiresCharging.getAsState()
             val autoPatchInterval by viewModel.prefs.autoPatchInterval.getAsState()
             val allowExternalBatchActions by viewModel.prefs.allowExternalBatchActions.getAsState()
@@ -965,10 +990,17 @@ fun AdvancedSettingsScreen(
 
             // Code adapted from Morphe, see third-party/NOTICE for more information
             // https://github.com/MorpheApp/morphe-manager/pull/795
-            GroupHeader(
-                stringResource(R.string.auto_patch_section),
-                icon = SettingsSectionIcons.Installer
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.auto_patch_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.auto_patch_section),
+                    icon = SettingsSectionIcons.Installer,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -1000,7 +1032,7 @@ fun AdvancedSettingsScreen(
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
                     val controlEnabled = !pendingAutoPatchShizukuPermission &&
-                        (autoPatchEnabled || autoPatchInstallWithShizuku)
+                        autoPatchEnabled
                     ExpressiveSettingsItem(
                         modifier = highlightModifier,
                         headlineContent = stringResource(
@@ -1012,13 +1044,8 @@ fun AdvancedSettingsScreen(
                         enabled = controlEnabled,
                         trailingContent = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                ExpressiveSettingsSwitch(
-                                    checked = autoPatchInstallWithShizuku,
-                                    enabled = controlEnabled,
-                                    onCheckedChange = setAutoPatchInstallWithShizuku
-                                )
                                 IconButton(
-                                    enabled = autoPatchInstallWithShizuku,
+                                    enabled = controlEnabled && autoPatchInstallWithShizuku,
                                     onClick = {
                                         autoPatchShizukuConflictOptionsExpanded =
                                             !autoPatchShizukuConflictOptionsExpanded
@@ -1033,6 +1060,11 @@ fun AdvancedSettingsScreen(
                                         contentDescription = null
                                     )
                                 }
+                                ExpressiveSettingsSwitch(
+                                    checked = autoPatchInstallWithShizuku,
+                                    enabled = controlEnabled,
+                                    onCheckedChange = setAutoPatchInstallWithShizuku
+                                )
                             }
                         },
                         onClick = {
@@ -1042,7 +1074,7 @@ fun AdvancedSettingsScreen(
                         }
                     )
                 }
-                if (autoPatchShizukuConflictOptionsExpanded) {
+                if (autoPatchShizukuConflictOptionsExpanded && autoPatchEnabled && autoPatchInstallWithShizuku) {
                     ExpressiveSettingsDivider()
                     SettingsSearchHighlight(
                         targetKey = R.string.auto_patch_shizuku_uninstall_on_conflict,
@@ -1050,9 +1082,7 @@ fun AdvancedSettingsScreen(
                         onHighlightComplete = { highlightTarget = null }
                     ) { highlightModifier ->
                         ExpressiveSettingsItem(
-                            modifier = highlightModifier
-                                .padding(start = 24.dp)
-                                .alpha(if (autoPatchInstallWithShizuku) 1f else 0.5f),
+                            modifier = highlightModifier.padding(start = 24.dp),
                             headlineContent = stringResource(
                                 R.string.auto_patch_shizuku_uninstall_on_conflict
                             ),
@@ -1086,8 +1116,7 @@ fun AdvancedSettingsScreen(
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
                     ExpressiveSettingsItem(
-                        modifier = highlightModifier
-                            .alpha(if (autoPatchEnabled) 1f else 0.5f),
+                        modifier = highlightModifier,
                         headlineContent = stringResource(
                             R.string.auto_patch_requires_charging
                         ),
@@ -1128,7 +1157,7 @@ fun AdvancedSettingsScreen(
                         },
                         secondaryActionEnabled = autoPatchEnabled &&
                             autoPatchInterval != viewModel.prefs.autoPatchInterval.default,
-                        primaryActionLabel = stringResource(R.string.configure),
+                        primaryActionLabel = stringResource(R.string.settings),
                         onPrimaryAction = { showAutoPatchIntervalDialog = true },
                         primaryActionEnabled = autoPatchEnabled
                     )
@@ -1203,10 +1232,17 @@ fun AdvancedSettingsScreen(
             }
 
             if (mode == AdvancedSettingsMode.ADVANCED_SYSTEM) {
-            GroupHeader(
-                stringResource(R.string.safeguards_compatibility_section),
-                icon = SettingsSectionIcons.SafeguardsCompatibility
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.safeguards_compatibility_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.safeguards_compatibility_section),
+                    icon = SettingsSectionIcons.SafeguardsCompatibility,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -1321,6 +1357,18 @@ fun AdvancedSettingsScreen(
             val morpheBytecodeMode by viewModel.prefs.morpheBytecodeMode.getAsState()
             val patcherLogMode by viewModel.prefs.patcherLogMode.getAsState()
             val useJvmRuntime by viewModel.prefs.useJvmRuntime.getAsState()
+            val artMemoryLimit by viewModel.prefs.artMemoryLimit.getAsState()
+            var showArtMemoryDialog by remember { mutableStateOf(false) }
+            if (showArtMemoryDialog) {
+                app.universal.patch.manager.ui.component.settings.ProcessMemoryLimitDialog(
+                    currentLimit = artMemoryLimit,
+                    onDismiss = { showArtMemoryDialog = false },
+                    onLimitChange = { limit -> viewModel.viewModelScope.launch {
+                        viewModel.prefs.artMemoryLimit.update(limit)
+                    } }
+                )
+            }
+
             if (showMorpheBytecodeModeDialog) {
                 MorpheBytecodeModeDialog(
                     current = morpheBytecodeMode,
@@ -1341,14 +1389,37 @@ fun AdvancedSettingsScreen(
                     }
                 )
             }
-            GroupHeader(
-                stringResource(R.string.patching_engine_section),
-                icon = SettingsSectionIcons.PatchingEngine
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.patching_engine_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.patching_engine_section),
+                    icon = SettingsSectionIcons.PatchingEngine,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.process_memory_limit,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.process_memory_limit),
+                        supportingContent = stringResource(R.string.art_memory_description),
+                        trailingContent = {
+                            Text(stringResource(R.string.process_memory_limit_value, artMemoryLimit))
+                        },
+                        onClick = { showArtMemoryDialog = true }
+                    )
+                }
+                ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
                     targetKey = R.string.patcher_jvm_enable,
                     activeKey = highlightTarget,
@@ -1504,10 +1575,17 @@ fun AdvancedSettingsScreen(
             val autoExpandRunningStepsExclusive by
                 viewModel.prefs.autoExpandRunningStepsExclusive.getAsState()
 
-            GroupHeader(
-                stringResource(R.string.patching_flow_section),
-                icon = SettingsSectionIcons.PatchingFlow
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.patching_flow_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.patching_flow_section),
+                    icon = SettingsSectionIcons.PatchingFlow,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -1642,15 +1720,172 @@ fun AdvancedSettingsScreen(
                 }
             }
 
+            SettingsSearchHighlight(
+                targetKey = R.string.saved_apps_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.saved_apps_section),
+                    icon = SettingsSectionIcons.SavedApps,
+                    modifier = highlightModifier
+                )
+            }
+            val savedAppsEnabled by viewModel.prefs.enableSavedApps.getAsState()
+            val disableSavedAppOverwrite by viewModel.prefs.disableSavedAppOverwrite.getAsState()
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.patcher_saved_apps_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = savedAppsEnabled,
+                        onValueChange = viewModel::setSavedAppsEnabled,
+                        headline = R.string.patcher_saved_apps_title,
+                        description = R.string.patcher_saved_apps_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.saved_apps_disable_overwrite_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = savedAppsEnabled && disableSavedAppOverwrite,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.disableSavedAppOverwrite.update(value)
+                            }
+                        },
+                        headline = R.string.saved_apps_disable_overwrite_title,
+                        description = R.string.saved_apps_disable_overwrite_description,
+                        enabled = savedAppsEnabled
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.saved_apps_show_bundle_update_badges_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    val showSavedAppBundleUpdateBadges by viewModel.prefs.showSavedAppBundleUpdateBadges.getAsState()
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = savedAppsEnabled && showSavedAppBundleUpdateBadges,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.showSavedAppBundleUpdateBadges.update(value)
+                            }
+                        },
+                        headline = R.string.saved_apps_show_bundle_update_badges_title,
+                        description = R.string.saved_apps_show_bundle_update_badges_description,
+                        enabled = savedAppsEnabled
+                    )
+                }
+            }
+            val showPatchSelectionVersionTags by
+                viewModel.prefs.patchSelectionShowVersionTags.getAsState()
+            val showPatchSelectionOptionPreviews by
+                viewModel.prefs.patchSelectionShowOptionPreviews.getAsState()
+            val minimalPatchSelectionView =
+                !showPatchSelectionVersionTags && !showPatchSelectionOptionPreviews
+
+            SettingsSearchHighlight(
+                targetKey = R.string.patch_list_display_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.patch_list_display_section),
+                    icon = SettingsSectionIcons.ActionButtonsPatchList,
+                    modifier = highlightModifier
+                )
+            }
+            ExpressiveSettingsCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.minimal_patch_selection_view_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = minimalPatchSelectionView,
+                        onValueChange = { enabled ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.setMinimalPatchSelectionView(enabled)
+                            }
+                        },
+                        headline = R.string.minimal_patch_selection_view_title,
+                        description = R.string.minimal_patch_selection_view_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.patch_selection_version_tags_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = showPatchSelectionVersionTags,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.patchSelectionShowVersionTags.update(value)
+                            }
+                        },
+                        headline = R.string.patch_selection_version_tags_title,
+                        description = R.string.patch_selection_version_tags_description,
+                        enabled = !minimalPatchSelectionView
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.patch_selection_option_previews_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = showPatchSelectionOptionPreviews,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.patchSelectionShowOptionPreviews.update(value)
+                            }
+                        },
+                        headline = R.string.patch_selection_option_previews_title,
+                        description = R.string.patch_selection_option_previews_description,
+                        enabled = !minimalPatchSelectionView
+                    )
+                }
+            }
             val splitMergeAutoExpandRunningStepsEnabled by
                 viewModel.prefs.splitMergeAutoExpandRunningSteps.getAsState()
             val splitMergeAutoExpandRunningStepsExclusive by
                 viewModel.prefs.splitMergeAutoExpandRunningStepsExclusive.getAsState()
 
-            GroupHeader(
-                stringResource(R.string.merge_split_flow_section),
-                icon = SettingsSectionIcons.PatchingFlow
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.merge_split_flow_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.merge_split_flow_section),
+                    icon = SettingsSectionIcons.PatchingFlow,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -1770,150 +2005,20 @@ fun AdvancedSettingsScreen(
                     )
                 }
             }
-
-            GroupHeader(
-                stringResource(R.string.saved_apps_section),
-                icon = SettingsSectionIcons.SavedApps
-            )
-            val savedAppsEnabled by viewModel.prefs.enableSavedApps.getAsState()
-            val disableSavedAppOverwrite by viewModel.prefs.disableSavedAppOverwrite.getAsState()
-            ExpressiveSettingsCard(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
-            ) {
-                SettingsSearchHighlight(
-                    targetKey = R.string.patcher_saved_apps_title,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        value = savedAppsEnabled,
-                        onValueChange = viewModel::setSavedAppsEnabled,
-                        headline = R.string.patcher_saved_apps_title,
-                        description = R.string.patcher_saved_apps_description,
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.saved_apps_disable_overwrite_title,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        value = savedAppsEnabled && disableSavedAppOverwrite,
-                        onValueChange = { value ->
-                            viewModel.viewModelScope.launch {
-                                viewModel.prefs.disableSavedAppOverwrite.update(value)
-                            }
-                        },
-                        headline = R.string.saved_apps_disable_overwrite_title,
-                        description = R.string.saved_apps_disable_overwrite_description,
-                        enabled = savedAppsEnabled
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.saved_apps_show_bundle_update_badges_title,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    val showSavedAppBundleUpdateBadges by viewModel.prefs.showSavedAppBundleUpdateBadges.getAsState()
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        value = savedAppsEnabled && showSavedAppBundleUpdateBadges,
-                        onValueChange = { value ->
-                            viewModel.viewModelScope.launch {
-                                viewModel.prefs.showSavedAppBundleUpdateBadges.update(value)
-                            }
-                        },
-                        headline = R.string.saved_apps_show_bundle_update_badges_title,
-                        description = R.string.saved_apps_show_bundle_update_badges_description,
-                        enabled = savedAppsEnabled
-                    )
-                }
-            }
-            val showPatchSelectionVersionTags by
-                viewModel.prefs.patchSelectionShowVersionTags.getAsState()
-            val showPatchSelectionOptionPreviews by
-                viewModel.prefs.patchSelectionShowOptionPreviews.getAsState()
-            val minimalPatchSelectionView =
-                !showPatchSelectionVersionTags && !showPatchSelectionOptionPreviews
-
-            GroupHeader(
-                stringResource(R.string.patch_list_display_section),
-                icon = SettingsSectionIcons.ActionButtonsPatchList
-            )
-            ExpressiveSettingsCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
-            ) {
-                SettingsSearchHighlight(
-                    targetKey = R.string.minimal_patch_selection_view_title,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        value = minimalPatchSelectionView,
-                        onValueChange = { enabled ->
-                            viewModel.viewModelScope.launch {
-                                viewModel.prefs.setMinimalPatchSelectionView(enabled)
-                            }
-                        },
-                        headline = R.string.minimal_patch_selection_view_title,
-                        description = R.string.minimal_patch_selection_view_description
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.patch_selection_version_tags_title,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        value = showPatchSelectionVersionTags,
-                        onValueChange = { value ->
-                            viewModel.viewModelScope.launch {
-                                viewModel.prefs.patchSelectionShowVersionTags.update(value)
-                            }
-                        },
-                        headline = R.string.patch_selection_version_tags_title,
-                        description = R.string.patch_selection_version_tags_description,
-                        enabled = !minimalPatchSelectionView
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.patch_selection_option_previews_title,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        value = showPatchSelectionOptionPreviews,
-                        onValueChange = { value ->
-                            viewModel.viewModelScope.launch {
-                                viewModel.prefs.patchSelectionShowOptionPreviews.update(value)
-                            }
-                        },
-                        headline = R.string.patch_selection_option_previews_title,
-                        description = R.string.patch_selection_option_previews_description,
-                        enabled = !minimalPatchSelectionView
-                    )
-                }
-            }
         }
 
         if (mode == AdvancedSettingsMode.ADVANCED_SYSTEM) {
-        GroupHeader(
-            stringResource(R.string.diagnostics_output_section),
-            icon = SettingsSectionIcons.DiagnosticsOutput
-        )
+        SettingsSearchHighlight(
+            targetKey = R.string.diagnostics_output_section,
+            activeKey = highlightTarget,
+            onHighlightComplete = { highlightTarget = null }
+        ) { highlightModifier ->
+            GroupHeader(
+                stringResource(R.string.diagnostics_output_section),
+                icon = SettingsSectionIcons.DiagnosticsOutput,
+                modifier = highlightModifier
+            )
+        }
         ExpressiveSettingsCard(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -2103,6 +2208,7 @@ private fun LanguageDialog(
         text = {
             val scrollState = rememberScrollState()
             ColumnWithScrollbar(
+                thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                 state = scrollState,
                 modifier = Modifier
                     .heightIn(max = 360.dp)
@@ -2332,7 +2438,8 @@ internal fun ActionButtonSettings(
 
     LaunchedEffect(highlightTarget) {
         when (highlightTarget) {
-            R.string.patch_selection_action_visibility_title -> actionsExpanded = true
+            R.string.patch_selection_action_visibility_title,
+            R.string.minimal_action_buttons_title -> actionsExpanded = true
             R.string.patch_bundle_action_visibility_title -> bundleActionsExpanded = true
             R.string.batch_result_action_visibility_title -> batchResultActionsExpanded = true
             R.string.saved_app_action_visibility_title -> savedActionsExpanded = true
@@ -2341,8 +2448,21 @@ internal fun ActionButtonSettings(
         }
     }
     Column {
+        DashboardActionSettings(
+            viewModel.prefs,
+            bundles = false,
+            highlightTarget = highlightTarget,
+            onHighlightComplete = onHighlightComplete
+        )
+        DashboardActionSettings(
+            viewModel.prefs,
+            bundles = true,
+            highlightTarget = highlightTarget,
+            onHighlightComplete = onHighlightComplete
+        )
         SettingsSearchHighlight(
                 targetKey = R.string.patch_selection_action_order_title,
+                extraKeys = setOf(R.string.minimal_action_buttons_title),
                 activeKey = highlightTarget,
                 onHighlightComplete = onHighlightComplete
             ) { highlightModifier ->
@@ -2361,6 +2481,7 @@ internal fun ActionButtonSettings(
             }
 
             if (actionsExpanded) {
+                MinimalActionSettings(viewModel.prefs, "selection")
                 ExpressiveSettingsDivider()
                 Box(
                         modifier = Modifier
@@ -2719,6 +2840,7 @@ internal fun ActionButtonSettings(
                 }
 
                 if (bundleActionsExpanded) {
+                MinimalActionSettings(viewModel.prefs, "bundles")
                     ExpressiveSettingsDivider()
                 Box(
                     modifier = Modifier
@@ -2841,6 +2963,7 @@ internal fun ActionButtonSettings(
             }
 
             if (batchResultActionsExpanded) {
+                MinimalActionSettings(viewModel.prefs, "batch")
                 ExpressiveSettingsDivider()
                 Box(
                     modifier = Modifier
@@ -2965,6 +3088,7 @@ internal fun ActionButtonSettings(
             }
 
             if (savedActionsExpanded) {
+                MinimalActionSettings(viewModel.prefs, "saved")
                 ExpressiveSettingsDivider()
                 Box(
                     modifier = Modifier
@@ -3082,6 +3206,7 @@ internal fun ActionButtonSettings(
             }
 
             if (profileActionsExpanded) {
+                MinimalActionSettings(viewModel.prefs, "profiles")
                 ExpressiveSettingsDivider()
                 Box(
                     modifier = Modifier
@@ -3204,6 +3329,7 @@ internal fun ActionButtonSettings(
             }
 
             if (lsposedActionsExpanded) {
+                MinimalActionSettings(viewModel.prefs, "lsposed")
                 ExpressiveSettingsDivider()
                 Box(
                     modifier = Modifier
@@ -3337,7 +3463,7 @@ private fun PatchSelectionActionPreview(
     ) {
         Box(
             modifier = Modifier.fillMaxWidth(),
-            contentAlignment = if (centerContent) Alignment.Center else Alignment.CenterEnd
+            contentAlignment = if (centerContent || minimalActionButtons("selection")) Alignment.Center else Alignment.CenterEnd
         ) {
             Surface(
                 shape = RoundedCornerShape(18.dp),
@@ -3423,7 +3549,10 @@ private fun SelectionActionPreviewRow(
             .height(48.dp),
         state = state,
         userScrollEnabled = userScrollEnabled,
-        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End)
+        horizontalArrangement = Arrangement.spacedBy(
+            6.dp,
+            if (minimalActionButtons("selection")) Alignment.CenterHorizontally else Alignment.End
+        )
     ) {
         items(
             items = keys,
@@ -3460,6 +3589,7 @@ private fun SelectionActionPreviewChip(
     highlighted: Boolean = false,
     ghost: Boolean = false,
     floating: Boolean = false,
+    group: String = "selection",
     onBoundsChanged: ((Rect) -> Unit)? = null
 ) {
     var layoutCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -3511,12 +3641,12 @@ private fun SelectionActionPreviewChip(
         ) {
             Icon(
                 imageVector = icon,
-                contentDescription = null,
+                contentDescription = label,
                 modifier = Modifier
                     .size(16.dp)
                     .offset(y = iconOffset)
             )
-            Text(
+            if (!minimalActionButtons(group)) Text(
                 text = label,
                 style = labelStyle,
                 maxLines = 1
@@ -3623,6 +3753,11 @@ private fun PatchBundleActionPreviewRow(
             .fillMaxWidth()
             .height(48.dp),
         state = state,
+        horizontalArrangement = if (minimalActionButtons("bundles")) {
+            Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally)
+        } else {
+            Arrangement.Start
+        },
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(
@@ -3637,6 +3772,7 @@ private fun PatchBundleActionPreviewRow(
                     contentAlignment = Alignment.Center
                 ) {
                     SelectionActionPreviewChip(
+                        group = "bundles",
                         icon = previewIconForBundleAction(key),
                         label = stringResource(key.labelRes),
                         dragging = isDragging,
@@ -3726,6 +3862,11 @@ private fun BatchResultActionPreviewRow(
             .fillMaxWidth()
             .height(48.dp),
         state = state,
+        horizontalArrangement = if (minimalActionButtons("batch")) {
+            Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally)
+        } else {
+            Arrangement.Start
+        },
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(
@@ -3740,6 +3881,7 @@ private fun BatchResultActionPreviewRow(
                     contentAlignment = Alignment.Center
                 ) {
                     SelectionActionPreviewChip(
+                        group = "batch",
                         icon = previewIconForBatchResultAction(key),
                         label = stringResource(key.labelRes),
                         dragging = isDragging,
@@ -3827,6 +3969,11 @@ private fun SavedAppActionPreviewRow(
             .fillMaxWidth()
             .height(48.dp),
         state = state,
+        horizontalArrangement = if (minimalActionButtons("saved")) {
+            Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally)
+        } else {
+            Arrangement.Start
+        },
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(
@@ -3841,6 +3988,7 @@ private fun SavedAppActionPreviewRow(
                     contentAlignment = Alignment.Center
                 ) {
                     SelectionActionPreviewChip(
+                        group = "saved",
                         icon = previewIconForSavedAppAction(key),
                         label = stringResource(key.labelRes),
                         dragging = isDragging,
@@ -3927,6 +4075,11 @@ private fun PatchProfileActionPreviewRow(
             .fillMaxWidth()
             .height(48.dp),
         state = state,
+        horizontalArrangement = if (minimalActionButtons("profiles")) {
+            Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally)
+        } else {
+            Arrangement.Start
+        },
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(
@@ -3941,6 +4094,7 @@ private fun PatchProfileActionPreviewRow(
                     contentAlignment = Alignment.Center
                 ) {
                     SelectionActionPreviewChip(
+                        group = "profiles",
                         icon = previewIconForProfileAction(key),
                         label = stringResource(key.labelRes),
                         dragging = isDragging,
@@ -4032,6 +4186,11 @@ private fun LsposedModuleActionPreviewRow(
             .fillMaxWidth()
             .height(48.dp),
         state = state,
+        horizontalArrangement = if (minimalActionButtons("lsposed")) {
+            Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally)
+        } else {
+            Arrangement.Start
+        },
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(
@@ -4046,6 +4205,7 @@ private fun LsposedModuleActionPreviewRow(
                     contentAlignment = Alignment.Center
                 ) {
                     SelectionActionPreviewChip(
+                        group = "lsposed",
                         icon = previewIconForLsposedModuleAction(key),
                         label = stringResource(key.labelRes),
                         dragging = isDragging,
@@ -5329,7 +5489,7 @@ private fun GitHubPatDialog(
                     },
                     visualTransformation = VisualTransformation { original ->
                         val masked = original.text.let { s ->
-                            if (s.length <= 5) s else s.take(5) + "•".repeat(s.length - 5)
+                            if (s.length <= 5) s else s.take(5) + "\u2022".repeat(s.length - 5)
                         }
                         TransformedText(AnnotatedString(masked), OffsetMapping.Identity)
                     }

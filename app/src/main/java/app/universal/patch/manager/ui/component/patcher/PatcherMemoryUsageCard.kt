@@ -77,7 +77,7 @@ import kotlin.math.ceil
 fun PatcherMemoryUsageCard(
     samples: List<PatcherMemoryUsage>,
     isActive: Boolean,
-    @StringRes titleRes: Int = R.string.patcher_memory_usage,
+    @StringRes titleRes: Int = R.string.patcher_heap_memory_usage,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     showExtraInfo: Boolean = false,
@@ -86,54 +86,29 @@ fun PatcherMemoryUsageCard(
 ) {
     if (samples.isEmpty()) return
     val latest = samples.last()
-    val requestedMaxMb = latest.requestedMaxMb.coerceAtLeast(1L)
+    // Heap pressure must use the worker's actual heap limit, not process RSS or
+    // the requested limit before a startup fallback. Native memory is additional.
+    val heapMaxMb = latest.maxMb.coerceAtLeast(1L)
     val processMemory = samples.latestResourceUsage()?.processMemoryMb
-    val reportsProcessMemory = samples.any { it.processMemoryMb != null }
-    val displaySamples = if (reportsProcessMemory) samples.mapNotNull { sample ->
-        sample.processMemoryMb?.let { sample.copy(usedMb = it) }
-    } else samples
-    val peakMb = displaySamples.maxOf { sample -> sample.usedMb }
-    // Native memory is outside the Java heap cap. Scale its history to the observed
-    // peak and show heap pressure only on the existing managed-memory graph.
-    val graphMaxMb = if (reportsProcessMemory) maxOf(requestedMaxMb, peakMb) else requestedMaxMb
-    val trendRes = memoryTrendRes(displaySamples, graphMaxMb)
-    val statusRes = when {
-        reportsProcessMemory && processMemory == null -> R.string.patcher_resource_unavailable_short
-        isActive -> R.string.patcher_memory_usage_live
-        else -> R.string.patcher_memory_usage_final
+    val peakMb = samples.maxOf { it.usedMb }
+    val trend = stringResource(memoryTrendRes(samples, heapMaxMb))
+    val status = stringResource(if (isActive) R.string.patcher_memory_usage_live else R.string.patcher_memory_usage_final)
+    val processDetail = processMemory?.let {
+        stringResource(R.string.patcher_heap_process_detail, it)
     }
-    val status = stringResource(statusRes)
-    val trend = stringResource(trendRes)
-    val heapDetail = if (reportsProcessMemory) stringResource(
-        R.string.patcher_process_memory_detail, latest.usedMb, latest.maxMb
-    ) else null
-    val accessibilityText = if (reportsProcessMemory) stringResource(
-        R.string.patcher_process_memory_accessibility, processMemory ?: displaySamples.last().usedMb, peakMb, trend, status
-    ) + " " + heapDetail else stringResource(
+    val accessibilityText = stringResource(
         R.string.patcher_memory_usage_accessibility,
-        latest.usedMb,
-        requestedMaxMb,
-        peakMb,
-        trend,
-        status
-    )
-    val graphBars = buildMemoryGraphBars(displaySamples, graphMaxMb).let { bars ->
-        if (reportsProcessMemory) bars.map { it.copy(pressureFraction = 0f) } else bars
-    }
+        latest.usedMb, heapMaxMb, peakMb, trend, status
+    ) + (processDetail?.let { " $it" } ?: "")
     PatcherHistoryUsageCard(
         samples = samples,
         isActive = isActive,
-        title = stringResource(if (reportsProcessMemory) R.string.patcher_process_memory_usage else titleRes),
-        headline = when {
-            !reportsProcessMemory -> stringResource(R.string.patcher_memory_usage_format, latest.usedMb, requestedMaxMb)
-            processMemory != null -> stringResource(R.string.patcher_process_memory_format, processMemory)
-            else -> stringResource(R.string.patcher_resource_unavailable_short)
-        },
-        currentAvailable = !reportsProcessMemory || processMemory != null,
-        detail = heapDetail,
+        title = stringResource(titleRes),
+        headline = stringResource(R.string.patcher_memory_usage_format, latest.usedMb, heapMaxMb),
+        detail = processDetail,
         peak = stringResource(R.string.patcher_memory_usage_peak_format, peakMb),
         accessibilityText = accessibilityText,
-        graphBars = graphBars,
+        graphBars = buildMemoryGraphBars(samples, heapMaxMb),
         modifier = modifier,
         compact = compact,
         showExtraInfo = showExtraInfo,

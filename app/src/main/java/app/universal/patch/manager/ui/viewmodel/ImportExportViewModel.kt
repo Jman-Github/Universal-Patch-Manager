@@ -1189,7 +1189,7 @@ class ImportExportViewModel(
                                 endpoint,
                                 snapshot.searchUpdate,
                                 snapshot.autoUpdate,
-                                usePrereleases = snapshot.usePrereleases == true && snapshot.useLatest != true,
+                                usePrereleases = snapshot.usePrereleases == true,
                                 useLatest = snapshot.useLatest == true,
                                 useSpecificVersion = snapshot.useSpecificVersion == true,
                                 selectedVersion = snapshot.selectedVersion,

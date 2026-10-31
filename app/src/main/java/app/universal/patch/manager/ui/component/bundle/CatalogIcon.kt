@@ -29,17 +29,22 @@ fun CatalogIcon(
     var model by remember(iconUrl, fallbackUrl) {
         mutableStateOf(iconUrl?.takeIf { it.isNotBlank() } ?: fallbackUrl)
     }
+    var imageLoaded by remember(iconUrl, fallbackUrl) { mutableStateOf(false) }
     val shape = CircleShape
     Box(modifier.clip(shape)) {
         Surface(shape = shape, color = if (isOfficial) Color(0xFF1B1B1B) else MaterialTheme.colorScheme.surfaceVariant,
             modifier = Modifier.fillMaxSize()) {
-            if (!isOfficial) Icon(Icons.Outlined.Source, contentDescription = null, modifier = Modifier.padding(8.dp))
+            if (!isOfficial && !imageLoaded) Icon(Icons.Outlined.Source, contentDescription = null, modifier = Modifier.padding(8.dp))
         }
         if (!model.isNullOrBlank()) {
             AsyncImage(model = model, contentDescription = description,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit,
-                onError = { model = fallbackUrl?.takeUnless { it == model } })
+                onSuccess = { imageLoaded = true },
+                onError = {
+                    imageLoaded = false
+                    model = fallbackUrl?.takeUnless { it == model }
+                })
         }
     }
 }

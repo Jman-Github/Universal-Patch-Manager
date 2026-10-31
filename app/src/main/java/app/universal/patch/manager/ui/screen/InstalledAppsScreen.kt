@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.minimalActionButtons
 import android.content.pm.PackageInfo
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -373,6 +374,7 @@ private fun InstalledAppCard(
                 }
                 AppIcon(
                     packageInfo = packageInfo,
+                    packageName = displayPackageName,
                     contentDescription = null,
                     modifier = Modifier.size(32.dp)
                 )
@@ -725,7 +727,7 @@ private fun AppActionPill(
                 tint = contentColor,
                 modifier = Modifier.size(14.dp)
             )
-            Text(
+            if (!minimalActionButtons("saved")) Text(
                 text = text,
                 style = MaterialTheme.typography.labelSmall,
                 color = contentColor,
@@ -771,6 +773,7 @@ private fun AppsOrderDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LazyColumnWithScrollbar(
+                    thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = 320.dp),

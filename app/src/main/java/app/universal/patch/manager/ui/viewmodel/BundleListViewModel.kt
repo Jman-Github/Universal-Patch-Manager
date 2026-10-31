@@ -38,7 +38,7 @@ class BundleListViewModel : ViewModel(), KoinComponent {
     fun refresh() = viewModelScope.launch {
         isRefreshing = true
         try {
-            patchBundleRepository.updateCheck()
+            patchBundleRepository.updateCheck(showToast = true)
             val progressFlow = patchBundleRepository.bundleUpdateProgress
             val started = withTimeoutOrNull(250L) {
                 progressFlow.filterNotNull().first()

@@ -6,6 +6,17 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LoadedPatcherRuntimePluginTest {
+    @Test fun normalizesRemoteAndInstalledRevancedNames() {
+        for (version in listOf(21, 22)) {
+            for (name in listOf("Revanced.v$version Plugin", "revanced-runtime-v$version",
+                "ReVanced v$version runtime", "Owner: revanced.v$version plugin")) {
+                assertEquals("ReVanced v$version", name.toRuntimeMainName())
+            }
+        }
+        assertEquals("Morphe", "Morphe runtime".toRuntimeMainName())
+        assertEquals("revanced.v220", "revanced.v220".toRuntimeMainName())
+    }
+
     private fun runtime(file: File) = LoadedPatcherRuntimePlugin(
         packageName = "fixture.runtime",
         name = "Runtime",

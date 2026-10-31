@@ -1,5 +1,6 @@
 package app.universal.patch.manager.patcher.worker
 
+import app.universal.patch.manager.data.platform.SharedApkFiles
 import app.universal.patch.manager.patcher.runtime.usage.PatcherResourceMonitor
 
 import app.universal.patch.manager.patcher.runtime.RevancedJvmRuntime
@@ -1636,9 +1637,10 @@ class PatcherWorker(
                 }
 
                 is SelectedApp.Local -> {
-                    val needsSplit = SplitApkPreparer.isSplitArchive(selectedApp.file)
-                    args.setInputFile(selectedApp.file, needsSplit, false)
-                    DownloadResult(selectedApp.file, needsSplit)
+                    val file = SharedApkFiles.resolve(selectedApp.file)
+                    val needsSplit = SplitApkPreparer.isSplitArchive(file)
+                    args.setInputFile(file, needsSplit, false)
+                    DownloadResult(file, needsSplit)
                 }
 
                 is SelectedApp.Installed -> {
@@ -1648,7 +1650,8 @@ class PatcherWorker(
                 }
             }
             downloadCleanup = downloadResult.cleanup
-            val inputFile = downloadResult.file
+            // A prepared selection can outlive the idle migration of its original path.
+            val inputFile = SharedApkFiles.resolve(downloadResult.file)
             val patchingContext = currentCoroutineContext()
             val checkCancelled: () -> Unit = { patchingContext.ensureActive() }
             val inputIsSplitArchive = SplitApkPreparer.isSplitArchive(

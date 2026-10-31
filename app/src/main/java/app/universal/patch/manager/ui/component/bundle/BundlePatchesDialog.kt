@@ -164,7 +164,8 @@ fun PatchItem(
     showCompatibilityMeta: Boolean = true,
     showOptionValues: Boolean = false,
     optionValues: Map<String, Any?>? = null,
-    appMetadata: Map<String, PackageNode> = emptyMap()
+    appMetadata: Map<String, PackageNode> = emptyMap(),
+    allowAppMetadataLookup: Boolean = true
 ) {
     val context = LocalContext.current
     val anyPackageLabel = stringResource(R.string.patches_view_any_package)
@@ -226,6 +227,19 @@ fun PatchItem(
                             val versions = compatiblePackage.versions.orEmpty().reversed()
                             val packageIsAny = isAnyPackageTag(packageName, anyPackageLabel)
 
+                            if (allowAppMetadataLookup && !packageIsAny && packageName !in appMetadata) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    app.universal.patch.manager.ui.component.AppIcon(
+                                        packageInfo = null, contentDescription = null,
+                                        packageName = packageName, modifier = Modifier.size(28.dp)
+                                    )
+                                    app.universal.patch.manager.ui.component.AppLabel(
+                                        packageInfo = null, packageName = packageName,
+                                        defaultText = packageName, style = MaterialTheme.typography.labelLarge
+                                    )
+                                }
+                            }
                             appMetadata[packageName]?.let { application ->
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically) {

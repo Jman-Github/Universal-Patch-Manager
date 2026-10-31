@@ -236,9 +236,13 @@ class AutoPatchWorker(
                     it.installOutcome == BatchInstallOutcome.INSTALLED
                 },
                 textOverride = textOverride,
-                openBatchResult = failed || !prefs.autoPatchInstallWithShizuku.getBlocking(),
-                packageNames = state.items.map { it.packageName },
-                appNames = state.patchedItems.map { it.appName },
+                openBatchResult = failed,
+                packageNames = state.items.map { item ->
+                    // Batch results use input packages; app details use persisted entry keys.
+                    if (failed) item.packageName
+                    else item.sourceEntryKey ?: item.installedPackageName ?: item.packageName
+                },
+                appNames = state.items.map { it.appName.ifBlank { it.packageName } },
                 failed = failed
             )
         )
@@ -279,7 +283,8 @@ class AutoPatchWorker(
             Intent(applicationContext, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 if (!running) {
-                    action = BatchPatchIntents.ACTION_SHOW_RESULT
+                    action = if (openBatchResult || failed) BatchPatchIntents.ACTION_SHOW_RESULT
+                        else BatchPatchIntents.ACTION_SHOW_APPS
                     putExtra(BatchPatchIntents.EXTRA_SCHEDULED, true)
                     if (packageNames.isNotEmpty()) {
                         putExtra(BatchPatchIntents.EXTRA_PACKAGES, packageNames.toTypedArray())
@@ -328,10 +333,10 @@ class AutoPatchWorker(
                 else R.string.auto_patch_notification_finished_title
             ))
             .setContentText(text)
-            .setStyle(Notification.BigTextStyle().bigText(
-                (listOf(text) + appNames).joinToString("\n")
-            ))
-            .apply { if (openBatchResult) setContentIntent(pendingIntent) }
+            .setStyle(Notification.InboxStyle().addLine(text).apply {
+                appNames.forEach { addLine("- $it") }
+            })
+            .apply { if (!running) setContentIntent(pendingIntent) }
             .setOngoing(running)
             .setAutoCancel(!running)
             .build()

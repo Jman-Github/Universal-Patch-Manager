@@ -471,14 +471,22 @@ fun UpdatesSettingsScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         ColumnWithScrollbar(
+            thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            GroupHeader(
-                stringResource(R.string.network_delivery_section),
-                icon = SettingsSectionIcons.NetworkDelivery
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.network_delivery_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.network_delivery_section),
+                    icon = SettingsSectionIcons.NetworkDelivery,
+                    modifier = highlightModifier
+                )
+            }
 
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -524,10 +532,17 @@ fun UpdatesSettingsScreen(
                 }
             }
 
-            GroupHeader(
-                stringResource(R.string.update_checks_section),
-                icon = SettingsSectionIcons.UpdateChecks
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.update_checks_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.update_checks_section),
+                    icon = SettingsSectionIcons.UpdateChecks,
+                    modifier = highlightModifier
+                )
+            }
 
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -625,10 +640,17 @@ fun UpdatesSettingsScreen(
                 }
             }
 
-            GroupHeader(
-                stringResource(R.string.bundle_changelog_history_section),
-                icon = SettingsSectionIcons.BundleChangelogHistory
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.bundle_changelog_history_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.bundle_changelog_history_section),
+                    icon = SettingsSectionIcons.BundleChangelogHistory,
+                    modifier = highlightModifier
+                )
+            }
 
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -684,10 +706,17 @@ fun UpdatesSettingsScreen(
                 }
             }
 
-            GroupHeader(
-                stringResource(R.string.background_updates_section),
-                icon = SettingsSectionIcons.BackgroundUpdates
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.background_updates_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.background_updates_section),
+                    icon = SettingsSectionIcons.BackgroundUpdates,
+                    modifier = highlightModifier
+                )
+            }
 
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)

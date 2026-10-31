@@ -5,6 +5,7 @@
 
 package app.universal.patch.manager.domain.batch
 
+import app.universal.patch.manager.data.platform.SharedApkFiles
 import android.app.Activity
 import android.app.Application
 import android.content.Intent
@@ -695,7 +696,7 @@ class BatchPatchCoordinator(
     }
 
     private suspend fun hasOriginalSignatureMetadata(item: BatchPatchItem): Boolean {
-        val source = item.repatchSourcePath?.let(::File)?.takeIf(File::isFile) ?: return false
+        val source = item.repatchSourcePath?.let { SharedApkFiles.resolve(File(it)) }?.takeIf(File::isFile) ?: return false
         return try {
             signatureMetadataInjector.analyzeSignatureSource(source)
             true
@@ -1684,7 +1685,7 @@ class BatchPatchCoordinator(
             version = sourceVersionName,
             versionCode = sourceVersionCode
         )
-        val repatchSource = item.repatchSourcePath?.let(::File)
+        val repatchSource = item.repatchSourcePath?.let { SharedApkFiles.resolve(File(it)) }
         val localSource = (item.input as? SelectedApp.Local)?.file
         return (sequenceOf(repatchSource, localSource).filterNotNull() + retainedOriginals.asSequence())
             .distinctBy { it.absolutePath }

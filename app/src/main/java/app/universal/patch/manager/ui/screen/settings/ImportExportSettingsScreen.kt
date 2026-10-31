@@ -679,6 +679,7 @@ fun ImportExportSettingsScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         ColumnWithScrollbar(
+            thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
@@ -867,10 +868,17 @@ fun ImportExportSettingsScreen(
                 }
             }
 
-            GroupHeader(
-                stringResource(R.string.keystore_section),
-                icon = SettingsSectionIcons.Keystore
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.keystore_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.keystore_section),
+                    icon = SettingsSectionIcons.Keystore,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
@@ -941,10 +949,17 @@ fun ImportExportSettingsScreen(
                 }
             }
 
-            GroupHeader(
-                stringResource(R.string.settings_selections_bundles_section),
-                icon = SettingsSectionIcons.SettingsSelectionsBundles
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.settings_selections_bundles_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.settings_selections_bundles_section),
+                    icon = SettingsSectionIcons.SettingsSelectionsBundles,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
@@ -1129,10 +1144,17 @@ fun ImportExportSettingsScreen(
                 }
             }
 
-            GroupHeader(
-                stringResource(R.string.reset),
-                icon = SettingsSectionIcons.Reset
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.reset,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.reset),
+                    icon = SettingsSectionIcons.Reset,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {

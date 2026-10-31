@@ -1,5 +1,7 @@
 package app.universal.patch.manager.domain.repository
 
+import app.universal.patch.manager.util.selectSuggestedPatchVersion
+
 import android.app.Application
 import android.content.Context
 import android.util.Log
@@ -82,6 +84,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -135,7 +138,7 @@ class PatchBundleRepository(
     private val bundlesDir = filesystem.patchBundlesDir
 
     private val scope = CoroutineScope(Dispatchers.Default)
-    private val store = Store(scope, State())
+    private val store = Store(scope, State(metadataLoaded = false))
     private val bundleDigestHashCache = ConcurrentHashMap<Int, String>()
 
     val sources = store.state.map { it.sources.values.toList() }
@@ -143,6 +146,11 @@ class PatchBundleRepository(
         it.sources.mapNotNull { (uid, src) ->
             uid to (src.patchBundle ?: return@mapNotNull null)
         }.toMap()
+    }
+    private val cachedAppList = MutableStateFlow<Map<Int, PatchBundleInfo.Global>>(emptyMap())
+    // Preview metadata is never exposed to patch execution or option editors.
+    val appListBundleInfoFlow = kotlinx.coroutines.flow.combine(cachedAppList, store.state) { cached, state ->
+        (if (state.metadataLoaded) state.info else cached).filterValues { it.enabled }
     }
     val allBundlesInfoFlow = store.state.map { it.info }
     val enabledBundlesInfoFlow = allBundlesInfoFlow.map { info ->
@@ -221,7 +229,7 @@ class PatchBundleRepository(
 
     val patchCountsFlow = allBundlesInfoFlow.map { it.mapValues { (_, info) -> info.patches.size } }
 
-    val suggestedVersions = enabledBundlesInfoFlow.map { bundleInfos ->
+    private fun suggestedVersionsForFlow(flow: Flow<Map<Int, PatchBundleInfo.Global>>) = flow.map { bundleInfos ->
         val revancedPatches = bundleInfos.values
             .filter { it.bundleType == PatchBundleType.REVANCED }
             .flatMap { info -> info.patches.map(PatchInfo::toPatcherPatch) }
@@ -234,7 +242,7 @@ class PatchBundleRepository(
         morpheSuggested + revancedSuggested
     }
 
-    val suggestedVersionsByBundle = enabledBundlesInfoFlow.map { bundleInfos ->
+    private fun suggestedVersionsByBundleForFlow(flow: Flow<Map<Int, PatchBundleInfo.Global>>) = flow.map { bundleInfos ->
         bundleInfos.mapValues { (_, info) ->
             when (info.bundleType) {
                 PatchBundleType.REVANCED -> {
@@ -249,6 +257,11 @@ class PatchBundleRepository(
             }
         }
     }
+
+    val suggestedVersions = suggestedVersionsForFlow(enabledBundlesInfoFlow)
+    val suggestedVersionsByBundle = suggestedVersionsByBundleForFlow(enabledBundlesInfoFlow)
+    val appListSuggestedVersions = suggestedVersionsForFlow(appListBundleInfoFlow)
+    val appListSuggestedVersionsByBundle = suggestedVersionsByBundleForFlow(appListBundleInfoFlow)
 
     private val manualUpdateInfoFlow = MutableStateFlow<Map<Int, ManualBundleUpdateInfo>>(emptyMap())
     val manualUpdateInfo: StateFlow<Map<Int, ManualBundleUpdateInfo>> = manualUpdateInfoFlow.asStateFlow()
@@ -741,6 +754,13 @@ class PatchBundleRepository(
         val entities = loadFromDb()
 
         val sources = entities.associate { it.uid to it.load() }.toMutableMap()
+        cachedAppList.value = withContext(Dispatchers.IO) {
+            sources.mapNotNull { (uid, source) ->
+                if (source.patchBundle == null) return@mapNotNull null
+                PatchableAppCache.read(directoryOf(uid), uid, source.displayTitle, source.version, source.enabled)
+                    ?.let { uid to it }
+            }.toMap()
+        }
         val entityByUid = entities.associateBy { it.uid }
         sources.forEach { (uid, source) ->
             val remote = source as? RemotePatchBundle ?: return@forEach
@@ -1264,6 +1284,9 @@ class PatchBundleRepository(
                     src.enabled,
                     patches
                 )
+                withContext(Dispatchers.IO) {
+                    PatchableAppCache.write(directoryOf(src.uid), metadata.getValue(src.uid))
+                }
             } catch (error: Throwable) {
                 detectDeclaredBundleType(bundle, src)?.let { declaredType ->
                     metadata[src.uid] = PatchBundleInfo.Global(
@@ -1448,8 +1471,8 @@ class PatchBundleRepository(
                     searchUpdate,
                     lastNotifiedVersion,
                     enabled,
-                    repositorySettings.releaseChannel == RepositoryBundleReleaseChannel.PRERELEASE,
-                    repositorySettings.releaseChannel == RepositoryBundleReleaseChannel.LATEST,
+                    repositorySettings.usePrereleases,
+                    repositorySettings.useLatest,
                     repositorySettings.useSpecificVersion,
                     repositorySettings.selectedVersion,
                 ).let { jsonBundle ->
@@ -1818,6 +1841,18 @@ class PatchBundleRepository(
         src: RemotePatchBundle,
         newUrl: String,
         onProgress: PatchBundleDownloadProgress? = null,
+        discoverySettings: RepositoryBundleSettings? = null,
+    ): Boolean = scope.async {
+        // The accepted change and its download must survive the details screen closing.
+        // Return failures to the caller without cancelling the repository's store scope.
+        runCatching { updateRemoteEndpointInternal(src, newUrl, onProgress, discoverySettings) }
+    }.await().getOrThrow()
+
+    private suspend fun updateRemoteEndpointInternal(
+        src: RemotePatchBundle,
+        newUrl: String,
+        onProgress: PatchBundleDownloadProgress?,
+        discoverySettings: RepositoryBundleSettings?,
     ): Boolean {
         val normalizedUrl = try {
             normalizeRemoteBundleUrl(newUrl)
@@ -1829,19 +1864,30 @@ class PatchBundleRepository(
         }
 
         var endpointChanged = false
-        withRemoteUpdateReservation {
+        withRemoteUpdateReservation(onQueued = ::notifyQueuedBundleSetting) {
             dispatchAction("Update bundle url (${src.uid})") { state ->
                 val currentSource = state.sources[src.uid] as? RemotePatchBundle
                     ?: return@dispatchAction state
-                if (normalizedUrl == currentSource.endpoint) return@dispatchAction state
+                if (normalizedUrl == currentSource.endpoint) {
+                    if (discoverySettings != null) {
+                        RepositoryBundleSettingsStore.write(directoryOf(src.uid), discoverySettings)
+                        // Retry if the previous download failed after saving the endpoint.
+                        endpointChanged = true
+                    }
+                    return@dispatchAction state
+                }
                 val props = dao.getProps(src.uid) ?: return@dispatchAction state
                 val now = System.currentTimeMillis()
                 changelogHistoryMutex.withLock {
                     writeChangelogHistoryInternal(src.uid, emptyList())
                     writeChangelogHistoryIdentityInternal(src.uid, null)
                 }
-                ExternalBundleMetadataStore.clear(directoryOf(src.uid))
-                RepositoryBundleSettingsStore.clear(directoryOf(src.uid))
+                if (discoverySettings != null) {
+                    RepositoryBundleSettingsStore.write(directoryOf(src.uid), discoverySettings)
+                } else {
+                    ExternalBundleMetadataStore.clear(directoryOf(src.uid))
+                    RepositoryBundleSettingsStore.clear(directoryOf(src.uid))
+                }
                 updateDb(src.uid) {
                     it.copy(
                         source = SourceInfo.from(normalizedUrl),
@@ -1888,6 +1934,7 @@ class PatchBundleRepository(
         val updated = try {
             updateNow(
                 force = true,
+                showToast = true,
                 allowUnsafeNetwork = allowUnsafeDownload,
                 onPerBundleProgress = { bundle, bytesRead, bytesTotal ->
                     if (bundle.uid == updatedSource.uid) {
@@ -2167,7 +2214,7 @@ class PatchBundleRepository(
             RepositoryBundleSettingsStore.write(
                 directoryOf(entity.uid),
                 RepositoryBundleSettings(
-                    usePrereleases = usePrereleases && !useLatest,
+                    usePrereleases = usePrereleases,
                     useLatest = useLatest,
                     useSpecificVersion = useSpecificVersion,
                     selectedVersion = selectedVersion,
@@ -2505,7 +2552,8 @@ class PatchBundleRepository(
     }
 
     suspend fun JsonPatchBundle.setRepositoryReleaseChannel(
-        channel: RepositoryBundleReleaseChannel
+        channel: RepositoryBundleReleaseChannel,
+        restorePrereleases: Boolean = false
     ): JsonPatchBundle {
         var updatedSource = this
         withRemoteUpdateReservation(onQueued = ::notifyQueuedBundleSetting) {
@@ -2515,18 +2563,22 @@ class PatchBundleRepository(
                     updatedSource = source
                     return@dispatchAction state
                 }
-                if (source.releaseChannel == channel) {
+                val effectiveChannel = if (restorePrereleases && source.usePrereleases) {
+                    RepositoryBundleReleaseChannel.PRERELEASE
+                } else channel
+                if (source.releaseChannel == effectiveChannel) {
                     updatedSource = source
                     return@dispatchAction state
                 }
                 RepositoryBundleSettingsStore.write(
                     directoryOf(uid),
                     RepositoryBundleSettingsStore.read(directoryOf(uid)).copy(
-                        usePrereleases = channel == RepositoryBundleReleaseChannel.PRERELEASE,
-                        useLatest = channel == RepositoryBundleReleaseChannel.LATEST
+                        usePrereleases = if (effectiveChannel == RepositoryBundleReleaseChannel.LATEST) source.usePrereleases
+                        else effectiveChannel == RepositoryBundleReleaseChannel.PRERELEASE,
+                        useLatest = effectiveChannel == RepositoryBundleReleaseChannel.LATEST
                     )
                 )
-                updatedSource = source.withReleaseChannel(channel)
+                updatedSource = source.withReleaseChannel(effectiveChannel)
                 manualUpdateInfoFlow.update { current -> current - uid }
                 state.copy(sources = state.sources.put(uid, updatedSource))
             }
@@ -2584,7 +2636,8 @@ class PatchBundleRepository(
     suspend fun JsonPatchBundle.setUseLatest(value: Boolean): JsonPatchBundle =
         setRepositoryReleaseChannel(
             if (value) RepositoryBundleReleaseChannel.LATEST
-            else RepositoryBundleReleaseChannel.RELEASE
+            else RepositoryBundleReleaseChannel.RELEASE,
+            restorePrereleases = !value
         )
 
     private suspend fun updateLastNotifiedVersion(
@@ -2646,6 +2699,7 @@ class PatchBundleRepository(
         force: Boolean = false,
         allowUnsafeNetwork: Boolean = false,
         showProgress: Boolean = true,
+        showToast: Boolean = false,
         onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)? = null,
         onBundleUpdated: ((bundle: RemotePatchBundle, updatedName: String?, updatedVersion: String) -> Unit)? = null,
         predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
@@ -2654,7 +2708,7 @@ class PatchBundleRepository(
             val operation = async(start = CoroutineStart.LAZY) {
                 performRemoteUpdate(
                     force = force,
-                    showToast = false,
+                    showToast = showToast,
                     allowUnsafeNetwork = allowUnsafeNetwork,
                     showProgress = showProgress,
                     onPerBundleProgress = onPerBundleProgress,
@@ -2756,9 +2810,9 @@ class PatchBundleRepository(
     /**
      * Updates all bundles that should be automatically updated.
      */
-    suspend fun updateCheck() {
+    suspend fun updateCheck(showToast: Boolean = false) {
         awaitReady()
-        store.dispatch(Update { it.updatesAutomatically })
+        store.dispatch(Update(showToast = showToast) { it.updatesAutomatically })
         checkManualUpdates()
     }
 
@@ -2961,7 +3015,8 @@ class PatchBundleRepository(
                     (bundle is ExternalGraphqlPatchBundle &&
                         metadata?.apiHost == ExternalBundlesEndpoints.REGISTRY_HOST &&
                         (!metadata.iconUrl.isNullOrBlank() || !metadata.ownerAvatarUrl.isNullOrBlank())))) continue
-                val canLookup = allowUnsafeNetwork || prefs.allowMeteredUpdates.get() || networkInfo.isConnected()
+                val canLookup = bundleUpdateNetworkBlock(networkInfo.isConnected(),
+                    networkInfo.isUnmetered(), prefs.allowMeteredUpdates.get(), allowUnsafeNetwork) == null
                 var migration = if (legacy != null) discoveryRegistryMigration(
                     legacy, metadata?.sourceUrl, metadata?.ownerName, metadata?.repoName, metadata?.isPrerelease,
                     metadata?.downloadUrl
@@ -3057,7 +3112,8 @@ class PatchBundleRepository(
         }
 
         val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
-        if (!allowMeteredUpdates && !networkInfo.isSafe()) {
+        if (bundleUpdateNetworkBlock(networkInfo.isConnected(),
+                networkInfo.isUnmetered(), allowMeteredUpdates) != null) {
             Log.d(tag, "Skipping manual update check because the network is down or metered.")
             return@coroutineScope
         }
@@ -3231,13 +3287,19 @@ class PatchBundleRepository(
         predicate: (bundle: RemotePatchBundle) -> Boolean,
     ): Boolean = coroutineScope {
         val progressStartedOrder = if (showProgress) bundleUpdateProgressOrder() else 0L
+        var updateFailed = false
         try {
             if (showProgress) {
                 cancelBundleUpdateAutoClear()
             }
             val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
-            if (!allowUnsafeNetwork && !allowMeteredUpdates && !networkInfo.isSafe()) {
+            val networkBlock = bundleUpdateNetworkBlock(networkInfo.isConnected(),
+                networkInfo.isUnmetered(), allowMeteredUpdates, allowUnsafeNetwork)
+            if (networkBlock != null) {
                 Log.d(tag, "Skipping update check because the network is down or metered.")
+                updateFailed = true
+                if (showToast) toast(R.string.patches_download_fail, app.getString(
+                    if (networkBlock == BundleUpdateNetworkBlock.METERED) R.string.bundle_update_metered else R.string.bundle_update_offline))
                 if (showProgress) {
                     cancelBundleUpdateAutoClear()
                     bundleUpdateProgressFlow.value = null
@@ -3369,6 +3431,7 @@ class PatchBundleRepository(
                     } catch (e: TimeoutCancellationException) {
                         bundleFailed = true
                         hadBundleFailures = true
+                        updateFailed = true
                         if (lastUpdateError == null) lastUpdateError = e
                         Log.e(tag, "Timed out while updating patch bundle: ${bundle.name}", e)
                         null
@@ -3378,6 +3441,7 @@ class PatchBundleRepository(
                     } catch (e: Exception) {
                         bundleFailed = true
                         hadBundleFailures = true
+                        updateFailed = true
                         if (lastUpdateError == null) lastUpdateError = e
                         Log.e(tag, "Failed to update patch bundle: ${bundle.name}", e)
                         null
@@ -3435,18 +3499,17 @@ class PatchBundleRepository(
                 throw e
             } catch (e: Exception) {
                 Log.e(tag, "Failed to update patches", e)
-                toast(R.string.patches_download_fail, e.simpleMessage())
+                updateFailed = true
+                hadBundleFailures = true
+                if (lastUpdateError == null) lastUpdateError = e
                 emptyMap()
-            } finally {
-                if (showProgress) {
-                    scheduleBundleUpdateProgressClear()
-                }
             }
 
             if (updated.isEmpty()) {
                 if (showToast) {
                     if (hadBundleFailures) {
-                        toast(R.string.patches_download_fail, "Some bundles failed to update")
+                        toast(R.string.patches_download_fail, lastUpdateError?.simpleMessage()
+                            ?: app.getString(R.string.patch_bundle_discovery_error))
                     } else {
                         toast(R.string.patches_update_unavailable)
                     }
@@ -3486,11 +3549,34 @@ class PatchBundleRepository(
                 runCatching {
                     removeUpdatedBundleNotifications(app, updatedUids)
                 }.onFailure { error -> Log.w(tag, "Failed to refresh bundle update notification", error) }
-                if (showToast) toast(R.string.patches_update_success)
+                if (showToast) {
+                    if (hadBundleFailures) toast(R.string.patches_download_fail,
+                        lastUpdateError?.simpleMessage() ?: app.getString(R.string.patch_bundle_discovery_error))
+                    else toast(R.string.patches_update_success)
+                }
             }
             true
+        } catch (cancel: CancellationException) {
+            updateFailed = true
+            throw cancel
+        } catch (error: Exception) {
+            updateFailed = true
+            Log.e(tag, "Failed to update patch bundles", error)
+            if (showToast) toast(R.string.patches_download_fail, error.simpleMessage())
+            return@coroutineScope false
         } finally {
-            clearActiveUpdateState()
+            withContext(NonCancellable) {
+                if (showProgress) {
+                    val progress = bundleUpdateProgressFlow.value
+                    if (updateFailed || progress == null || progress.completed < progress.total) {
+                        cancelBundleUpdateAutoClear()
+                        bundleUpdateProgressFlow.value = null
+                    } else {
+                        scheduleBundleUpdateProgressClear()
+                    }
+                }
+                clearActiveUpdateState()
+            }
         }
     }
 
@@ -3540,21 +3626,8 @@ class PatchBundleRepository(
             val selectedVersions = stableVersions.ifEmpty {
                 versions.mapValues { (_, stats) -> stats.totalPatchCount }
             }
-            selectSuggestedMorpheVersion(selectedVersions)
+            selectSuggestedPatchVersion(selectedVersions)
         }
-    }
-
-    private fun selectSuggestedMorpheVersion(versions: Map<String, Int>): String? {
-        if (versions.isEmpty()) return null
-        if (versions.keys.size < 2) return versions.keys.firstOrNull()
-
-        var currentHighestPatchCount = -1
-        return versions.entries.last { (_, patchCount) ->
-            if (patchCount >= currentHighestPatchCount) {
-                currentHighestPatchCount = patchCount
-                true
-            } else false
-        }.key
     }
 
     private data class MorpheVersionStats(
@@ -3604,7 +3677,8 @@ class PatchBundleRepository(
 
     data class State(
         val sources: PersistentMap<Int, PatchBundleSource> = persistentMapOf(),
-        val info: PersistentMap<Int, PatchBundleInfo.Global> = persistentMapOf()
+        val info: PersistentMap<Int, PatchBundleInfo.Global> = persistentMapOf(),
+        val metadataLoaded: Boolean = true
     )
 
     data class BundleUpdateProgress(

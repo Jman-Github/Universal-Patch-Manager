@@ -59,6 +59,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import coil3.SingletonImageLoader
 import coil3.ImageLoader
+import coil3.disk.DiskCache
+import coil3.memory.MemoryCache
+import okio.Path.Companion.toOkioPath
 import coil3.gif.AnimatedImageDecoder
 import coil3.gif.GifDecoder
 import coil3.svg.SvgDecoder
@@ -150,6 +153,15 @@ class ManagerApplication : Application() {
 
         SingletonImageLoader.setSafe { context ->
             ImageLoader.Builder(context)
+                .memoryCache {
+                    MemoryCache.Builder().maxSizeBytes(16L * 1024 * 1024).build()
+                }
+                .diskCache {
+                    DiskCache.Builder()
+                        .directory(context.cacheDir.resolve("image_cache").toOkioPath())
+                        .maxSizeBytes(64L * 1024 * 1024)
+                        .build()
+                }
                 .components {
                     add(SvgDecoder.Factory())
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {

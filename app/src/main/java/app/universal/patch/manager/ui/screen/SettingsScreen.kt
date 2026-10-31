@@ -127,6 +127,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                     R.string.inject_signature_metadata_after_patching,
                     R.string.patcher_log_mode,
                     R.string.patcher_jvm_enable,
+                    R.string.process_memory_limit,
                     R.string.morphe_bytecode_mode,
                     R.string.patcher_memory_usage_graph_title,
                     R.string.patcher_resource_graphs_compact_title,
@@ -332,6 +333,33 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
     }
     val settingsEntries = remember {
         listOf(
+            SearchEntry(R.string.app_behavior_section, null, R.string.advanced_system, Settings.AdvancedSystem),
+            SearchEntry(R.string.network_integrations_section, null, R.string.advanced_system, Settings.AdvancedSystem),
+            SearchEntry(R.string.installer_section, null, R.string.advanced_system, Settings.AdvancedSystem),
+            SearchEntry(R.string.auto_patch_section, null, R.string.advanced_system, Settings.AdvancedSystem),
+            SearchEntry(R.string.safeguards_compatibility_section, null, R.string.advanced_system, Settings.AdvancedSystem),
+            SearchEntry(R.string.patching_engine_section, null, R.string.patcher_category, Settings.Patcher),
+            SearchEntry(R.string.patching_flow_section, null, R.string.patcher_category, Settings.Patcher),
+            SearchEntry(R.string.merge_split_flow_section, null, R.string.patcher_category, Settings.Patcher),
+            SearchEntry(R.string.saved_apps_section, null, R.string.patcher_category, Settings.Patcher),
+            SearchEntry(R.string.patch_list_display_section, null, R.string.patcher_category, Settings.Patcher),
+            SearchEntry(R.string.diagnostics_output_section, null, R.string.advanced_system, Settings.AdvancedSystem),
+            SearchEntry(R.string.stability_update_controls_section, null, R.string.developer_options, Settings.Developer),
+            SearchEntry(R.string.download_behavior_section, null, R.string.downloads, Settings.Downloads),
+            SearchEntry(R.string.download_export_section, null, R.string.downloads, Settings.Downloads),
+            SearchEntry(R.string.navigation_tabs_section, null, R.string.general, Settings.General),
+            SearchEntry(R.string.action_buttons_section, null, R.string.general, Settings.General),
+            SearchEntry(R.string.theme_section, null, R.string.general, Settings.General),
+            SearchEntry(R.string.background_section, null, R.string.general, Settings.General),
+            SearchEntry(R.string.keystore_section, null, R.string.import_export, Settings.ImportExport),
+            SearchEntry(R.string.settings_selections_bundles_section, null, R.string.import_export, Settings.ImportExport),
+            SearchEntry(R.string.reset, null, R.string.import_export, Settings.ImportExport),
+            SearchEntry(R.string.patcher_runtime_available, null, R.string.patcher_runtime_plugins, Settings.PatcherRuntimes),
+            SearchEntry(R.string.patcher_runtime_plugins_section, null, R.string.patcher_runtime_plugins, Settings.PatcherRuntimes),
+            SearchEntry(R.string.network_delivery_section, null, R.string.updates, Settings.Updates),
+            SearchEntry(R.string.update_checks_section, null, R.string.updates, Settings.Updates),
+            SearchEntry(R.string.bundle_changelog_history_section, null, R.string.updates, Settings.Updates),
+            SearchEntry(R.string.background_updates_section, null, R.string.updates, Settings.Updates),
             SearchEntry(R.string.dynamic_color, R.string.dynamic_color_description, R.string.general, Settings.General),
             SearchEntry(R.string.theme_presets, R.string.theme_presets_description, R.string.general, Settings.General),
             SearchEntry(R.string.theme_color, R.string.theme_color_description, R.string.general, Settings.General),
@@ -398,6 +426,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.storage_custom_backgrounds, R.string.storage_custom_backgrounds_description, R.string.storage_cache_management, Settings.Storage),
             SearchEntry(R.string.storage_temporary_workspace, R.string.storage_temporary_workspace_description, R.string.storage_cache_management, Settings.Storage),
             SearchEntry(R.string.storage_ui_temporary_workspace, R.string.storage_ui_temporary_workspace_description, R.string.storage_cache_management, Settings.Storage),
+            SearchEntry(R.string.storage_shared_apks, R.string.storage_shared_apks_description, R.string.storage_cache_management, Settings.Storage),
             SearchEntry(R.string.storage_other_internal_data, R.string.storage_other_internal_data_description, R.string.storage_cache_management, Settings.Storage),
             SearchEntry(R.string.storage_external_cache, R.string.storage_external_cache_description, R.string.storage_cache_management, Settings.Storage),
             SearchEntry(R.string.storage_external_files, R.string.storage_external_files_description, R.string.storage_cache_management, Settings.Storage),
@@ -477,6 +506,13 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.inject_signature_metadata_after_patching, R.string.inject_signature_metadata_after_patching_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.patcher_log_mode, R.string.patcher_log_mode_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.patcher_jvm_enable, R.string.patcher_jvm_description, R.string.patcher_category, Settings.Patcher),
+            SearchEntry(
+                R.string.process_memory_limit,
+                R.string.art_memory_description,
+                R.string.patcher_category,
+                Settings.Patcher,
+                keywords = listOf(R.string.art_memory_search_keywords)
+            ),
             SearchEntry(R.string.morphe_bytecode_mode, R.string.morphe_bytecode_mode_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.patcher_memory_usage_graph_title, R.string.patcher_memory_usage_graph_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.patcher_resource_graphs_compact_title, R.string.patcher_resource_graphs_compact_description, R.string.patcher_category, Settings.Patcher),
@@ -523,6 +559,9 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.use_custom_file_picker_title, R.string.use_custom_file_picker_description, R.string.advanced_system, Settings.AdvancedSystem),
             SearchEntry(R.string.show_patch_selection_summary, R.string.show_patch_selection_summary_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.patch_selection_collapse_on_toggle, R.string.patch_selection_collapse_on_toggle_description, R.string.patcher_category, Settings.Patcher),
+            SearchEntry(R.string.minimal_action_buttons_title, R.string.minimal_action_buttons_description, R.string.action_buttons_section, Settings.General),
+            SearchEntry(R.string.dashboard_apps_actions, R.string.dashboard_actions_description, R.string.action_buttons_section, Settings.General),
+            SearchEntry(R.string.dashboard_bundles_actions, R.string.dashboard_actions_description, R.string.action_buttons_section, Settings.General),
             SearchEntry(R.string.patch_selection_action_order_title, R.string.patch_selection_action_order_description, R.string.action_buttons_section, Settings.General),
             SearchEntry(R.string.patch_selection_action_visibility_title, R.string.patch_selection_action_visibility_description, R.string.action_buttons_section, Settings.General),
             SearchEntry(R.string.minimal_patch_selection_view_title, R.string.minimal_patch_selection_view_description, R.string.patch_list_display_section, Settings.Patcher),
@@ -547,6 +586,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.reset_patch_bundles, R.string.reset_patch_bundles_description, R.string.developer_options, Settings.Developer),
             SearchEntry(R.string.patch_profile_bundle_override_title, R.string.patch_profile_bundle_override_description, R.string.developer_options, Settings.Developer),
             SearchEntry(R.string.about_revanced_manager, null, R.string.about, Settings.About),
+            SearchEntry(R.string.about_donate, R.string.about_donate_description, R.string.about, Settings.About),
             SearchEntry(R.string.github, null, R.string.about, Settings.About),
             SearchEntry(R.string.patch_bundle_urls, null, R.string.about, Settings.About),
             SearchEntry(R.string.credits, null, R.string.about, Settings.About),
@@ -680,6 +720,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                     }
                 } else {
                     ColumnWithScrollbar(
+                        thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
@@ -783,6 +824,7 @@ private fun SettingsOverviewLayout(
         if (requiredHeight > constraints.maxHeight) {
             val scrollPlaceable = subcompose(SettingsOverviewSlot.Scroll) {
                 ColumnWithScrollbar(
+                    thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                     modifier = Modifier.fillMaxSize(),
                     state = scrollState
                 ) {

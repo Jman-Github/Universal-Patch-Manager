@@ -299,8 +299,7 @@ class PatcherRuntimePluginRepository(
             val entries = readSourceEntries().map { entry ->
                 if (entry.id == id) {
                     entry.copy(
-                        latest = enabled,
-                        prerelease = if (enabled) false else entry.prerelease
+                        latest = enabled
                     )
                 } else {
                     entry
