@@ -7,7 +7,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.drawable.Icon
+import android.os.SystemClock
 import app.universal.patch.manager.R
 import app.universal.patch.manager.MainActivity
 import app.universal.patch.manager.util.permission.hasNotificationPermission
@@ -43,7 +43,8 @@ class DownloadProgressNotifier(private val app: Application) {
         private val closed = AtomicBoolean(false)
         private val enabled = app.hasNotificationPermission()
         private var lastProgress = -1
-        private var lastUpdateAt = 0L
+        private var lastUpdateAt = -1L
+        private var titleChanged = false
 
         init {
             update(0L, null)
@@ -53,21 +54,18 @@ class DownloadProgressNotifier(private val app: Application) {
         fun update(bytesRead: Long, bytesTotal: Long?) {
             if (!enabled || closed.get()) return
             val total = bytesTotal?.takeIf { it > 0L }
-            val transferComplete = total != null && bytesRead >= total
             val progress = total?.let {
-                ((bytesRead.coerceIn(0L, it) * PROGRESS_MAX) / it)
+                (bytesRead.coerceIn(0L, it).toDouble() / it.toDouble() * PROGRESS_MAX)
                     .toInt()
                     .coerceAtMost(PROGRESS_MAX - 1)
-            }
-            val now = System.currentTimeMillis()
-            if (
-                !transferComplete &&
-                now - lastUpdateAt < MIN_UPDATE_INTERVAL_MS
-            ) return
-            if (progress == lastProgress) return
-            lastProgress = progress ?: -1
+            } ?: -1
+            val now = SystemClock.elapsedRealtime()
+            if (lastUpdateAt >= 0L && now - lastUpdateAt < MIN_UPDATE_INTERVAL_MS) return
+            if (progress == lastProgress && !titleChanged && lastUpdateAt >= 0L) return
+            lastProgress = progress
             lastUpdateAt = now
-            notify(progress ?: 0, progress == null)
+            titleChanged = false
+            notify(progress.coerceAtLeast(0), progress < 0)
         }
 
         @Synchronized
@@ -76,24 +74,21 @@ class DownloadProgressNotifier(private val app: Application) {
             // The next progress/completion update publishes the resolved title. Avoid
             // two back-to-back notifications being throttled at the end of a download.
             title = value
+            titleChanged = true
         }
 
         @Synchronized
         fun complete() {
-            if (!closed.compareAndSet(false, true) || !enabled) return
-            notify(
-                progress = PROGRESS_MAX,
-                indeterminate = false,
-                ongoing = false,
-                timeoutAfter = COMPLETION_VISIBILITY_MS
-            )
+            // A final replacement can be rate-limited, leaving the ongoing version
+            // visible forever. Removal does not depend on accepting another update.
+            cancel()
         }
 
         fun fail() = cancel()
 
         @Synchronized
         fun cancel() {
-            if (!closed.compareAndSet(false, true)) return
+            closed.set(true)
             // A replacement progress notification can be throttled or kept as a live
             // update by the system. Explicitly remove failed/cancelled downloads.
             runCatching { manager.cancel(notificationId) }
@@ -154,7 +149,7 @@ class DownloadProgressNotifier(private val app: Application) {
         return Notification.Builder(app, CHANNEL_ID)
             .setContentTitle(title)
             .apply { contentText?.let(::setContentText) }
-            .setSmallIcon(Icon.createWithResource(app, R.drawable.ic_notification_status))
+            .applyManagerNotificationIcon(app)
             .setContentIntent(pendingIntent)
             .setAutoCancel(!ongoing)
             .setTimeoutAfter(timeoutAfter)
@@ -190,8 +185,7 @@ class DownloadProgressNotifier(private val app: Application) {
         private const val CHANNEL_ID = "download_progress"
         private const val NOTIFICATION_ID_START = 31_000
         private const val PROGRESS_MAX = 1_000
-        private const val MIN_UPDATE_INTERVAL_MS = 200L
+        private const val MIN_UPDATE_INTERVAL_MS = 1_000L
         private const val ACTIVE_NOTIFICATION_TIMEOUT_MS = 30L * 60L * 1_000L
-        private const val COMPLETION_VISIBILITY_MS = 750L
     }
 }

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="notification_icon_tint">#E6E1E5</color>
     <color name="notification_progress_fill">#D0BCFF</color>
     <color name="notification_progress_background">#49454F</color>
 </resources>

@@ -2695,6 +2695,8 @@ class PatchBundleRepository(
         )
     }
 
+    private data class RemoteUpdateResult(val updated: Boolean = false, val error: String? = null)
+
     suspend fun updateNow(
         force: Boolean = false,
         allowUnsafeNetwork: Boolean = false,
@@ -2703,7 +2705,21 @@ class PatchBundleRepository(
         onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)? = null,
         onBundleUpdated: ((bundle: RemotePatchBundle, updatedName: String?, updatedVersion: String) -> Unit)? = null,
         predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
-    ): Boolean = coroutineScope {
+    ): Boolean = updateNowResult(
+        force, allowUnsafeNetwork, showProgress, showToast,
+        onPerBundleProgress, onBundleUpdated, predicate
+    ).updated
+
+    private suspend fun updateNowResult(
+        force: Boolean = false,
+        allowUnsafeNetwork: Boolean = false,
+        showProgress: Boolean = true,
+        showToast: Boolean = false,
+        onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)? = null,
+        onBundleUpdated: ((bundle: RemotePatchBundle, updatedName: String?, updatedVersion: String) -> Unit)? = null,
+        predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
+        refreshMetadata: Boolean = false,
+    ): RemoteUpdateResult = coroutineScope {
         while (true) {
             val operation = async(start = CoroutineStart.LAZY) {
                 performRemoteUpdate(
@@ -2713,7 +2729,8 @@ class PatchBundleRepository(
                     showProgress = showProgress,
                     onPerBundleProgress = onPerBundleProgress,
                     onBundleUpdated = onBundleUpdated,
-                    predicate = predicate
+                    predicate = predicate,
+                    refreshMetadata = refreshMetadata
                 )
             }
             val activeJob = updateJobMutex.withLock {
@@ -2811,9 +2828,24 @@ class PatchBundleRepository(
      * Updates all bundles that should be automatically updated.
      */
     suspend fun updateCheck(showToast: Boolean = false) {
-        awaitReady()
-        store.dispatch(Update(showToast = showToast) { it.updatesAutomatically })
-        checkManualUpdates()
+        // Downloads belong to the repository, not the screen collecting refresh state.
+        scope.async {
+            awaitReady()
+            val automatic = updateNowResult(
+                predicate = { it.updatesAutomatically },
+                refreshMetadata = true
+            )
+            val manualError = checkManualUpdates(refreshMetadata = true)
+            if (showToast) {
+                val error = automatic.error ?: manualError
+                when {
+                    error != null -> toast(R.string.patches_download_fail, error)
+                    manualUpdateInfoFlow.value.isNotEmpty() -> toast(R.string.bundle_update_manual_available)
+                    automatic.updated -> toast(R.string.patches_update_success)
+                    else -> toast(R.string.patches_update_unavailable)
+                }
+            }
+        }.await()
     }
 
     suspend fun fetchUpdatesAndNotify(
@@ -3087,7 +3119,10 @@ class PatchBundleRepository(
         }
     }
 
-    suspend fun checkManualUpdates(vararg bundleUids: Int) = coroutineScope {
+    suspend fun checkManualUpdates(
+        vararg bundleUids: Int,
+        refreshMetadata: Boolean = false
+    ): String? = coroutineScope {
         migrateLegacyDiscoveryEndpoints()
         val targetUids = bundleUids.toSet().takeIf { it.isNotEmpty() }
         val snapshot = store.state.value
@@ -3108,27 +3143,34 @@ class PatchBundleRepository(
         }
 
         if (manualBundles.isEmpty()) {
-            return@coroutineScope
+            return@coroutineScope null
         }
 
         val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
-        if (bundleUpdateNetworkBlock(networkInfo.isConnected(),
-                networkInfo.isUnmetered(), allowMeteredUpdates) != null) {
+        val networkBlock = bundleUpdateNetworkBlock(
+            networkInfo.isConnected(), networkInfo.isUnmetered(), allowMeteredUpdates
+        )
+        if (networkBlock != null) {
             Log.d(tag, "Skipping manual update check because the network is down or metered.")
-            return@coroutineScope
+            return@coroutineScope app.getString(
+                if (networkBlock == BundleUpdateNetworkBlock.METERED) R.string.bundle_update_metered
+                else R.string.bundle_update_offline
+            )
         }
 
         val fetched = manualBundles.map { bundle ->
             async {
+                var failure: String? = null
                 val info = try {
-                    bundle.fetchAvailableUpdateInfo()
+                    bundle.fetchAvailableUpdateInfo(refresh = refreshMetadata)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
                     Log.e(tag, "Failed to check manual update for ${bundle.name}", error)
+                    failure = error.simpleMessage() ?: app.getString(R.string.patch_bundle_discovery_error)
                     null
                 }
-                bundle to info
+                Triple(bundle, info, failure)
             }
         }.awaitAll()
 
@@ -3192,6 +3234,7 @@ class PatchBundleRepository(
                 next
             }
         }
+        fetched.firstNotNullOfOrNull { it.third }
     }
 
     suspend fun reorderBundles(prioritizedUids: List<Int>) = withTrackedReload {
@@ -3285,7 +3328,8 @@ class PatchBundleRepository(
         onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)?,
         onBundleUpdated: ((bundle: RemotePatchBundle, updatedName: String?, updatedVersion: String) -> Unit)?,
         predicate: (bundle: RemotePatchBundle) -> Boolean,
-    ): Boolean = coroutineScope {
+        refreshMetadata: Boolean = false,
+    ): RemoteUpdateResult = coroutineScope {
         val progressStartedOrder = if (showProgress) bundleUpdateProgressOrder() else 0L
         var updateFailed = false
         try {
@@ -3298,13 +3342,16 @@ class PatchBundleRepository(
             if (networkBlock != null) {
                 Log.d(tag, "Skipping update check because the network is down or metered.")
                 updateFailed = true
-                if (showToast) toast(R.string.patches_download_fail, app.getString(
-                    if (networkBlock == BundleUpdateNetworkBlock.METERED) R.string.bundle_update_metered else R.string.bundle_update_offline))
+                val error = app.getString(
+                    if (networkBlock == BundleUpdateNetworkBlock.METERED) R.string.bundle_update_metered
+                    else R.string.bundle_update_offline
+                )
+                if (showToast) toast(R.string.patches_download_fail, error)
                 if (showProgress) {
                     cancelBundleUpdateAutoClear()
                     bundleUpdateProgressFlow.value = null
                 }
-                return@coroutineScope false
+                return@coroutineScope RemoteUpdateResult(error = error)
             }
 
             migrateLegacyDiscoveryEndpoints(allowUnsafeNetwork)
@@ -3318,7 +3365,7 @@ class PatchBundleRepository(
                     cancelBundleUpdateAutoClear()
                     bundleUpdateProgressFlow.value = null
                 }
-                return@coroutineScope false
+                return@coroutineScope RemoteUpdateResult()
             }
 
             markActiveUpdateUids(targets.map(RemotePatchBundle::uid).toSet())
@@ -3344,7 +3391,7 @@ class PatchBundleRepository(
                         if (showProgress) {
                             bundleUpdateProgressFlow.value = null
                         }
-                        return@coroutineScope false
+                        return@coroutineScope RemoteUpdateResult()
                     }
                     if (isRemoteUpdateCancelled(bundle.uid)) {
                         completed = (completed + 1).coerceAtMost(total)
@@ -3405,6 +3452,8 @@ class PatchBundleRepository(
                     var bundleFailed = false
                     val result = try {
                         withTimeout(REMOTE_BUNDLE_UPDATE_TIMEOUT_MS) {
+                            // Explicit refresh must not reuse a stale discovery/changelog cache.
+                            if (refreshMetadata) bundle.fetchLatestReleaseInfo(refresh = true)
                             if (force) {
                                 bundle.downloadLatest(onProgress)
                             } else {
@@ -3505,6 +3554,9 @@ class PatchBundleRepository(
                 emptyMap()
             }
 
+            val failureMessage = if (hadBundleFailures) {
+                lastUpdateError?.simpleMessage() ?: app.getString(R.string.patch_bundle_discovery_error)
+            } else null
             if (updated.isEmpty()) {
                 if (showToast) {
                     if (hadBundleFailures) {
@@ -3514,7 +3566,7 @@ class PatchBundleRepository(
                         toast(R.string.patches_update_unavailable)
                     }
                 }
-                return@coroutineScope false
+                return@coroutineScope RemoteUpdateResult(error = failureMessage)
             }
 
             withContext(NonCancellable) {
@@ -3555,7 +3607,7 @@ class PatchBundleRepository(
                     else toast(R.string.patches_update_success)
                 }
             }
-            true
+            RemoteUpdateResult(updated = true, error = failureMessage)
         } catch (cancel: CancellationException) {
             updateFailed = true
             throw cancel
@@ -3563,7 +3615,9 @@ class PatchBundleRepository(
             updateFailed = true
             Log.e(tag, "Failed to update patch bundles", error)
             if (showToast) toast(R.string.patches_download_fail, error.simpleMessage())
-            return@coroutineScope false
+            return@coroutineScope RemoteUpdateResult(
+                error = error.simpleMessage() ?: app.getString(R.string.patch_bundle_discovery_error)
+            )
         } finally {
             withContext(NonCancellable) {
                 if (showProgress) {

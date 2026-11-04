@@ -1,5 +1,6 @@
 package app.universal.patch.manager.domain.worker
 
+import app.universal.patch.manager.util.applyManagerNotificationIcon
 import android.app.Application
 import android.app.Notification
 import android.app.NotificationChannel
@@ -7,7 +8,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.drawable.Icon
 import android.util.Log
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
@@ -68,7 +68,8 @@ class WorkerRepository(app: Application) {
 
     suspend inline fun <reified W : Worker<A>, A : Any> launchExpedited(
         name: String,
-        input: A
+        input: A,
+        onEnqueueRequested: (UUID) -> Unit = {}
     ): UUID {
         val request =
             OneTimeWorkRequest.Builder(W::class.java) // create Worker
@@ -88,6 +89,7 @@ class WorkerRepository(app: Application) {
                 request
             )
             enqueueRequested = true
+            onEnqueueRequested(request.id)
             withContext(Dispatchers.IO) {
                 operation.result.get()
             }
@@ -201,7 +203,7 @@ class WorkerRepository(app: Application) {
         val builder = Notification.Builder(context, notificationChannel.id)
             .setContentTitle(title)
             .setContentText(description)
-            .setSmallIcon(Icon.createWithResource(context, R.drawable.ic_notification_status))
+            .applyManagerNotificationIcon(context)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
         if (groupKey != null) {

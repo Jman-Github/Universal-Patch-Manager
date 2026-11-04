@@ -13,10 +13,8 @@ import app.universal.patch.manager.domain.repository.PatchBundleRepository
 import app.universal.patch.manager.util.toast
 import app.universal.patch.manager.util.mutableStateSetOf
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 
@@ -28,26 +26,21 @@ class BundleListViewModel : ViewModel(), KoinComponent {
         private set
 
     val sources = patchBundleRepository.sources.onEach { currentSources ->
-        isRefreshing = false
         selectedSources.retainAll(currentSources.map(PatchBundleSource::uid).toSet())
     }
     val manualUpdateInfo = patchBundleRepository.manualUpdateInfo
 
     val selectedSources = mutableStateSetOf<Int>()
 
-    fun refresh() = viewModelScope.launch {
+    fun refresh() {
+        if (isRefreshing) return
         isRefreshing = true
-        try {
-            patchBundleRepository.updateCheck(showToast = true)
-            val progressFlow = patchBundleRepository.bundleUpdateProgress
-            val started = withTimeoutOrNull(250L) {
-                progressFlow.filterNotNull().first()
+        viewModelScope.launch {
+            try {
+                patchBundleRepository.updateCheck(showToast = true)
+            } finally {
+                isRefreshing = false
             }
-            if (started != null) {
-                progressFlow.first { it == null }
-            }
-        } finally {
-            isRefreshing = false
         }
     }
 
@@ -99,13 +92,11 @@ class BundleListViewModel : ViewModel(), KoinComponent {
     fun forceUpdate(src: PatchBundleSource) = viewModelScope.launch {
         if (src !is RemotePatchBundle) return@launch
 
-        val updated = patchBundleRepository.updateNow(
+        patchBundleRepository.updateNow(
             force = true,
+            showToast = true,
             predicate = { it.uid == src.uid }
         )
-        if (!updated) {
-            app.toast(app.getString(R.string.patches_update_unavailable))
-        }
     }
 
     fun disable(src: PatchBundleSource) =

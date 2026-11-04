@@ -1,5 +1,6 @@
 package app.universal.patch.manager.patcher.worker
 
+import app.universal.patch.manager.util.applyManagerNotificationIcon
 import android.app.Notification
 import android.app.Notification.InboxStyle
 import android.app.NotificationChannel
@@ -7,7 +8,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.drawable.Icon
 import android.os.Bundle
 import android.os.PowerManager
 import android.util.Log
@@ -344,7 +344,7 @@ class BundleUpdateNotificationWorker(
         val builder = Notification.Builder(applicationContext, channelId)
             .setContentTitle(title)
             .setContentText(description)
-            .setSmallIcon(Icon.createWithResource(applicationContext, R.drawable.ic_notification_status))
+            .applyManagerNotificationIcon(applicationContext)
             .setContentIntent(pendingIntent)
             .setOnlyAlertOnce(true)
             .setOngoing(ongoing)

@@ -171,7 +171,8 @@ sealed class RemotePatchBundle(
     val updatesAutomatically: Boolean get() = autoUpdate && !isVersionPinned
 
     // Notification discovery must not change the artifact selected for download.
-    open suspend fun fetchAvailableUpdateInfo(): ReVancedAsset = fetchLatestReleaseInfo()
+    open suspend fun fetchAvailableUpdateInfo(refresh: Boolean = false): ReVancedAsset =
+        fetchLatestReleaseInfo(refresh)
 
     fun isUpdateAvailable(info: ReVancedAsset, forNotification: Boolean = false): Boolean =
         isRemoteBundleVersionUpdate(
@@ -185,7 +186,8 @@ sealed class RemotePatchBundle(
             pinnedVersion = isVersionPinned && !forNotification,
         )
 
-    suspend fun fetchLatestReleaseInfo(): ReVancedAsset {
+    suspend fun fetchLatestReleaseInfo(refresh: Boolean = false): ReVancedAsset {
+        if (refresh) return refreshLatestReleaseInfo()
         val key = "$uid|${latestInfoCacheIdentity()}"
         val now = System.currentTimeMillis()
         val cached = changelogCacheMutex.withLock {
@@ -402,12 +404,12 @@ class JsonPatchBundle(
         return super.update(onProgress)
     }
 
-    override suspend fun fetchAvailableUpdateInfo(): ReVancedAsset =
+    override suspend fun fetchAvailableUpdateInfo(refresh: Boolean): ReVancedAsset =
         if (useSpecificVersion) {
             withRepositorySettings(repositorySettings.copy(useSpecificVersion = false))
-                .fetchLatestReleaseInfo()
+                .fetchLatestReleaseInfo(refresh)
         } else {
-            fetchLatestReleaseInfo()
+            fetchLatestReleaseInfo(refresh)
         }
 
     override suspend fun getLatestInfo() = withContext(Dispatchers.IO) {

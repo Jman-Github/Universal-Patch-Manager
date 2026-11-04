@@ -30,9 +30,11 @@ deps = [artifact("org.jetbrains.kotlin", "kotlin-stdlib", kotlin),
 base = "app/universal/patch/manager/"
 sources = [ROOT / ("app/src/main/java/" + base + path) for path in (
     "network/runtime/LoadedPatcherRuntimePlugin.kt", "network/runtime/PatcherRuntimeKind.kt",
-    "patcher/patch/PatchBundleType.kt", "domain/repository/BundleUpdateNetworkPolicy.kt")]
+    "patcher/patch/PatchBundleType.kt", "domain/repository/BundleUpdateNetworkPolicy.kt",
+    "util/ScrollDirectionTracker.kt")]
 sources += [ROOT / ("app/src/test/java/" + base + path) for path in (
-    "network/runtime/LoadedPatcherRuntimePluginTest.kt", "domain/repository/BundleUpdateNetworkPolicyTest.kt")]
+    "network/runtime/LoadedPatcherRuntimePluginTest.kt", "domain/repository/BundleUpdateNetworkPolicyTest.kt",
+    "util/ScrollDirectionTrackerTest.kt")]
 (ROOT / "build").mkdir(exist_ok=True)
 with tempfile.TemporaryDirectory(prefix="bundle-ui-issues-", dir=ROOT / "build") as work:
     classes = Path(work) / "classes"
@@ -42,5 +44,6 @@ with tempfile.TemporaryDirectory(prefix="bundle-ui-issues-", dir=ROOT / "build")
         check=True, timeout=90)
     subprocess.run(list(map(str, [JAVA, "-cp", cp([classes] + deps), "org.junit.runner.JUnitCore",
         "app.universal.patch.manager.network.runtime.LoadedPatcherRuntimePluginTest",
-        "app.universal.patch.manager.domain.repository.BundleUpdateNetworkPolicyTest"])),
+        "app.universal.patch.manager.domain.repository.BundleUpdateNetworkPolicyTest",
+        "app.universal.patch.manager.util.ScrollDirectionTrackerTest"])),
         check=True, timeout=90)

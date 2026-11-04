@@ -87,6 +87,7 @@ import app.universal.patch.manager.domain.manager.SignatureMetadataInjectorManag
 import app.universal.patch.manager.domain.manager.SignatureMetadataWorkflowProgress
 import app.universal.patch.manager.domain.manager.SignatureMetadataSigningMode
 import app.universal.patch.manager.domain.storage.CacheCleanupGuard
+import app.universal.patch.manager.domain.storage.PatcherWorkspaceGate
 import app.universal.patch.manager.domain.repository.DownloadResult
 import app.universal.patch.manager.domain.repository.DownloadedAppRepository
 import app.universal.patch.manager.domain.repository.DownloaderPluginRepository
@@ -155,6 +156,7 @@ import app.universal.patch.manager.util.uiSafe
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -962,8 +964,11 @@ class PatcherViewModel(
     var splitSelectionPreparationError by mutableStateOf<String?>(null)
         private set
 
-    private var prePatchPreparationJob: Job? = null
-    private var workerLaunchJob: Job? = null
+    private var prePatchPreparationJob: Job? by mutableStateOf(null)
+    private var workerLaunchJob: Job? by mutableStateOf(null)
+    val isPatchingStarting: Boolean
+        get() = prePatchPreparationJob != null || workerLaunchJob != null
+    private var leavingScreen = false
     private var preparedInput: DownloadResult? = null
     private var preparedInputIncludesDownload = false
     private var selectedSplitConfiguration: PatcherWorker.SplitSelection? = null
@@ -979,12 +984,11 @@ class PatcherViewModel(
     }
 
     fun cancelSplitSelectionPreparation() {
-        prePatchPreparationJob?.cancel()
-        prePatchPreparationJob = null
-        isPreparingSplitSelection = false
-        prePatchDownloadProgress = null
+        val preparation = prePatchPreparationJob
+        preparation?.cancel()
         pendingSplitSelectionDialog = null
-        cleanupPreparedInput()
+        // The preparation coroutine owns its files until cancellation has finished.
+        if (preparation == null) cleanupPreparedInput()
     }
 
     fun dismissSplitSelectionPreparationError() {
@@ -998,12 +1002,20 @@ class PatcherViewModel(
     private fun launchPrePatchPreparation(
         block: suspend (chooseSplitApks: Boolean) -> Unit
     ) {
-        prePatchPreparationJob?.cancel()
-        prePatchPreparationJob = viewModelScope.launch {
+        if (leavingScreen) return
+        val previousPreparation = prePatchPreparationJob
+        previousPreparation?.cancel()
+        // UNDISPATCHED enters the guarded region even if cancellation precedes dispatch.
+        val job = viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
             val preparationJob = currentCoroutineContext()[Job]
-            splitSelectionPreparationError = null
+            var ownsPreparedInput = false
             var cacheUseToken: AutoCloseable? = null
             try {
+                // A retry must wait for its predecessor to release the shared input.
+                withContext(NonCancellable) { previousPreparation?.join() }
+                yield()
+                ownsPreparedInput = true
+                splitSelectionPreparationError = null
                 // Idle migration may replace an old APK path with a shared-file reference.
                 // Keep the file stable throughout inspection and split preparation.
                 withContext(Dispatchers.IO) {
@@ -1024,10 +1036,10 @@ class PatcherViewModel(
                 yield()
                 block(chooseSplitApks)
             } catch (error: CancellationException) {
-                cleanupPreparedInput()
+                if (ownsPreparedInput) cleanupPreparedInput()
                 throw error
             } catch (error: Throwable) {
-                cleanupPreparedInput()
+                if (ownsPreparedInput) cleanupPreparedInput()
                 // Interrupted file IO can throw before coroutine cancellation is delivered.
                 currentCoroutineContext().ensureActive()
                 splitSelectionPreparationError =
@@ -1041,6 +1053,7 @@ class PatcherViewModel(
                 }
             }
         }
+        prePatchPreparationJob = job.takeUnless { it.isCompleted }
     }
 
     private suspend fun prepareSplitSelectionOrStartWorker(chooseSplitApks: Boolean) {
@@ -2370,14 +2383,18 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private fun startWorker() {
-        if (workerLaunchJob?.isActive == true || _isPatchingActive.value == true) return
-        workerLaunchJob = viewModelScope.launch {
+        if (leavingScreen || workerLaunchJob != null || _isPatchingActive.value == true) return
+        val job = viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            val launchJob = currentCoroutineContext()[Job]
             try {
+                // Assign the observable job before startup can resume on Main.
+                yield()
                 startWorkerNow()
             } finally {
-                workerLaunchJob = null
+                if (workerLaunchJob === launchJob) workerLaunchJob = null
             }
         }
+        workerLaunchJob = job.takeUnless { it.isCompleted }
     }
 
     private suspend fun startWorkerNow() {
@@ -2471,7 +2488,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         logBatteryOptimizationStatus(batteryOptimization)
         logEnvironmentStatus(environment)
         val workId = try {
-            launchWorker(runSelection, runOptions)
+            launchWorker(runSelection, runOptions).also {
+                currentCoroutineContext().ensureActive()
+            }
+        } catch (cancelled: CancellationException) {
+            stopPatchingTaskMonitor()
+            _isPatchingActive.value = false
+            throw cancelled
         } catch (_: UniqueWorkAlreadyRunningException) {
             stopPatchingTaskMonitor()
             _isPatchingActive.value = false
@@ -2487,7 +2510,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             _patcherSucceeded.value = false
             return
         }
-        patcherWorkerId = ParcelUuid(workId)
         PatcherWorker.showInitialNotification(app)
         observeWorker(workId)
     }
@@ -2554,23 +2576,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
         source.observeForever(observer)
         continuation.invokeOnCancellation { source.removeObserver(observer) }
-    }
-
-    private fun cleanupTemporaryLocalInputAfterWorkStops(workId: UUID?) {
-        if (!hasTemporaryLocalInput()) return
-        val preservedFileToDelete = inputFile
-        val originalFileToDelete = redundantTemporaryLocalInputSourceFile()
-        if (preservedFileToDelete == null && originalFileToDelete == null) return
-        clearTemporaryLocalInputState()
-        CoroutineScope(Dispatchers.IO).launch {
-            workId?.let { activeWorkId ->
-                withContext(Dispatchers.Main.immediate) {
-                    awaitWorkToFinish(activeWorkId)
-                }
-            }
-            deleteTemporaryLocalInput(preservedFileToDelete)
-            deleteTemporaryLocalInput(originalFileToDelete)
-        }
     }
 
     private suspend fun persistPatchedApp(
@@ -3091,35 +3096,40 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     fun onBack(cleanupLocalInput: Boolean) {
-        cancelSplitSelectionPreparation()
-        val injectionJob = signatureWorkflowJob
-        injectionJob?.cancel(CancellationException("Patching stopped"))
-        // tempDir cannot be deleted inside onCleared because it gets called on system-initiated process death.
-        if (_isPatchingActive.value == true) {
+        if (leavingScreen) return
+        leavingScreen = true
+        val preparation = prePatchPreparationJob
+        val startup = workerLaunchJob
+        val injection = signatureWorkflowJob
+        listOfNotNull(preparation, startup, injection).forEach {
+            it.cancel(CancellationException("Patching stopped"))
+        }
+        clearPendingActivityInteractions()
+        // Outlive the screen: startup may be completing a WorkManager submission.
+        CoroutineScope(Dispatchers.Main.immediate).launch {
+            preparation?.join()
+            startup?.join()
+            injection?.join()
             val workId = patcherWorkerId?.uuid
-            workId?.let(workManager::cancelWorkById)
+            if (workId != null) {
+                workManager.cancelWorkById(workId)
+                awaitWorkToFinish(workId)
+            }
             clearPatchingNotification()
             stopPatchingTaskMonitor()
-            if (cleanupLocalInput) {
-                cleanupTemporaryLocalInputAfterWorkStops(workId)
+            // WorkInfo can be CANCELLED before the worker's finally block finishes.
+            // Wait for the actual workspace owner before removing any of its inputs.
+            PatcherWorkspaceGate.withWorkspace {
+                cleanupPreparedInput()
+                if (cleanupLocalInput) cleanupTemporaryLocalInput()
+                val repatchSourcePath = patchedRepatchSourcePath
+                patchedRepatchSourcePath = null
+                // Each screen owns its directory; cleanup cannot delete a retry's output.
+                withContext(Dispatchers.IO) {
+                    fs.deleteRepatchInputStagingFile(repatchSourcePath)
+                    tempDir.deleteRecursively()
+                }
             }
-        } else if (cleanupLocalInput && injectionJob == null) {
-            cleanupTemporaryLocalInput()
-        }
-        val repatchSourcePath = patchedRepatchSourcePath
-        patchedRepatchSourcePath = null
-        val workId = patcherWorkerId?.uuid
-        // Each screen owns its directory, so delayed cleanup cannot delete a retry's output.
-        CoroutineScope(Dispatchers.IO).launch {
-            injectionJob?.join()
-            if (cleanupLocalInput && injectionJob != null) {
-                withContext(Dispatchers.Main.immediate) { cleanupTemporaryLocalInput() }
-            }
-            workId?.let {
-                withContext(Dispatchers.Main.immediate) { awaitWorkToFinish(it) }
-            }
-            fs.deleteRepatchInputStagingFile(repatchSourcePath)
-            tempDir.deleteRecursively()
         }
     }
 
@@ -5178,10 +5188,24 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private suspend fun launchWorker(
         selectedPatches: PatchSelection,
         options: Options
-    ): UUID = workerRepository.launchExpedited<PatcherWorker, PatcherWorker.Args>(
-        PatcherWorker.UNIQUE_WORK_NAME,
-        buildWorkerArgs(selectedPatches, options)
-    )
+    ): UUID {
+        val args = buildWorkerArgs(selectedPatches, options)
+        currentCoroutineContext().ensureActive()
+        // Cancellation must not lose a submitted worker's identity or input ownership.
+        // onBack joins this short submission before stopping the worker and deleting files.
+        return withContext(NonCancellable) {
+            workerRepository.launchExpedited<PatcherWorker, PatcherWorker.Args>(
+                PatcherWorker.UNIQUE_WORK_NAME,
+                args,
+                onEnqueueRequested = { workId ->
+                    patcherWorkerId = ParcelUuid(workId)
+                    preparedInput = null
+                    preparedInputIncludesDownload = false
+                    selectedSplitConfiguration = null
+                }
+            )
+        }
+    }
 
     private suspend fun handleDownloaderActivityRequest(
         plugin: LoadedDownloaderPlugin,
@@ -5242,10 +5266,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             selectedForRun is SelectedApp.Local && (selectedForRun.temporary || forceKeepLocalInput)
         val resolvedPreparedInput = preparedInput
         val resolvedSplitSelection = selectedSplitConfiguration
-        preparedInput = null
-        preparedInputIncludesDownload = false
-        selectedSplitConfiguration = null
-
         return PatcherWorker.Args(
             selectedForRun,
             outputFile.path,

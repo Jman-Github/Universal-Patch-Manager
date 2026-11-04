@@ -13,7 +13,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Parcelable
 import android.os.PowerManager
@@ -70,6 +69,7 @@ import app.universal.patch.manager.plugin.downloader.PluginHostApi
 import app.universal.patch.manager.plugin.downloader.UserInteractionException
 import app.universal.patch.manager.ui.model.SelectedApp
 import app.universal.patch.manager.util.AppForeground
+import app.universal.patch.manager.util.applyManagerNotificationIcon
 import app.universal.patch.manager.util.applyProgressNotification
 import app.universal.patch.manager.util.Options
 import app.universal.patch.manager.util.PM
@@ -2216,7 +2216,7 @@ class PatcherWorker(
             )
             return Notification.Builder(context, ensureNotificationChannel(context))
                 .setContentTitle(title)
-                .setSmallIcon(Icon.createWithResource(context, R.drawable.ic_notification_status))
+                .applyManagerNotificationIcon(context)
                 .setContentIntent(pendingIntent)
                 .setCategory(Notification.CATEGORY_SERVICE)
                 .setOngoing(true)

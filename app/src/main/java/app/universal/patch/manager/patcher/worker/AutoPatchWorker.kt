@@ -5,6 +5,7 @@
 
 package app.universal.patch.manager.patcher.worker
 
+import app.universal.patch.manager.util.applyManagerNotificationIcon
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -12,7 +13,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.PowerManager
 import android.util.Log
@@ -321,12 +321,7 @@ class AutoPatchWorker(
             )
         }
         return Notification.Builder(applicationContext, CHANNEL_ID)
-            .setSmallIcon(
-                Icon.createWithResource(
-                    applicationContext,
-                    R.drawable.ic_notification_status
-                )
-            )
+            .applyManagerNotificationIcon(applicationContext)
             .setContentTitle(applicationContext.getString(
                 if (running) R.string.auto_patch_notification_title
                 else if (failed) R.string.auto_patch_notification_failed_title
