@@ -174,7 +174,7 @@ object ReseamRuntimeBridge {
                     ?: throw IOException("Reseam runtime classpath does not exist: $path")
             }
         val runtime = if (overrideFile != null) ReseamRuntimeAssets.prepareRuntime(context, overrideFile)
-            else ReseamRuntimeAssets.prepareBundledRuntime(context)
+            else ReseamRuntimeAssets.prepareSelectedRuntime(context)
         val cacheKey = runtime.nativeLibraryDirectory.canonicalPath
         val existing = classLoader
         if (existing != null && runtimeClassPath == cacheKey) return@synchronized existing

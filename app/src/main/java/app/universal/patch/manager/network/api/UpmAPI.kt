@@ -234,7 +234,8 @@ class UpmAPI(
     suspend fun getRepositoryReleaseHistory(
         repoUrl: String,
         prerelease: Boolean? = null,
-        limit: Int = 20
+        limit: Int = 20,
+        tagPrefix: String? = null
     ): APIResponse<List<GitHubRelease>> {
         val config = runCatching { parseRepoUrl(repoUrl) }
             .getOrElse { return APIResponse.Failure(APIFailure(it, null)) }
@@ -248,7 +249,8 @@ class UpmAPI(
                 is APIResponse.Success -> {
                     val batch = response.data
                     releases += batch.filter { release ->
-                        !release.draft && (prerelease == null || release.prerelease == prerelease)
+                        !release.draft && (prerelease == null || release.prerelease == prerelease) &&
+                            (tagPrefix == null || release.tagName.startsWith(tagPrefix))
                     }
                     if (batch.size < perPage) break
                     page += 1

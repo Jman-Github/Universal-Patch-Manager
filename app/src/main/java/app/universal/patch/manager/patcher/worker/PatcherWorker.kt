@@ -1876,7 +1876,7 @@ class PatcherWorker(
                 when (bundleType) {
                 PatchBundleType.MORPHE -> {
                     check(MorpheRuntimeAssets.isAvailable(applicationContext)) {
-                        "Morphe runtime is not included in this build."
+                        "Morphe runtime plugin is not installed or trusted."
                     }
                     // Code adapted from Morphe, see third-party/NOTICE for more information.
                     // https://github.com/MorpheApp/morphe-manager/pull/1202

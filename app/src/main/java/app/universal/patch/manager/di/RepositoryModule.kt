@@ -56,6 +56,7 @@ val repositoryModule = module {
     }
     singleOf(::AnnouncementRepository)
     singleOf(::DownloaderPluginRepository)
+    singleOf(::RuntimeCatalogRepository)
     singleOf(::PatcherRuntimePluginRepository)
     singleOf(::WorkerRepository)
     singleOf(::DownloadedAppRepository)

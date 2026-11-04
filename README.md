@@ -164,14 +164,14 @@ Export/import the signing keystore separately; JSON backups do not include its k
 
 The embedded JVM uses OpenJDK 25 with compact object headers in 64-bit processes and OpenJDK 17 on 32-bit ARM. This configuration follows [Morphe Manager PR #1302](https://github.com/MorpheApp/morphe-manager/pull/1302). Reseam continues to run in its isolated ART worker.
 
-Runtime plugins must be built for UPM: <code>app.universal.patch.manager.revanced.v21.runtime</code> and <code>app.universal.patch.manager.revanced.v22.runtime</code>. The bundled Reseam runtime uses <code>app.universal.patch.manager.reseam.runtime</code>, and Morphe uses <code>app.universal.patch.manager.morphe.runtime</code>.
+All four patcher engines are downloaded runtime plugins. Fresh installations and upgrades from bundled runtimes must choose their engines during setup. OpenJDK images and JVM tool hosts are downloaded once as shared support. Runtime source and independent releases live in [Universal-Patch-Manager-Runtimes](https://github.com/Jman-Github/Universal-Patch-Manager-Runtimes); see [runtime documentation](docs/runtimes/README.md).
 
 
 ## 📋 Patch Bundles
 
 UPM starts with no patch bundles installed. Add bundles through discovery or import.
 
-UPM can add compatible ReVanced (<code>.rvp</code>), Morphe (<code>.mpp</code>), and Reseam (<code>.reseam</code>) patch bundles from local files, supported remote URLs, repository/release sources, and the in-app discovery catalog. ReVanced v21 and v22 bundles require their respective runtime plugins. Morphe and Reseam are included by default.
+UPM can add compatible ReVanced (<code>.rvp</code>), Morphe (<code>.mpp</code>), and Reseam (<code>.reseam</code>) patch bundles from local files, supported remote URLs, repository/release sources, and the in-app discovery catalog. Each bundle type requires its corresponding runtime plugin. Add engines from **Settings → Patcher runtimes → Import**, which opens the runtime catalog. Signed APK files can also be imported for offline recovery.
 
 The [Patch Bundle Registry](https://github.com/Jman-Github/Patch-Bundle-Registry) maintains a searchable catalog of community patch sources. Visit its [patch browsing site](https://patch-bundles.jmancentral.com/) to explore bundles, patch lists, supported apps, release versions, and changelogs, and copy remote bundle URLs for import into UPM.
 

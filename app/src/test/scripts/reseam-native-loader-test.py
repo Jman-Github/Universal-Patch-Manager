@@ -18,7 +18,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[4]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--emulator")
-parser.add_argument("--runtime", "--plugin", dest="plugin", type=Path, default=ROOT / "reseam-runtime/build/outputs/apk/release/reseam-runtime.apk")
+parser.add_argument("--runtime", "--plugin", dest="plugin", type=Path, default=ROOT.parent.parent / "UP-Manager-Runtimes/main-worktree/reseam-runtime/build/outputs/apk/release/reseam-runtime.apk")
 parser.add_argument("--metadata-bundle", type=Path)
 parser.add_argument("--manager-apk", type=Path)
 args = parser.parse_args()
@@ -80,8 +80,8 @@ with tempfile.TemporaryDirectory(prefix="reseam-native-loader-", dir=ROOT / "bui
         assert android.is_file() and d8.is_file() and adb.is_file(), "Android SDK 37/build-tools 36 required"
         assert args.plugin.is_file(), "Pass --runtime with a previously assembled Reseam runtime APK"
         fixture = ROOT / "app/src/test/fixtures/reseam-native-loader"
-        sources = pure_sources + [main / "reseam/ReseamRuntimeBridge.kt", main / "runtime/reseam/ReseamRuntimeAssets.kt", main / "runtime/reseam/BundledReseamRuntimeAssets.kt",
-            main / "runtime/RuntimePreparationCache.kt", main / "runtime/PatcherRuntimePluginRegistry.kt", ROOT / "shared/runtime-plugin/src/main/java/app/universal/patch/manager/patcher/logger/Logger.kt"]
+        sources = pure_sources + [main / "reseam/ReseamRuntimeBridge.kt", main / "runtime/reseam/ReseamRuntimeAssets.kt",
+            main / "runtime/RuntimePreparationCache.kt", main / "runtime/PatcherRuntimePluginRegistry.kt"]
         sources += sorted(fixture.glob("*.kt"))
         harness = work / "harness.jar"
         run([java, "-cp", cp(compiler), "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler", "-no-stdlib", "-no-reflect",

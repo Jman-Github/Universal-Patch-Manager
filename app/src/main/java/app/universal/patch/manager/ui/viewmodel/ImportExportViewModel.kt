@@ -1559,15 +1559,16 @@ class ImportExportViewModel(
         } else null
         // Activity resume checks disable automatic patching without notification permission.
         // Save the intended Shizuku settings, but enable automatic patching only after permission.
-        preferencesManager.importSettings(
-            deferred?.let {
-                settings.copy(
-                    autoPatchEnabled = false,
-                    autoPatchInstallWithShizuku = it.autoPatchInstallWithShizuku,
-                    autoPatchUninstallOnConflictWithShizuku = it.autoPatchUninstallOnConflictWithShizuku
-                )
-            } ?: settings
-        )
+        val importedSettings = deferred?.let {
+            settings.copy(
+                autoPatchEnabled = false,
+                autoPatchInstallWithShizuku = it.autoPatchInstallWithShizuku,
+                autoPatchUninstallOnConflictWithShizuku = it.autoPatchUninstallOnConflictWithShizuku
+            )
+        } ?: settings
+        patcherRuntimePluginRepository.importSettingsWithRuntimeRestore(importedSettings) { prepared, restore ->
+            preferencesManager.importSettings(prepared, restoreRuntimes = restore)
+        }
         deferredImportedAutoPatchSettings = deferred
     }
 
@@ -1747,18 +1748,10 @@ class ImportExportViewModel(
                 Log.e(tag, "Failed to update imported downloader plugins", error)
             }
         }
-        if (settings.acknowledgedPatcherRuntimePlugins != null ||
-            settings.trustedPatcherRuntimePluginsJson != null ||
-            settings.patcherRuntimePluginSourcesJson != null
+        if (settings.patcherRuntimePluginSourcesJson == null &&
+            (settings.acknowledgedPatcherRuntimePlugins != null || settings.trustedPatcherRuntimePluginsJson != null)
         ) {
             patcherRuntimePluginRepository.reload()
-            try {
-                patcherRuntimePluginRepository.updateCheck()
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                Log.e(tag, "Failed to update imported patcher runtime plugins", error)
-            }
         }
         patchBundleRepository.reload()
     }

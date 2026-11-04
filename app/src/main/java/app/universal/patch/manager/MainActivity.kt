@@ -334,6 +334,21 @@ private fun ReVancedManager(
     vm: MainViewModel,
     disableScreenSlideTransitions: Boolean
 ) {
+    val runtimeRepository: app.universal.patch.manager.domain.repository.PatcherRuntimePluginRepository = koinInject()
+    val runtimeSetupRequired by runtimeRepository.runtimeSetupRequired.collectAsStateWithLifecycle(null)
+    if (runtimeSetupRequired == null) {
+        Box(
+            modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+            contentAlignment = androidx.compose.ui.Alignment.Center
+        ) {
+            androidx.compose.material3.CircularProgressIndicator()
+        }
+        return
+    }
+    if (runtimeSetupRequired == true) {
+        app.universal.patch.manager.ui.screen.settings.RuntimeCatalogScreen(onboarding = true)
+        return
+    }
     val navController = rememberNavController()
     val dashboardVm: DashboardViewModel = koinViewModel()
     val batchPatcherVm: BatchPatcherViewModel = koinViewModel()

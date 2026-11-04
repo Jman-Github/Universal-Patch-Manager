@@ -2278,7 +2278,7 @@ Details: %2$s</string>
     <string name="export">Export</string>
     <string name="confirm">Confirm</string>
     <string name="patcher_runtime_plugins">Patcher Runtimes</string>
-    <string name="patcher_runtime_plugins_description">Morphe and Reseam are included. Manage optional ReVanced v21 and v22 plugins</string>
+    <string name="patcher_runtime_plugins_description">Download and manage the patcher runtimes you need</string>
     <string name="patcher_runtime_import_url">Import runtime source</string>
     <string name="patcher_runtime_import_url_description">Add runtime plugins from a GitHub repository or release APK URL</string>
     <string name="patcher_runtime_import_url_hint">https://github.com/...</string>

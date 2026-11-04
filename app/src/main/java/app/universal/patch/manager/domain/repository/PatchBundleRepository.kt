@@ -1059,7 +1059,7 @@ class PatchBundleRepository(
         val declaredType = detectDeclaredBundleType(bundle, source)
         if (declaredType == PatchBundleType.RESEAM) {
             if (!ReseamRuntimeAssets.isAvailable(app)) {
-                throw IllegalStateException("Reseam runtime is not included in this build.")
+                throw IllegalStateException("ReSeam runtime plugin is not installed or trusted.")
             }
             return PatchBundleType.RESEAM to
                 ReseamRuntimeBridge.loadMetadata(bundlePath)

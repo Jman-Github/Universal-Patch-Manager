@@ -44,6 +44,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -132,13 +133,18 @@ fun PatcherRuntimePluginsSettingsScreen(
     }
 
     if (showImportUrlDialog) {
-        ImportRuntimeSourceDialog(
-            onDismiss = { showImportUrlDialog = false },
-            onImport = { url ->
-                viewModel.importPluginSource(url)
-                showImportUrlDialog = false
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showImportUrlDialog = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface {
+                RuntimeCatalogScreen(
+                    onboarding = false,
+                    onBackClick = { showImportUrlDialog = false },
+                    viewModel = viewModel
+                )
             }
-        )
+        }
     }
     if (remoteSourceBusyState != null) {
         TransparentLoadingDialog()
@@ -257,9 +263,7 @@ private fun RuntimeSummaryCard(
             }
         )
         ExpressiveSettingsDivider()
-        RuntimeAvailabilityRow(name = "Reseam", available = true, builtIn = true)
-        RuntimeAvailabilityRow(name = "Morphe", available = true, builtIn = true)
-        PatcherRuntimeKind.entries.forEach { kind ->
+        PatcherRuntimeKind.entries.filterNot { it == PatcherRuntimeKind.SHARED_SUPPORT }.forEach { kind ->
             RuntimeAvailabilityRow(
                 name = kind.displayName,
                 available = kind in loadedRuntimes
@@ -271,8 +275,7 @@ private fun RuntimeSummaryCard(
 @Composable
 private fun RuntimeAvailabilityRow(
     name: String,
-    available: Boolean,
-    builtIn: Boolean = false
+    available: Boolean
 ) {
     Row(
         modifier = Modifier
@@ -288,20 +291,12 @@ private fun RuntimeAvailabilityRow(
         )
         Spacer(modifier = Modifier.width(12.dp))
         RuntimeStatusPill(
-            text = if (builtIn) {
-                stringResource(R.string.patcher_runtime_built_in)
-            } else {
-                stringResource(
-                    if (available) R.string.patcher_runtime_available_yes
-                    else R.string.patcher_runtime_available_no
-                )
-            },
-            icon = when {
-                builtIn -> Icons.Outlined.Build
-                available -> Icons.Filled.Check
-                else -> Icons.Filled.Close
-            },
-            emphasized = available || builtIn
+            text = stringResource(
+                if (available) R.string.patcher_runtime_available_yes
+                else R.string.patcher_runtime_available_no
+            ),
+            icon = if (available) Icons.Filled.Check else Icons.Filled.Close,
+            emphasized = available
         )
     }
 }
@@ -356,8 +351,8 @@ private fun RuntimeImportCard(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
     ) {
         ExpressiveSettingsItem(
-            headlineContent = stringResource(R.string.patcher_runtime_import_url),
-            supportingContent = stringResource(R.string.patcher_runtime_import_url_description)
+            headlineContent = stringResource(R.string.runtime_catalog_title),
+            supportingContent = stringResource(R.string.runtime_catalog_description)
         )
         Row(
             modifier = Modifier
@@ -411,6 +406,12 @@ private fun ManagedRuntimeCard(
         type = RuntimePluginType.Remote,
         detail = source.repoUrl.toGitHubRepoDisplayName(),
         modifier = modifier,
+        leadingContent = {
+            app.universal.patch.manager.ui.component.RuntimePluginIcon(
+                apk = (source.state as? PatcherRuntimePluginSourceState.State.Loaded)?.plugin?.apkFile,
+                pm = viewModel.pm, previewUrl = null, modifier = Modifier.size(44.dp)
+            )
+        },
         secondaryActionLabel = stringResource(R.string.delete),
         onSecondaryAction = { showDeleteDialog = true },
         middleActionLabel = stringResource(R.string.settings),
@@ -1188,63 +1189,6 @@ private fun TrustDialogSectionLabel(text: String) {
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center
-    )
-}
-
-@Composable
-private fun ImportRuntimeSourceDialog(
-    onDismiss: () -> Unit,
-    onImport: (String) -> Unit
-) {
-    var url by rememberSaveable { mutableStateOf("") }
-    val trimmedUrl = url.trim()
-    val focusRequester = remember { FocusRequester() }
-    val keyboardController = LocalSoftwareKeyboardController.current
-
-    LaunchedEffect(Unit) {
-        withFrameNanos { }
-        focusRequester.requestFocus()
-        keyboardController?.show()
-    }
-
-    AlertDialog(
-        modifier = Modifier.imePadding(),
-        onDismissRequest = onDismiss,
-        title = { CenteredDialogTitle(stringResource(R.string.patcher_runtime_import_url)) },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.patcher_runtime_import_url_description),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                OutlinedTextField(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focusRequester),
-                    value = url,
-                    onValueChange = { url = it },
-                    placeholder = { Text(stringResource(R.string.patcher_runtime_import_url_hint)) },
-                    singleLine = true
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onImport(trimmedUrl) },
-                enabled = trimmedUrl.isNotEmpty()
-            ) {
-                Text(stringResource(R.string.import_button))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
-            }
-        }
     )
 }
 

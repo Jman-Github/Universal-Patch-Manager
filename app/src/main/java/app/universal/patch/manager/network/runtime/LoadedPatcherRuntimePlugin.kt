@@ -12,7 +12,8 @@ data class LoadedPatcherRuntimePlugin(
     // Capture file identity now so replacing a managed APK at the same path/version
     // still emits a runtime change and refreshes bundles loaded by that runtime.
     val apkLastModified: Long = apkFile.lastModified(),
-    val apkSize: Long = apkFile.length()
+    val apkSize: Long = apkFile.length(),
+    val upstreamVersion: String? = null
 ) {
     val id: String = sourceId ?: packageName
 }

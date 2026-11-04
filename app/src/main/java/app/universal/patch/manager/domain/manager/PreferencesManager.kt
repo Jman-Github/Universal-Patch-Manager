@@ -307,6 +307,13 @@ class PreferencesManager(
         }
     }
 
+    val runtimeSetupDownloading = booleanPreference("runtime_setup_downloading", false)
+    val runtimeSetupVersion = intPreference("runtime_setup_version", 0)
+    // Local restore state is deliberately excluded from exported settings.
+    val runtimeSetupFromBackup = booleanPreference("runtime_setup_from_backup", false)
+    val runtimeRestorePending = booleanPreference("runtime_restore_pending", false)
+    val runtimeRestoreRequest = stringPreference("runtime_restore_request", "")
+    val runtimeSetupSelection = stringSetPreference("runtime_setup_selection", emptySet())
     val firstLaunch = booleanPreference("first_launch", true)
     val managerAutoUpdates = booleanPreference("manager_auto_updates", false)
     val showManagerUpdateDialogOnLaunch = booleanPreference("show_manager_update_dialog_on_launch", true)
@@ -817,7 +824,13 @@ class PreferencesManager(
         snapshot
     }
 
-    suspend fun importSettings(snapshot: SettingsSnapshot) = edit {
+    suspend fun importSettings(snapshot: SettingsSnapshot, restoreRuntimes: Boolean = false) = edit {
+        if (restoreRuntimes) {
+            runtimeSetupFromBackup.value = true
+            runtimeRestorePending.value = true
+            runtimeRestoreRequest.value = java.util.UUID.randomUUID().toString()
+            runtimeSetupDownloading.value = false
+        }
         val imported = normalizeImportedManagerSettings(snapshot)
         importAppearanceSettings(imported)
         importCoreUpdateSettings(imported)

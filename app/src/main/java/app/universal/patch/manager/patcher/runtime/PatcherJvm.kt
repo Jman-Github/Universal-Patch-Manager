@@ -59,7 +59,7 @@ class PatcherJvm private constructor(
             }
             checkCancelled()
             val installed = installation.install(requireNotNull(engine.host),
-                if (engine == RuntimeEngine.REVANCED21 || engine == RuntimeEngine.REVANCED_LEGACY || engine == RuntimeEngine.REVANCED22)
+                if (engine != RuntimeEngine.TOOLS)
                     runtimeClassPath?.let(::File) else null)
             if (JarFile(installed.hostJar).use {
                     it.getJarEntry("app/universal/patch/manager/patcher/host/GcOverheadWatch.class") == null

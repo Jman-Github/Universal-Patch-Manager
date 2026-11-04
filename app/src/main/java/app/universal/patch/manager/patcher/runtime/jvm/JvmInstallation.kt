@@ -16,6 +16,11 @@ import android.os.Build
 import android.os.Process
 import android.util.Log
 import app.universal.patch.manager.BuildConfig
+import app.universal.patch.manager.network.runtime.PatcherRuntimeKind
+import app.universal.patch.manager.patcher.runtime.PatcherRuntimePluginRegistry
+import java.util.zip.ZipFile
+import java.io.InputStream
+import java.io.FilterInputStream
 import app.universal.patch.manager.patcher.runtime.JvmUnavailableException
 import app.universal.patch.manager.util.tag
 import kotlinx.coroutines.Dispatchers
@@ -29,39 +34,62 @@ import java.io.RandomAccessFile
 import java.util.zip.ZipInputStream
 
 /**
- * The JVM the app ships in its assets for patching, unpacked to storage the first time a run
+ * The JVM distributed in the separately signed runtime support plugin for patching, unpacked to storage the first time a run
  * needs it, since the JVM can only be loaded from files.
  *
- * The runtime is unpacked once per runtime the app ships. The patcher host is part of the app's
- * own code and is unpacked once per install of the app. Both ship compressed with xz, which
- * takes a few seconds to undo on a phone.
+ * Runtime images are unpacked once per support plugin version. Each patcher host comes from
+ * its matching signed plugin and is cached by plugin content and manager build identity.
+ * The shared runtime images retain the compressed layout used by earlier manager builds.
  */
 class JvmInstallation(private val app: Application) {
     /**
      * The ABI of the runtime this device gets, null where the app ships none for it. Matched to
      * the process rather than the device, as a 64 bit device can run the app as a 32 bit one.
      */
-    val abi: String? =
-        (if (Process.is64Bit()) Build.SUPPORTED_64_BIT_ABIS else Build.SUPPORTED_32_BIT_ABIS)
-            .firstOrNull { it in BuildConfig.EMBEDDED_JVM_ABIS }
-
+    private val supportPack: File
+        get() = PatcherRuntimePluginRegistry.runtimeFor(PatcherRuntimeKind.SHARED_SUPPORT)?.apkFile
+            ?: throw JvmUnavailableException("UPM runtime support plugin is missing")
+    val abi: String?
+        get() = runCatching {
+            ZipFile(supportPack).use { zip ->
+                (if (Process.is64Bit()) Build.SUPPORTED_64_BIT_ABIS else Build.SUPPORTED_32_BIT_ABIS)
+                    .firstOrNull { zip.getEntry("assets/jvm/$it.zip.xz") != null }
+            }
+        }.getOrNull()
     val isAvailable get() = abi != null
-    val feature get() = if (Process.is64Bit()) BuildConfig.EMBEDDED_JVM_64_BIT_FEATURE
-        else BuildConfig.EMBEDDED_JVM_32_BIT_FEATURE
+    val feature get() = if (Process.is64Bit()) 25 else 17
+
+    private fun contentHash(file: File): String = java.security.MessageDigest.getInstance("SHA-256").let { digest ->
+        file.inputStream().use { input ->
+            val buffer = ByteArray(65536)
+            while (true) { val size = input.read(buffer); if (size < 0) break; digest.update(buffer, 0, size) }
+        }
+        digest.digest().joinToString("") { "%02x".format(it.toInt() and 255) }
+    }
+
+    private fun openAsset(pack: File, name: String): InputStream {
+        val zip = ZipFile(pack)
+        try {
+            val entry = zip.getEntry("assets/$name") ?: throw IOException("Missing runtime support asset: $name")
+            return object : FilterInputStream(zip.getInputStream(entry)) {
+                override fun close() { try { super.close() } finally { zip.close() } }
+            }
+        } catch (error: Throwable) { zip.close(); throw error }
+    }
 
     private val root = app.managerStorageContext.noBackupFilesDir.resolve(ROOT_DIR)
     private val lock = Mutex()
 
     /** Warm the runtime image without unpacking an unrelated engine's host JAR. */
     suspend fun prepareRuntime() = lock.withLock {
-        withContext(Dispatchers.IO) { runtimeHome() }
+        withContext(Dispatchers.IO) { runtimeHome(supportPack) }
     }
 
-    private fun runtimeHome(): File {
+    private fun runtimeHome(pack: File): File {
         val abi = abi ?: throw JvmUnavailableException("No patcher JVM for ${Build.SUPPORTED_ABIS.joinToString()}")
         if (!root.isDirectory && !root.mkdirs()) throw IOException("Could not create $root")
-        val home = root.resolve("runtime-$abi-${BuildConfig.EMBEDDED_JVM_ID}")
-        if (!home.isDirectory) unpackRuntime(abi, home)
+        val home = root.resolve("runtime-$abi-${contentHash(pack)}")
+        if (!home.isDirectory) unpackRuntime(pack, abi, home)
         return home
     }
 
@@ -73,11 +101,13 @@ class JvmInstallation(private val app: Application) {
             )
 
             try {
-                val home = runtimeHome()
+                val pack = supportPack
+                val home = runtimeHome(pack)
 
                 // UPM PR APKs can share a version code, so refresh the host on every app update.
                 val updatedAt = app.packageManager.getPackageInfo(app.packageName, 0).lastUpdateTime
-                val pluginId = plugin?.let { file ->
+                val source = plugin ?: pack
+                val pluginId = source.let { file ->
                     java.security.MessageDigest.getInstance("SHA-256").let { digest ->
                         file.inputStream().use { input ->
                             val buffer = ByteArray(65536)
@@ -91,16 +121,9 @@ class JvmInstallation(private val app: Application) {
                     }
                 }.orEmpty()
                 val hostJar = root.resolve("$host-$pluginId-${BuildConfig.VERSION_CODE}-${BuildConfig.BUILD_ID}-$updatedAt.jar")
-                if (!hostJar.isFile) unpackHost(host, hostJar, plugin)
+                if (!hostJar.isFile) unpackHost(host, hostJar, source)
 
-                // Whatever an earlier version of the app unpacked is of no use to this one
-                root.listFiles()?.filter {
-                    (it.name.startsWith("runtime-") && it != home) ||
-                        (it.name.startsWith("$host-") && it != hostJar) ||
-                        // Remove the unpacked core under its former name after an app update.
-                        (host == "upm-patcher-core" && it.name.startsWith("morphe-patcher-core-"))
-                }?.forEach { it.deleteRecursively() }
-
+                // Previous images and hosts remain valid for jobs using an older plugin.
                 Installed(home, hostJar)
             } catch (e: IOException) {
                 throw JvmUnavailableException("Could not unpack the patcher JVM", e)
@@ -110,10 +133,10 @@ class JvmInstallation(private val app: Application) {
 
     // Unpacked beside the destination and renamed into place, so a half unpacked runtime left by
     // a process that died midway is never taken for a complete one
-    private fun unpackRuntime(abi: String, home: File) {
+    private fun unpackRuntime(pack: File, abi: String, home: File) {
         val staging = File(home.path + STAGING_SUFFIX).apply { deleteRecursively() }
 
-        ZipInputStream(XZInputStream(app.assets.open("$ASSETS_DIR/$abi.zip.xz").buffered())).use { zip ->
+        ZipInputStream(XZInputStream(openAsset(pack, "$ASSETS_DIR/$abi.zip.xz").buffered())).use { zip ->
             generateSequence { zip.nextEntry }.forEach { entry ->
                 val target = staging.resolve(entry.name)
                 if (!target.canonicalPath.startsWith(staging.canonicalPath + File.separator)) {
@@ -129,25 +152,25 @@ class JvmInstallation(private val app: Application) {
             }
         }
 
-        unpackImage(abi, staging.resolve("lib/modules"))
+        unpackImage(pack, abi, staging.resolve("lib/modules"))
 
         if (!staging.renameTo(home)) throw IOException("Could not move the runtime into $home")
         Log.i(tag, "Unpacked the patcher JVM for $abi")
     }
 
     // Ship the module image once; rebuild ABI-specific differences before publishing the runtime.
-    private fun unpackImage(abi: String, image: File) {
+    private fun unpackImage(pack: File, abi: String, image: File) {
         image.parentFile?.mkdirs()
         val delta = "$abi.modules.delta.xz"
-        if (app.assets.list(ASSETS_DIR)?.contains(delta) != true) {
-            unpackXz("modules.xz", image)
+        if (ZipFile(pack).use { it.getEntry("assets/$ASSETS_DIR/$delta") } == null) {
+            unpackXz(pack, "modules.xz", image)
             return
         }
         val base = File(image.path + ".base")
         try {
-            unpackXz("modules.xz", base)
+            unpackXz(pack, "modules.xz", base)
             RandomAccessFile(base, "r").use { baseImage ->
-                XZInputStream(app.assets.open("$ASSETS_DIR/$delta").buffered()).use { input ->
+                XZInputStream(openAsset(pack, "$ASSETS_DIR/$delta").buffered()).use { input ->
                     image.outputStream().buffered().use { JvmImageDelta.apply(baseImage, input, it) }
                 }
             }
@@ -156,26 +179,25 @@ class JvmInstallation(private val app: Application) {
         }
     }
 
-    private fun unpackXz(asset: String, target: File) {
-        XZInputStream(app.assets.open("$ASSETS_DIR/$asset").buffered()).use { input ->
+    private fun unpackXz(pack: File, asset: String, target: File) {
+        XZInputStream(openAsset(pack, "$ASSETS_DIR/$asset").buffered()).use { input ->
             target.outputStream().use { input.copyTo(it) }
         }
     }
 
-    private fun unpackHost(host: String, hostJar: File, plugin: File?) {
+    private fun unpackHost(host: String, hostJar: File, plugin: File) {
         val staging = File(hostJar.path + STAGING_SUFFIX)
-        if (plugin != null) {
-            java.util.zip.ZipFile(plugin).use { zip ->
+        try {
+            ZipFile(plugin).use { zip ->
                 val entry = zip.getEntry("assets/jvm/$host.jar")
-                    ?: throw JvmUnavailableException("This plugin has no JVM host; use its bound ART host")
+                    ?: throw JvmUnavailableException("This plugin has no JVM host; use its ART host")
                 zip.getInputStream(entry).use { input ->
                     staging.outputStream().use { input.copyTo(it) }
                 }
             }
-        } else XZInputStream(app.assets.open("$ASSETS_DIR/$host.jar.xz").buffered()).use { input ->
-            JvmHostArchive.restore(input, File(app.applicationInfo.sourceDir), staging)
-        }
-        if (!staging.renameTo(hostJar)) throw IOException("Could not move the patcher host into $hostJar")
+            if (!staging.setReadOnly()) throw IOException("Cannot protect JVM host")
+            if (!staging.renameTo(hostJar)) throw IOException("Could not publish JVM host")
+        } finally { staging.delete() }
     }
 
     class Installed(val home: File, val hostJar: File) {
