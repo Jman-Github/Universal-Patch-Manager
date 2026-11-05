@@ -4,6 +4,18 @@ Release notes are generated automatically from Conventional Commits.
 
 Historical manually maintained release notes remain in `api/CHANGELOG.md` and `api/DEV-CHANGELOG.md`.
 
+# [2.1.0-dev.3](https://github.com/Jman-Github/Universal-Patch-Manager/compare/v2.1.0-dev.2...v2.1.0-dev.3) (2026-11-05)
+
+
+### Bug Fixes
+
+* **manager:** stabilize patching, updates, and notifications ([24fb204](https://github.com/Jman-Github/Universal-Patch-Manager/commit/24fb2043e7c77dd626910844882501039b472d23)), closes [#828](https://github.com/Jman-Github/Universal-Patch-Manager/issues/828) [#826](https://github.com/Jman-Github/Universal-Patch-Manager/issues/826) [#821](https://github.com/Jman-Github/Universal-Patch-Manager/issues/821) [#822](https://github.com/Jman-Github/Universal-Patch-Manager/issues/822) [#818](https://github.com/Jman-Github/Universal-Patch-Manager/issues/818)
+
+
+### Features
+
+* **runtimes:** replace bundled engines with runtime plugins ([d9aac9a](https://github.com/Jman-Github/Universal-Patch-Manager/commit/d9aac9ac128977144957dd64a91428183b2cff02))
+
 # [2.1.0-dev.2](https://github.com/Jman-Github/Universal-Patch-Manager/compare/v2.1.0-dev.1...v2.1.0-dev.2) (2026-10-31)
 
 
