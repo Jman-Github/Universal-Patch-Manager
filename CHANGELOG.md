@@ -4,6 +4,22 @@ Release notes are generated automatically from Conventional Commits.
 
 Historical manually maintained release notes remain in `api/CHANGELOG.md` and `api/DEV-CHANGELOG.md`.
 
+# [2.1.0-dev.4](https://github.com/Jman-Github/Universal-Patch-Manager/compare/v2.1.0-dev.3...v2.1.0-dev.4) (2026-11-06)
+
+
+### Bug Fixes
+
+* **ARSCLib:** bump to latest ([d39bf32](https://github.com/Jman-Github/Universal-Patch-Manager/commit/d39bf32cc01bfee9005c4e676bd8eb213914fcef))
+* **patcher:** fix JVM startup and cancellation state ([b99d571](https://github.com/Jman-Github/Universal-Patch-Manager/commit/b99d571c0a83d9e72bca813830b9ca1b5f9fb6de))
+* **release:** restore release configuration and repository dotfiles ([9fdef1c](https://github.com/Jman-Github/Universal-Patch-Manager/commit/9fdef1c5591f296b7fadafe144c276254f21fac0))
+* **runtime:** fix signer detection on Android 9 and 10 ([c7b9fe1](https://github.com/Jman-Github/Universal-Patch-Manager/commit/c7b9fe12c24329211309d9ba916448dc5721a25d)), closes [#839](https://github.com/Jman-Github/Universal-Patch-Manager/issues/839)
+
+
+### Features
+
+* **manager:** add graph pinning and refine app detail ([9e720d0](https://github.com/Jman-Github/Universal-Patch-Manager/commit/9e720d0459950f314f44223cec78c9ef6246b59d)), closes [#816](https://github.com/Jman-Github/Universal-Patch-Manager/issues/816) [#815](https://github.com/Jman-Github/Universal-Patch-Manager/issues/815) [#820](https://github.com/Jman-Github/Universal-Patch-Manager/issues/820) [#817](https://github.com/Jman-Github/Universal-Patch-Manager/issues/817) [#827](https://github.com/Jman-Github/Universal-Patch-Manager/issues/827) [#825](https://github.com/Jman-Github/Universal-Patch-Manager/issues/825) [#824](https://github.com/Jman-Github/Universal-Patch-Manager/issues/824) [#829](https://github.com/Jman-Github/Universal-Patch-Manager/issues/829)
+* **runtimes:** schedule updates and add notifications ([cb6fbfe](https://github.com/Jman-Github/Universal-Patch-Manager/commit/cb6fbfece02bff983fbf79bbe09ec1b09666ff41)), closes [#842](https://github.com/Jman-Github/Universal-Patch-Manager/issues/842)
+
 # [2.1.0-dev.3](https://github.com/Jman-Github/Universal-Patch-Manager/compare/v2.1.0-dev.2...v2.1.0-dev.3) (2026-11-05)
 
 
