@@ -34,6 +34,7 @@ class BundleUpdateNotificationWorker(
     parameters: WorkerParameters
 ) : Worker<BundleUpdateNotificationWorker.Args>(context, parameters), KoinComponent {
     private val patchBundleRepository: PatchBundleRepository by inject()
+    private val runtimePluginRepository: app.universal.patch.manager.domain.repository.PatcherRuntimePluginRepository by inject()
     // Periodic and immediate workers may overlap, including during cancellation cleanup.
     private val progressNotificationTag = "bundle-update-progress:$id"
 
@@ -67,6 +68,14 @@ class BundleUpdateNotificationWorker(
 
             // The application reloads patch bundles asynchronously on process start.
             // Do not snapshot the repository's initial empty state on a cold worker run.
+            // Runtime checks share the bundle worker's periodic schedule and network policy.
+            try {
+                runtimePluginRepository.updateCheck()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w("RuntimeUpdates", "Runtime update check failed", error)
+            }
             patchBundleRepository.awaitReady()
 
             fun buildPendingIntent(

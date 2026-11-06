@@ -299,7 +299,6 @@ class PatcherRuntimePluginsViewModel(
         isRefreshingPlugins = true
         try {
             runtimePluginRepository.reload()
-            runtimePluginRepository.updateCheck()
         } catch (t: Throwable) {
             Log.e(TAG, "Failed to refresh patcher runtime plugins", t)
         } finally {

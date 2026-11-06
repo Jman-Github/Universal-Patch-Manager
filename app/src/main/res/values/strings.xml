@@ -2640,4 +2640,7 @@ Details: %2$s</string>
     <string name="merger_resource_graphs_pinned_title">Pin merger resource graphs</string>
     <string name="merger_resource_graphs_pinned_description">Keep CPU, memory, and storage graphs above the merging steps while scrolling.</string>
     <string name="resource_graph_pinning_search_keywords">pin pinning pinned fixed sticky graphs resource usage monitoring</string>
+    <string name="runtime_updates_channel">Patcher runtime updates</string>
+    <string name="runtime_updates_available">Patcher runtime updates available</string>
+    <string name="runtime_updates_completed">Patcher runtimes updated</string>
 </resources>

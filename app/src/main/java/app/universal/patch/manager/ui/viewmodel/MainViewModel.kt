@@ -70,6 +70,8 @@ class MainViewModel(
     val legacyImportActivityFlow = legacyImportActivityChannel.receiveAsFlow()
     private val bundleDeepLinkChannel = Channel<BundleDeepLink>(Channel.BUFFERED)
     val bundleDeepLinkFlow = bundleDeepLinkChannel.receiveAsFlow()
+    private val runtimeUpdateDeepLinkChannel = Channel<Unit>(Channel.BUFFERED)
+    val runtimeUpdateDeepLinkFlow = runtimeUpdateDeepLinkChannel.receiveAsFlow()
     private val managerUpdateDeepLinkChannel = Channel<Unit>(Channel.BUFFERED)
     val managerUpdateDeepLinkFlow = managerUpdateDeepLinkChannel.receiveAsFlow()
     private val announcementDeepLinkChannel =
@@ -206,6 +208,10 @@ class MainViewModel(
 
     fun handleIntent(intent: Intent?) {
         if (handleBatchIntent(intent)) return
+        if (intent?.getBooleanExtra("open_patcher_runtimes", false) == true) {
+            runtimeUpdateDeepLinkChannel.trySend(Unit)
+            return
+        }
         if (ManagerUpdateDeepLinkIntent.shouldOpenManagerUpdate(intent)) {
             managerUpdateDeepLinkChannel.trySend(Unit)
         }

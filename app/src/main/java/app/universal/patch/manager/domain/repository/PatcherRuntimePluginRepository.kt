@@ -23,6 +23,7 @@ import app.universal.patch.manager.network.runtime.PatcherRuntimePluginSourceEnt
 import app.universal.patch.manager.network.runtime.PatcherRuntimePluginSourceState
 import app.universal.patch.manager.network.runtime.PatcherRuntimePluginState
 import app.universal.patch.manager.network.service.HttpService
+import app.universal.patch.manager.util.RuntimeUpdateNotifications
 import app.universal.patch.manager.util.DownloadProgressNotifier
 import app.universal.patch.manager.util.PM
 import app.universal.patch.manager.util.tag
@@ -812,36 +813,81 @@ class PatcherRuntimePluginRepository(
         installedPluginPackageNames.value = installedPluginPackageNames.value - packageName
     }
 
-    suspend fun updateCheck() {
+    suspend fun updateCheck() = withContext(Dispatchers.IO) {
         sourceMutex.withLock {
-            if (!networkInfo.isConnected()) return
-            if (!prefs.allowMeteredUpdates.get() && !networkInfo.isUnmetered()) return
-
-            val entries = withContext(Dispatchers.IO) { readSourceEntries() }
-            if (entries.none { it.autoUpdate && it.trustedSignatureHex != null }) return
-            val currentSourceStates = sourceStates.value
-
-            val updatedEntries = buildList {
-                entries.forEach { entry ->
-                    val updateMode = shouldAutoUpdate(entry, currentSourceStates[entry.id]?.state)
-                    if (updateMode == SourceUpdateMode.SKIP) {
-                        add(entry)
-                        return@forEach
-                    }
-                    val updated = runCatching { updateEntry(entry, force = updateMode == SourceUpdateMode.FORCE) }
-                        .onFailure {
-                            if (it is CancellationException) throw it
-                            Log.e(tag, "Failed to update patcher runtime source ${entry.repoUrl}", it)
-                        }
-                        .getOrElse { entry }
-                    add(updated)
-                }
-            }
-
-            withContext(Dispatchers.IO) {
-                writeSourceEntries(updatedEntries)
+            if (!networkInfo.isConnected()) return@withLock
+            if (!prefs.allowMeteredUpdates.get() && !networkInfo.isUnmetered()) return@withLock
+            val entries = readSourceEntries().toMutableList()
+            if (entries.isEmpty()) return@withLock
+            val currentCatalog = try { catalog.refresh() } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(tag, "Using cached runtime catalog for updates", error)
+                catalog.cached()
             }
             reload()
+            val available = mutableListOf<String>()
+            val updated = mutableListOf<String>()
+            var checksComplete = true
+            entries.indices.forEach { index ->
+                val entry = entries[index]
+                if (entry.trustedSignatureHex == null) return@forEach
+                try {
+                    val state = sourceStates.value[entry.id]
+                    val name = state?.name ?: entry.assetSelector
+                    val resolved = entry.catalogId?.let { catalogId ->
+                        val item = currentCatalog.plugins.firstOrNull { it.id == catalogId }
+                            ?: error("Runtime was removed from the catalog")
+                        catalog.resolve(item, entry.releasePrereleaseFilter)
+                    }
+                    val release = if (resolved == null) latestReleaseFor(
+                        entry.repoUrl, entry.releasePrereleaseFilter, entry.assetSelector
+                    ) else null
+                    val asset = resolved?.asset ?: release!!.assets
+                        .filter(::isSupportedRuntimeAsset)
+                        .firstOrNull { it.matchesAssetSelector(entry.assetSelector) }
+                        ?: error("No matching runtime asset")
+                    val key = if (resolved != null)
+                        resolved.release.tagName + ":" + resolved.manifest.sha256.lowercase()
+                    else releaseVersionKey(release!!, asset)
+                    // A filtered channel may only expose releases older than the
+                    // installed runtime. Installation rejects these; do not advertise them.
+                    if (resolved != null && entry.expectedVersionCode != null &&
+                        resolved.manifest.versionCode < entry.expectedVersionCode) return@forEach
+                    // Local imports use "local:<sha>" rather than a release tag.
+                    // For catalog runtimes, identical verified bytes are not an update.
+                    val changed = if (resolved != null && entry.expectedSha256 != null) {
+                        !resolved.manifest.sha256.equals(entry.expectedSha256, ignoreCase = true)
+                    } else key != entry.versionKey
+                    if (!entry.autoUpdate) {
+                        if (changed) available += name
+                        return@forEach
+                    }
+                    val mode = shouldAutoUpdate(entry, state?.state)
+                    if (mode == SourceUpdateMode.SKIP) return@forEach
+                    if (!changed && mode != SourceUpdateMode.FORCE &&
+                        state?.state is PatcherRuntimePluginSourceState.State.Loaded &&
+                        sourceFile(entry).exists()) return@forEach
+                    val replacement = if (resolved != null) installCatalogEntry(entry, resolved)
+                    else {
+                        downloadAssetToEntry(entry, asset)
+                        entry.copy(versionKey = key)
+                    }
+                    entries[index] = replacement
+                    // Persist each success before cancellation or another source's failure.
+                    writeSourceEntries(entries)
+                    reload()
+                    if (changed && sourceStates.value[entry.id]?.state is PatcherRuntimePluginSourceState.State.Loaded)
+                        updated += name
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    checksComplete = false
+                    Log.e(tag, "Failed to check runtime source " + entry.repoUrl, error)
+                }
+            }
+            runCatching { RuntimeUpdateNotifications.show(app, available, updated, checksComplete) }
+                .onFailure { Log.w(tag, "Failed to show runtime update notifications", it) }
         }
     }
 
