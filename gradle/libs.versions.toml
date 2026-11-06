@@ -26,7 +26,7 @@ revanced-library = "3.1.0"
 morphe-patcher = "2.1.0"
 morphe-library = "1.4.0"
 # Commit hashes are not chronological versions; keep SDK transitives from overriding this pin.
-arsclib = { strictly = "4695b583ef" }
+arsclib = { strictly = "675bed2de3" }
 koin = "4.2.2"
 ktor = "3.5.1"
 markdown-renderer = "0.30.0"
