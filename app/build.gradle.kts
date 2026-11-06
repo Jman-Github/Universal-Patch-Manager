@@ -119,7 +119,6 @@ val androidArscLib by tasks.registering(Jar::class) {
     )
 }
 
-usePatcherClassMergerCompatibility()
 
 dependencies {
     // Bundle format detection inspects DEX superclasses before loading a patcher SDK.
@@ -404,7 +403,6 @@ android {
         }
     }
 
-    sourceSets.getByName("main").kotlin.directories.add(rootProject.file("shared/runtime-framework/src/main/java").path)
 
     sourceSets {
         getByName("main").kotlin.directories.add(rootProject.file("shared/merger/src/main/java").path)
