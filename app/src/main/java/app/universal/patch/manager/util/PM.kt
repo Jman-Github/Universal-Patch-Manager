@@ -249,7 +249,16 @@ class PM(
             )
         val signingFlags = if (includeSigning) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                PackageManager.GET_SIGNING_CERTIFICATES.toLong()
+                val modernFlag = PackageManager.GET_SIGNING_CERTIFICATES.toLong()
+                // Android 9/10 only collect archive certificates when GET_SIGNATURES is also set.
+                // Keep SigningInfo for the current signer and verified certificate rotation history.
+                // https://android.googlesource.com/platform/frameworks/base/+/android-10.0.0_r47/core/java/android/content/pm/PackageManager.java
+                @Suppress("DEPRECATION")
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                    modernFlag or PackageManager.GET_SIGNATURES.toLong()
+                } else {
+                    modernFlag
+                }
             } else {
                 @Suppress("DEPRECATION")
                 PackageManager.GET_SIGNATURES.toLong()
