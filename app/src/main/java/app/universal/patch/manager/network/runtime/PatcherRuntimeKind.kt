@@ -9,7 +9,7 @@ enum class PatcherRuntimeKind(
     REVANCED_V21("revanced-v21", "ReVanced v21"),
     REVANCED_V22("revanced-v22", "ReVanced v22"),
     MORPHE("morphe", "Morphe"),
-    RESEAM("reseam", "ReSeam"),
+    RESEAM("reseam", "Reseam"),
     SHARED_SUPPORT("shared-support", "UPM runtime support");
 
     companion object {

@@ -39,7 +39,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
+import app.universal.patch.manager.ui.component.LazyColumnWithScrollbar
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -502,7 +502,7 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
             )
         }
     ) { padding ->
-        LazyColumn(
+        LazyColumnWithScrollbar(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)

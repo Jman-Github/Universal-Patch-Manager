@@ -31,7 +31,7 @@ fun LazyColumnWithScrollbar(
     horizontalAlignment: Alignment.Horizontal = Alignment.Start,
     flingBehavior: FlingBehavior = ScrollableDefaults.flingBehavior(),
     userScrollEnabled: Boolean = true,
-    thumbLength: Dp? = null,
+    thumbLength: Dp? = DASHBOARD_SCROLLBAR_THUMB_LENGTH,
     reserveScrollbarSpace: Boolean = false,
     content: LazyListScope.() -> Unit
 ) {

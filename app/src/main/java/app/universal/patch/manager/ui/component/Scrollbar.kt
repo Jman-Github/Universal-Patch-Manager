@@ -24,7 +24,7 @@ fun Scrollbar(
     scrollState: ScrollState,
     modifier: Modifier = Modifier,
     prominent: Boolean = false,
-    thumbLength: Dp? = null
+    thumbLength: Dp? = DASHBOARD_SCROLLBAR_THUMB_LENGTH
 ) {
     Scrollbar(
         ScrollbarsScrollType.Scroll(
@@ -42,7 +42,7 @@ fun Scrollbar(
     lazyListState: LazyListState,
     modifier: Modifier = Modifier,
     prominent: Boolean = false,
-    thumbLength: Dp? = null
+    thumbLength: Dp? = DASHBOARD_SCROLLBAR_THUMB_LENGTH
 ) {
     LazyListScrollbar(lazyListState, modifier, prominent, thumbLength)
 }

@@ -30,5 +30,5 @@ fun String.toRuntimeMainName(): String {
         .replace(Regex("\\s+"), " ")
         .trim()
 
-    return normalized.ifBlank { original }
+    return normalized.replace(Regex("(?i)reseam"), "Reseam").ifBlank { original }
 }

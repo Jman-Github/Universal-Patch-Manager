@@ -97,7 +97,9 @@ object SplitApkPreparer {
 object SplitApkFiles {
     fun baseApk(file: File, cache: File, entries: List<String>) = file
 }
+object R { object string { const val runtime_signer_unreadable = 1 } }
 class App {
+    fun getString(id: Int, name: String) = "Failed to read signer for $name"
     val packageManager = PackageManager()
     val cacheDir = File(".")
 }

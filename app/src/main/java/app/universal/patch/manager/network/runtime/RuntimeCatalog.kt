@@ -29,7 +29,7 @@ data class RuntimeCatalog(val schemaVersion: Int, val plugins: List<RuntimeCatal
                 "Runtime ${engine.id} is missing its shared support dependency"
             }
         }
-        return this
+        return copy(plugins = plugins.map { if (it.runtimeKind == PatcherRuntimeKind.RESEAM) it.copy(name = "Reseam") else it })
     }
 
     /** Catalogs can retire engines while a saved selection still contains their IDs. */

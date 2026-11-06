@@ -408,7 +408,7 @@ private fun ManagedRuntimeCard(
         modifier = modifier,
         leadingContent = {
             app.universal.patch.manager.ui.component.RuntimePluginIcon(
-                apk = (source.state as? PatcherRuntimePluginSourceState.State.Loaded)?.plugin?.apkFile,
+                apk = viewModel.sourceIconFile(source.entry),
                 pm = viewModel.pm, previewUrl = null, modifier = Modifier.size(44.dp)
             )
         },

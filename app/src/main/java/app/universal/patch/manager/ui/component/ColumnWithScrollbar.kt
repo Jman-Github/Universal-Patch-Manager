@@ -20,7 +20,7 @@ fun ColumnWithScrollbar(
     state: ScrollState = rememberScrollState(),
     verticalArrangement: Arrangement.Vertical = Arrangement.Top,
     horizontalAlignment: Alignment.Horizontal = Alignment.Start,
-    thumbLength: Dp? = null,
+    thumbLength: Dp? = DASHBOARD_SCROLLBAR_THUMB_LENGTH,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Box(modifier) {

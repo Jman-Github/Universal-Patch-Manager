@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
+import app.universal.patch.manager.ui.component.LazyColumnWithScrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Save
@@ -196,7 +196,7 @@ fun KeystoreCreatorScreen(onBackClick: () -> Unit) {
             }
         }
     ) { paddingValues ->
-        LazyColumn(
+        LazyColumnWithScrollbar(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),

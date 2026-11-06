@@ -1059,7 +1059,7 @@ class PatchBundleRepository(
         val declaredType = detectDeclaredBundleType(bundle, source)
         if (declaredType == PatchBundleType.RESEAM) {
             if (!ReseamRuntimeAssets.isAvailable(app)) {
-                throw IllegalStateException("ReSeam runtime plugin is not installed or trusted.")
+                throw IllegalStateException("Reseam runtime plugin is not installed or trusted.")
             }
             return PatchBundleType.RESEAM to
                 ReseamRuntimeBridge.loadMetadata(bundlePath)
@@ -1863,6 +1863,10 @@ class PatchBundleRepository(
             return false
         }
 
+        if (discoverySettings != null) {
+            return updateDiscoveryReleaseSelection(src.uid, normalizedUrl, discoverySettings, onProgress)
+        }
+
         var endpointChanged = false
         withRemoteUpdateReservation(onQueued = ::notifyQueuedBundleSetting) {
             dispatchAction("Update bundle url (${src.uid})") { state ->
@@ -1952,6 +1956,46 @@ class PatchBundleRepository(
         }
         if (updated) progressNotification.complete() else progressNotification.fail()
         return true
+    }
+
+    /** Preserve the active Discovery endpoint until its replacement has downloaded successfully. */
+    private suspend fun updateDiscoveryReleaseSelection(
+        uid: Int,
+        endpoint: String,
+        settings: RepositoryBundleSettings,
+        onProgress: PatchBundleDownloadProgress?
+    ): Boolean = withRemoteUpdateReservation(onQueued = ::notifyQueuedBundleSetting) {
+        val props = dao.getProps(uid) ?: return@withRemoteUpdateReservation false
+        val candidate = PatchBundleEntity(
+            uid = uid, name = props.name, displayName = props.displayName,
+            versionHash = props.versionHash, source = SourceInfo.from(endpoint),
+            autoUpdate = props.autoUpdate, searchUpdate = props.searchUpdate,
+            lastNotifiedVersion = props.lastNotifiedVersion, enabled = props.enabled,
+            sortOrder = props.sortOrder, createdAt = props.createdAt, updatedAt = props.updatedAt
+        ).load() as? RemotePatchBundle ?: return@withRemoteUpdateReservation false
+        val directory = directoryOf(uid)
+        val previousMetadata = ExternalBundleMetadataStore.read(directory)
+        var committed = false
+        try {
+            committed = performRemoteUpdate(
+                force = true, showToast = true, allowUnsafeNetwork = prefs.allowMeteredUpdates.get(),
+                showProgress = true,
+                onPerBundleProgress = onProgress?.let { callback ->
+                    { _: RemotePatchBundle, bytes: Long, total: Long? -> callback(bytes, total) }
+                },
+                onBundleUpdated = null, predicate = { it.uid == uid }, refreshMetadata = true,
+                selectionOverrides = mapOf(uid to candidate), discoverySelections = mapOf(uid to settings)
+            ).updated
+            committed
+        } finally {
+            // Metadata lookup can write the candidate's version before the APK has downloaded.
+            if (!committed) withContext(NonCancellable) {
+                if (dao.getProps(uid) != null) {
+                    if (previousMetadata != null) ExternalBundleMetadataStore.write(directory, previousMetadata)
+                    else ExternalBundleMetadataStore.clear(directory)
+                }
+            }
+        }
     }
 
     suspend fun updateTimestamps(src: PatchBundleSource, createdAt: Long?, updatedAt: Long?) {
@@ -2549,6 +2593,39 @@ class PatchBundleRepository(
             state.copy(sources = state.sources.put(uid, newSrc))
         }
         if (value) checkManualUpdates(uid)
+    }
+
+    /** Download a candidate first; publish its release preferences only with a successful update. */
+    suspend fun JsonPatchBundle.updateRepositorySelection(
+        transform: (JsonPatchBundle) -> RepositoryBundleSettings
+    ): Boolean = withRemoteUpdateReservation(onQueued = ::notifyQueuedBundleSetting) {
+        val current = store.state.value.sources[uid] as? JsonPatchBundle ?: return@withRemoteUpdateReservation false
+        val settings = transform(current)
+        if (settings == current.repositorySettings) return@withRemoteUpdateReservation true
+        val candidate = current.withRepositorySettings(settings)
+        if (settings.useSpecificVersion && settings.selectedVersion == null) {
+            // An empty pin is intentional. Check access before accepting it, so rate limiting
+            // does not change an existing release preference.
+            try {
+                current.fetchAvailableVersions()
+                dispatchAction("Enable bundle version selection") { state ->
+                    val active = state.sources[uid] as? JsonPatchBundle ?: return@dispatchAction state
+                    RepositoryBundleSettingsStore.write(directoryOf(uid), settings)
+                    state.copy(sources = state.sources.put(uid, active.withRepositorySettings(settings)))
+                }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (error: Exception) {
+                toast(R.string.patches_download_fail, error.simpleMessage())
+            }
+        } else {
+            performRemoteUpdate(
+                force = true, showToast = true, allowUnsafeNetwork = false, showProgress = true,
+                onPerBundleProgress = null, onBundleUpdated = null, predicate = { it.uid == uid },
+                refreshMetadata = true, selectionOverrides = mapOf(uid to candidate)
+            )
+        }
+        (store.state.value.sources[uid] as? JsonPatchBundle)?.repositorySettings == settings
     }
 
     suspend fun JsonPatchBundle.setRepositoryReleaseChannel(
@@ -3329,6 +3406,8 @@ class PatchBundleRepository(
         onBundleUpdated: ((bundle: RemotePatchBundle, updatedName: String?, updatedVersion: String) -> Unit)?,
         predicate: (bundle: RemotePatchBundle) -> Boolean,
         refreshMetadata: Boolean = false,
+        selectionOverrides: Map<Int, RemotePatchBundle> = emptyMap(),
+        discoverySelections: Map<Int, RepositoryBundleSettings> = emptyMap(),
     ): RemoteUpdateResult = coroutineScope {
         val progressStartedOrder = if (showProgress) bundleUpdateProgressOrder() else 0L
         var updateFailed = false
@@ -3358,6 +3437,7 @@ class PatchBundleRepository(
             val targets = store.state.value.sources.values
                 .filterIsInstance<RemotePatchBundle>()
                 .filter { predicate(it) }
+                .map { selectionOverrides[it.uid] ?: it }
 
             if (targets.isEmpty()) {
                 if (showToast) toast(R.string.patches_update_unavailable)
@@ -3575,6 +3655,15 @@ class PatchBundleRepository(
                     dispatchAction("Apply updated bundles") {
                         updated.forEach { (src, downloadResult) ->
                             if (dao.getProps(src.uid) == null) return@forEach
+                            val settings = discoverySelections[src.uid]
+                                ?: (selectionOverrides[src.uid] as? JsonPatchBundle)?.repositorySettings
+                            settings?.let { RepositoryBundleSettingsStore.write(directoryOf(src.uid), it) }
+                            if (src.uid in discoverySelections) {
+                                changelogHistoryMutex.withLock {
+                                    writeChangelogHistoryInternal(src.uid, emptyList())
+                                    writeChangelogHistoryIdentityInternal(src.uid, null)
+                                }
+                            }
                             val rawName = runCatching {
                                 PatchBundle(src.patchesJarFile.absolutePath).manifestAttributes?.name
                             }.getOrNull()?.trim().takeUnless { it.isNullOrBlank() } ?: src.name
@@ -3583,6 +3672,7 @@ class PatchBundleRepository(
 
                             updateDb(src.uid) {
                                 it.copy(
+                                    source = if (src.uid in discoverySelections) SourceInfo.from(src.endpoint) else it.source,
                                     versionHash = downloadResult.versionSignature,
                                     lastNotifiedVersion = null,
                                     name = name,

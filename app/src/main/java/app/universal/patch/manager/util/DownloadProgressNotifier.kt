@@ -165,9 +165,8 @@ class DownloadProgressNotifier(private val app: Application) {
             .build()
     }
 
-    private fun defaultContentText(progress: Int, indeterminate: Boolean): CharSequence =
-        if (indeterminate) app.getString(R.string.download_progress_indeterminate)
-        else (progress * 100 / PROGRESS_MAX).toString() + "%"
+    private fun defaultContentText(progress: Int, indeterminate: Boolean): CharSequence? =
+        if (indeterminate) app.getString(R.string.download_progress_indeterminate) else null
 
     private fun initialNotificationId(): Int = runCatching {
         manager.activeNotifications

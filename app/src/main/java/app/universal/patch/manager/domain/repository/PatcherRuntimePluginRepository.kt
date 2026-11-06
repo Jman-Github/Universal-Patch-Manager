@@ -53,6 +53,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.UUID
 import java.security.MessageDigest
+import app.universal.patch.manager.network.runtime.toRuntimeMainName
 import com.android.apksig.ApkVerifier
 import app.universal.patch.manager.network.runtime.isInternalSupport
 import app.universal.patch.manager.network.runtime.isInternalRuntimePlugin
@@ -1093,7 +1094,7 @@ class PatcherRuntimePluginRepository(
         }
         @Suppress("DEPRECATION")
         val current = packageInfo.signatures.orEmpty().map { it.hex() }
-        if (current.isEmpty()) throw SecurityException("Failed to read signer for ${packageInfo.packageName}")
+        if (current.isEmpty()) throw SecurityException(app.getString(R.string.runtime_signer_unreadable, packageInfo.packageName))
         return RuntimePluginSigners(current)
     }
 
@@ -1319,10 +1320,20 @@ class PatcherRuntimePluginRepository(
         if (!resumable && tempFile.exists()) tempFile.delete()
         if (resumable && tempFile.length() > requireNotNull(entry.expectedSize)) tempFile.delete()
         var transferred = false
+        fun runtimeTitle(name: String) = if (name.contains("runtime support", ignoreCase = true)) name
+            else app.getString(R.string.runtime_download_title, name.toRuntimeMainName())
         val progressNotification = downloadProgressNotifier.begin(
-            _sourceStates.value[entry.id]?.name?.let {
-                app.getString(R.string.runtime_download_title, it)
-            } ?: asset.name
+            runtimeTitle(
+                catalog.cached().plugins.firstOrNull { it.id == entry.catalogId }?.name
+                    ?: _sourceStates.value[entry.id]?.name
+                    ?: when {
+                        asset.name.contains("revanced-v21", true) -> "ReVanced v21"
+                        asset.name.contains("revanced-v22", true) -> "ReVanced v22"
+                        asset.name.contains("morphe", true) -> "Morphe"
+                        asset.name.contains("reseam", true) -> "Reseam"
+                        asset.name.contains("shared-support", true) -> "UPM"
+                        else -> entry.assetSelector.toReadableSourceName()
+                    })
         )
 
         fun reportProgress(bytes: Long, total: Long?) {
@@ -1366,7 +1377,7 @@ class PatcherRuntimePluginRepository(
             val packageInfo = readArchivePackageInfo(tempFile)
             validateManagedArchive(entry, packageInfo, tempFile)
             val plugin = resolvePlugin(packageInfo, sourceId = entry.id)
-            progressNotification.updateTitle(app.getString(R.string.runtime_download_title, plugin.name))
+            progressNotification.updateTitle(runtimeTitle(plugin.name))
             if (entry.trustedSignatureHex != null) {
                 when (val trust = verifyArchiveTrust(entry, packageInfo)) {
                     ArchiveTrust.Trusted -> Unit
@@ -1374,7 +1385,7 @@ class PatcherRuntimePluginRepository(
                         "Signer mismatch for ${packageInfo.packageName}"
                     )
                     is ArchiveTrust.Unreadable -> throw SecurityException(
-                        "Failed to read signer for ${packageInfo.packageName}",
+                        app.getString(R.string.runtime_signer_unreadable, packageInfo.packageName),
                         trust.throwable
                     )
                     is ArchiveTrust.Untrusted -> throw SecurityException(
@@ -1453,6 +1464,8 @@ class PatcherRuntimePluginRepository(
         require(id.matches(Regex("[a-zA-Z0-9-]+"))) { "Invalid runtime source identity" }
         return managedSourceRoot.resolve(id)
     }
+    fun sourceIconFile(entry: PatcherRuntimePluginSourceEntry): File? = sourceFile(entry).takeIf { it.isFile }
+
     private fun sourceFile(entry: PatcherRuntimePluginSourceEntry): File {
         val name = entry.archiveName ?: "patcher-runtime.apk"
         require(name == "patcher-runtime.apk" || name.matches(Regex("[a-f0-9]{64}\\.apk"))) { "Invalid runtime archive name" }

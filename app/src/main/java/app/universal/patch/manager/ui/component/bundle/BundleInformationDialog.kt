@@ -165,28 +165,28 @@ fun BundleInformationDialog(
     }
 
     fun onRepositoryPrereleasesChange(new: Boolean) = composableScope.launch {
-        val updatedSource = with(bundleRepo) {
-            (src as? JsonPatchBundle)?.setUsePrereleases(new)
-        } ?: return@launch
-        bundleRepo.update(updatedSource, showToast = true)
+        with(bundleRepo) {
+            (src as? JsonPatchBundle)?.updateRepositorySelection { current ->
+                current.repositorySettings.copy(usePrereleases = new, useLatest = false)
+            }
+        }
     }
 
     fun onRepositoryLatestChange(new: Boolean) = composableScope.launch {
-        val updatedSource = with(bundleRepo) {
-            (src as? JsonPatchBundle)?.setUseLatest(new)
-        } ?: return@launch
-        bundleRepo.update(updatedSource, showToast = true)
+        with(bundleRepo) {
+            (src as? JsonPatchBundle)?.updateRepositorySelection { current ->
+                current.repositorySettings.copy(useLatest = new)
+            }
+        }
     }
 
     fun onVersionSelectionChange(enabled: Boolean) = composableScope.launch {
-        val updated = with(bundleRepo) {
-            (src as? JsonPatchBundle)?.setVersionSelection(enabled)
-        } ?: return@launch
-        if (enabled && updated.selectedVersion == null) {
-            showVersionDialog = true
-        } else {
-            bundleRepo.update(updated, showToast = true)
-        }
+        val accepted = with(bundleRepo) {
+            (src as? JsonPatchBundle)?.updateRepositorySelection { current ->
+                current.repositorySettings.withVersionSelection(enabled)
+            }
+        } == true
+        if (accepted && enabled && (src as? JsonPatchBundle)?.selectedVersion == null) showVersionDialog = true
     }
 
     if (showVersionDialog && src is JsonPatchBundle && src.useSpecificVersion) {
@@ -196,8 +196,11 @@ fun BundleInformationDialog(
             onSelect = { asset ->
                 showVersionDialog = false
                 composableScope.launch {
-                    val updated = with(bundleRepo) { src.setVersionSelection(true, asset) }
-                    bundleRepo.update(updated, showToast = true)
+                    with(bundleRepo) {
+                        src.updateRepositorySelection { current ->
+                            current.repositorySettings.withVersionSelection(true, asset)
+                        }
+                    }
                 }
             }
         )

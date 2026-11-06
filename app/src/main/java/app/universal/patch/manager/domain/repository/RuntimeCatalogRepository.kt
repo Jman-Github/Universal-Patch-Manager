@@ -1,6 +1,7 @@
 package app.universal.patch.manager.domain.repository
 
 import android.app.Application
+import app.universal.patch.manager.R
 import android.os.Build
 import android.os.Process
 import app.universal.patch.manager.network.api.UpmAPI
@@ -78,7 +79,7 @@ class RuntimeCatalogRepository(
                 if (firstFailure == null) firstFailure = error
             }
         }
-        throw IllegalStateException("No compatible release of ${item.name} is available. Retry after its runtime release is published.", firstFailure)
+        throw IllegalStateException(app.getString(R.string.runtime_catalog_no_compatible_release, item.name), firstFailure)
     }
 
     companion object {

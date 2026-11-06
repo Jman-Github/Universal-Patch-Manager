@@ -39,7 +39,7 @@ fun validateRuntimePluginPayload(kind: PatcherRuntimeKind, file: File, processAb
         }
         if (kind == PatcherRuntimeKind.RESEAM) {
             require(processAbis.any { zip.getEntry("lib/$it/libreseam-sdk-native.so")?.size?.let { size -> size > 0 } == true }) {
-                "ReSeam has no native library for this process"
+                "Reseam has no native library for this process"
             }
         }
     }

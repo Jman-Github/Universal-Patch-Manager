@@ -973,7 +973,13 @@ class DownloaderPluginRepository(
         val progressNotification = downloadProgressNotifier.begin(
             _sourceStates.value[entry.id]?.name?.let {
                 app.getString(R.string.downloader_download_title, it.toDownloaderMainName())
-            } ?: asset.name
+            } ?: app.getString(R.string.downloader_download_title, when {
+                asset.name.contains("apkcombo", true) -> "APKCombo"
+                asset.name.contains("apkmirror", true) -> "APKMirror"
+                asset.name.contains("apkpure", true) -> "APKPure"
+                asset.name.contains("play-store", true) -> "Play Store"
+                else -> entry.assetSelector.toReadableSourceName().toDownloaderMainName()
+            })
         )
 
         runCatching {

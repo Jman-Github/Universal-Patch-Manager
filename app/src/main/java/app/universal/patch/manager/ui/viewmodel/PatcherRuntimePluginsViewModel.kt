@@ -66,7 +66,7 @@ class PatcherRuntimePluginsViewModel(
                 catalog = catalogRepository.refresh()
             } catch (error: Throwable) {
                 if (error is kotlinx.coroutines.CancellationException) throw error
-                catalogWarning = error.simpleMessage() ?: "Could not refresh the runtime catalog"
+                catalogWarning = error.simpleMessage() ?: appContext.getString(R.string.runtime_catalog_refresh_failed)
             }
             val validIds = catalog.plugins.filter { it.isEngine }.map { it.id }.toSet()
             selectedCatalogIds = catalog.engineSelection(selectedCatalogIds)
@@ -160,6 +160,9 @@ class PatcherRuntimePluginsViewModel(
     val runtimePluginSourceStates = runtimePluginRepository.sourceStates.map { states ->
         states.filterValues { !it.isInternalSupport }
     }
+    fun sourceIconFile(entry: app.universal.patch.manager.network.runtime.PatcherRuntimePluginSourceEntry) =
+        runtimePluginRepository.sourceIconFile(entry)
+
     val downloadProgress = runtimePluginRepository.downloadProgress
     val downloadedCatalogRuntimes = runtimePluginRepository.downloadedCatalogRuntimes
     val catalogRuntimes = runtimePluginRepository.catalogRuntimes

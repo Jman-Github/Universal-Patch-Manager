@@ -40,8 +40,8 @@
     {
       "id": "reseam",
       "kind": "reseam",
-      "name": "ReSeam",
-      "description": "Supports ReSeam patch bundles (.reseam).",
+      "name": "Reseam",
+      "description": "Supports Reseam patch bundles (.reseam).",
       "packageName": "app.universal.patch.manager.reseam.runtime",
       "assetName": "reseam-runtime.apk",
       "dependencies": [

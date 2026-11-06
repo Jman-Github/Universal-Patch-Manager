@@ -2643,4 +2643,12 @@ Details: %2$s</string>
     <string name="runtime_updates_channel">Patcher runtime updates</string>
     <string name="runtime_updates_available">Patcher runtime updates available</string>
     <string name="runtime_updates_completed">Patcher runtimes updated</string>
+    <string name="runtime_description_revanced_v21">Supports ReVanced v21 and legacy class-based patch bundles.</string>
+    <string name="runtime_description_revanced_v22">Supports ReVanced v22 patch bundles.</string>
+    <string name="runtime_description_morphe">Supports Morphe patch bundles (.mpp).</string>
+    <string name="runtime_description_reseam">Supports Reseam patch bundles (.reseam).</string>
+    <string name="runtime_description_support">Shared support for patcher runtimes.</string>
+    <string name="runtime_catalog_refresh_failed">Could not refresh the runtime catalog</string>
+    <string name="runtime_catalog_no_compatible_release">No compatible release of %1$s is available. Retry after its runtime release is published.</string>
+    <string name="runtime_signer_unreadable">Failed to read signer for %1$s</string>
 </resources>

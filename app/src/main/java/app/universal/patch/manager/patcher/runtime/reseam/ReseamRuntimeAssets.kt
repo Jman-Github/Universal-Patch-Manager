@@ -29,7 +29,7 @@ object ReseamRuntimeAssets {
     fun isAvailable(context: Context): Boolean = app.universal.patch.manager.patcher.runtime.PatcherRuntimePluginRegistry.runtimeFor(app.universal.patch.manager.network.runtime.PatcherRuntimeKind.RESEAM) != null
 
     fun ensureRuntimeClassPath(context: Context): File = app.universal.patch.manager.patcher.runtime.PatcherRuntimePluginRegistry.runtimeFor(app.universal.patch.manager.network.runtime.PatcherRuntimeKind.RESEAM)?.apkFile
-        ?: throw java.io.IOException("ReSeam runtime plugin is not installed or trusted.")
+        ?: throw java.io.IOException("Reseam runtime plugin is not installed or trusted.")
 
     internal fun prepareRuntime(context: Context, apk: File): ReseamRuntimeFiles {
         val abis = if (Process.is64Bit()) Build.SUPPORTED_64_BIT_ABIS else Build.SUPPORTED_32_BIT_ABIS

@@ -206,7 +206,7 @@ fun RuntimeCatalogScreen(
                 LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp))
             }
             viewModel.catalogWarning?.let { warning ->
-                item { RuntimeCatalogMessage(stringResource(R.string.runtime_catalog_cached, warning), error = false) }
+                item { RuntimeCatalogMessage(stringResource(R.string.runtime_catalog_cached, warning), error = true) }
             }
             viewModel.downloadError?.let { error ->
                 item { RuntimeCatalogMessage(error, error = true) }
@@ -254,7 +254,13 @@ private fun RuntimeChoiceCard(
             )
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(item.name, style = MaterialTheme.typography.titleMedium)
-                Text(item.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(when (item.runtimeKind) {
+                    app.universal.patch.manager.network.runtime.PatcherRuntimeKind.REVANCED_V21 -> R.string.runtime_description_revanced_v21
+                    app.universal.patch.manager.network.runtime.PatcherRuntimeKind.REVANCED_V22 -> R.string.runtime_description_revanced_v22
+                    app.universal.patch.manager.network.runtime.PatcherRuntimeKind.MORPHE -> R.string.runtime_description_morphe
+                    app.universal.patch.manager.network.runtime.PatcherRuntimeKind.RESEAM -> R.string.runtime_description_reseam
+                    app.universal.patch.manager.network.runtime.PatcherRuntimeKind.SHARED_SUPPORT -> R.string.runtime_description_support
+                }), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             HapticCheckbox(checked = selected, onCheckedChange = null, enabled = !busy)
         }
@@ -345,7 +351,7 @@ private fun RuntimeTransferProgress(
                 targetValue = fraction, animationSpec = ProgressIndicatorDefaults.ProgressAnimationSpec,
                 label = "runtimeDownloadProgress"
             )
-            LinearProgressIndicator(progress = { animated }, modifier = Modifier.fillMaxWidth())
+            LinearProgressIndicator(progress = { animated }, modifier = Modifier.fillMaxWidth(), drawStopIndicator = {})
         }
         if (progress?.stage == RuntimeDownloadStage.DOWNLOADING &&
             (progress.bytesDownloaded > 0 || progress.totalBytes != null)) {
