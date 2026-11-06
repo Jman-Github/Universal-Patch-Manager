@@ -11,6 +11,7 @@ compiler, deps, JAVA = namespace["compiler"], namespace["deps"], namespace["JAVA
 deps = deps + [namespace["artifact"]("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm", "1.10.2")]
 cp = namespace["cp"]
 source = (ROOT / "app/src/main/java/app/universal/patch/manager/ui/viewmodel/PatcherViewModel.kt").read_text(encoding="utf-8")
+confirmation = source[source.index("    fun shouldConfirmPatchingCancellation()"):source.index("    private var leavingScreen")]
 submission = source[source.index("    private suspend fun launchWorker("):source.index("\n    private suspend fun handleDownloaderActivityRequest(")]
 back = source[source.index("    fun onBack(cleanupLocalInput: Boolean)"):source.index("\n    fun isDeviceRooted()")]
 # Android Main is replaced with the fixture's single-thread event loop.
@@ -34,10 +35,19 @@ class Repository {
     val requested = CompletableDeferred<Unit>()
     val committed = CompletableDeferred<Unit>()
     val id = UUID.randomUUID()
+    var enqueueFails = false
+    var cancellationConfirmed = true
+    var active = false
+    fun isActiveUniqueWork(name: String, candidate: UUID) = active && candidate == id
     suspend inline fun <reified W, A> launchExpedited(name: String, input: A, onEnqueueRequested: (UUID) -> Unit): UUID {
         requested.complete(Unit)
         committed.await()
+        active = true
         onEnqueueRequested(id)
+        if (enqueueFails) {
+            if (cancellationConfirmed) active = false
+            throw IllegalStateException("enqueue failed")
+        }
         return id
     }
 }
@@ -56,6 +66,10 @@ class Fixture(val dispatcher: CoroutineDispatcher, val root: File) {
     var prePatchPreparationJob: Job? = null
     var workerLaunchJob: Job? = null
     var signatureWorkflowJob: Job? = null
+    class ActiveState(var value: Boolean = false)
+    val isPatchingActive = ActiveState()
+    var signatureWorkflowRunning = false
+    val isPatchingStarting get() = prePatchPreparationJob != null || workerLaunchJob != null
     var leavingScreen = false
     var patcherWorkerId: ParcelUuid? = null
     var preparedInput: Any? = Any()
@@ -88,6 +102,41 @@ class Fixture(val dispatcher: CoroutineDispatcher, val root: File) {
 fun main(args: Array<String>) = runBlocking {
     newSingleThreadContext("Main").use { main ->
         withContext(main) {
+            val state = Fixture(main, File(args[0]))
+            check(!state.shouldConfirmPatchingCancellation())
+            state.prePatchPreparationJob = Job()
+            check(state.shouldConfirmPatchingCancellation())
+            state.prePatchPreparationJob = null
+            state.workerLaunchJob = Job()
+            check(state.shouldConfirmPatchingCancellation())
+            state.workerLaunchJob = null
+            // Worker submission has completed, but the UI/LiveData still says idle.
+            state.patcherWorkerId = ParcelUuid(UUID.randomUUID())
+            check(state.shouldConfirmPatchingCancellation())
+            state.patcherWorkerId = null
+            state.isPatchingActive.value = true
+            check(state.shouldConfirmPatchingCancellation())
+            state.isPatchingActive.value = false
+            state.signatureWorkflowRunning = true
+            check(state.shouldConfirmPatchingCancellation())
+            state.signatureWorkflowRunning = false
+            check(!state.shouldConfirmPatchingCancellation())
+            // Failed submission must stop looking active only when cancellation was confirmed.
+            for (confirmed in listOf(true, false)) {
+                val failed = Fixture(main, File(args[0]))
+                failed.argsReady.complete(Unit)
+                failed.workerRepository.committed.complete(Unit)
+                failed.workerRepository.enqueueFails = true
+                failed.workerRepository.cancellationConfirmed = confirmed
+                try {
+                    failed.submit()
+                    error("Failed enqueue succeeded")
+                } catch (error: IllegalStateException) {
+                    check(error.message == "enqueue failed")
+                }
+                check((failed.patcherWorkerId == null) == confirmed)
+                check(failed.shouldConfirmPatchingCancellation() == !confirmed)
+            }
             val before = Fixture(main, File(args[0]))
             before.workerLaunchJob = launch(start = CoroutineStart.UNDISPATCHED) { before.submit() }
             before.argsStarted.await()
@@ -135,9 +184,9 @@ fun main(args: Array<String>) = runBlocking {
             withTimeout(3000) { preparing.cleaned.await() }
         }
     }
-    println("PASS: Back before enqueue, during submission, after worker ownership, and during preparation")
+    println("PASS: Back during startup/preparation, worker ownership, and confirmed/unconfirmed enqueue cancellation")
 }
-""".replace("    // PRODUCTION_METHODS", submission + "\n" + back)
+""".replace("    // PRODUCTION_METHODS", confirmation + "\n" + submission + "\n" + back)
 (ROOT / "build").mkdir(exist_ok=True)
 with tempfile.TemporaryDirectory(prefix="patcher-startup-cancel-", dir=ROOT / "build") as temporary:
     work = Path(temporary)

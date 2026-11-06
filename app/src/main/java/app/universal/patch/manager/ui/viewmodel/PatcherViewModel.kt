@@ -970,6 +970,12 @@ class PatcherViewModel(
     private var workerLaunchJob: Job? by mutableStateOf(null)
     val isPatchingStarting: Boolean
         get() = prePatchPreparationJob != null || workerLaunchJob != null
+    // Read at the time Back is pressed: Compose's observed worker state may still
+    // describe the frame before startup handed ownership to WorkManager.
+    fun shouldConfirmPatchingCancellation(): Boolean =
+        isPatchingStarting || isPatchingActive.value == true ||
+            patcherWorkerId != null || signatureWorkflowRunning
+
     private var leavingScreen = false
     private var preparedInput: DownloadResult? = null
     private var preparedInputIncludesDownload = false
@@ -5204,16 +5210,31 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         // Cancellation must not lose a submitted worker's identity or input ownership.
         // onBack joins this short submission before stopping the worker and deleting files.
         return withContext(NonCancellable) {
-            workerRepository.launchExpedited<PatcherWorker, PatcherWorker.Args>(
-                PatcherWorker.UNIQUE_WORK_NAME,
-                args,
-                onEnqueueRequested = { workId ->
-                    patcherWorkerId = ParcelUuid(workId)
-                    preparedInput = null
-                    preparedInputIncludesDownload = false
-                    selectedSplitConfiguration = null
+            var submittedWorkId: UUID? = null
+            try {
+                workerRepository.launchExpedited<PatcherWorker, PatcherWorker.Args>(
+                    PatcherWorker.UNIQUE_WORK_NAME,
+                    args,
+                    onEnqueueRequested = { workId ->
+                        submittedWorkId = workId
+                        patcherWorkerId = ParcelUuid(workId)
+                        preparedInput = null
+                        preparedInputIncludesDownload = false
+                        selectedSplitConfiguration = null
+                    }
+                )
+            } catch (error: Throwable) {
+                submittedWorkId?.let { workId ->
+                    // The repository releases this ID only after confirming cancellation.
+                    // Keep uncertain submissions so Back can still cancel and await them.
+                    if (patcherWorkerId?.uuid == workId &&
+                        !workerRepository.isActiveUniqueWork(PatcherWorker.UNIQUE_WORK_NAME, workId)
+                    ) {
+                        patcherWorkerId = null
+                    }
                 }
-            )
+                throw error
+            }
         }
     }
 
@@ -5510,7 +5531,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 WorkInfo.State.RUNNING,
                 WorkInfo.State.ENQUEUED,
                 WorkInfo.State.BLOCKED -> true
-                else -> progressActive
+                // A null initial query is not evidence that submitted work stopped.
+                else -> progressActive || _isPatchingActive.value == true || patcherWorkerId?.uuid == id
             }
             when (workInfo?.state) {
                 WorkInfo.State.SUCCEEDED -> {

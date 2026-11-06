@@ -19,3 +19,9 @@ Runtime setup completion and in-progress download state are local installation s
 Publish compatible runtime releases before releasing this manager change. The manager build no longer compiles or packages engine APKs or JVM distributions.
 
 Interrupted catalog transfers retain partial bytes for range-based retry. APK identity, checksum and signature are checked after transfer and before activation.
+
+## Upstream runtime changes
+
+The manager's JVM startup fixes and the runtime plugins' native-library support
+and one-pass APK writer are documented with upstream commit and PR links in the
+[runtime host documentation](https://github.com/Jman-Github/Universal-Patch-Manager-Runtimes/blob/dev/upm-patcher-core/README.md#upstream-changes-used-by-upm).

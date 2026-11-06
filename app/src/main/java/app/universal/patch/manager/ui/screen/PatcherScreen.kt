@@ -386,7 +386,7 @@ fun PatcherScreen(
     }
 
     fun requestLeave(toDashboard: Boolean) = when {
-        isPatchingActive || viewModel.isPatchingStarting -> {
+        viewModel.shouldConfirmPatchingCancellation() -> {
             leaveToDashboardRequested = toDashboard
             showDismissConfirmationDialog = true
         }

@@ -1,5 +1,7 @@
 // Code adapted from Morphe, see third-party/NOTICE for more information.
 // https://github.com/MorpheApp/morphe-manager/pull/1223
+// https://github.com/MorpheApp/morphe-manager/commit/ad2f4644edfe848a3d09260b2f53c441ebfd6161
+// https://github.com/MorpheApp/morphe-manager/commit/9ea4626a025aa1e69ecfd3830b6a8cb211702559
 // Starts a HotSpot JVM inside the app's process and runs a main class in it.
 //
 // The JVM keeps its heap in native memory, so it is bound by what the device can spare rather than
@@ -17,6 +19,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <future>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -69,29 +72,114 @@ std::vector<std::string> toStrings(JNIEnv *env, jobjectArray array) {
     return strings;
 }
 
+// The stack trace of throwable as printStackTrace writes it, empty if writing it threw as well
+std::string stackTrace(JNIEnv *env, jthrowable throwable) {
+    // Any of the calls below may throw, which has to be cleared before JNI is called again
+    const auto threw = [env] {
+        if (!env->ExceptionCheck()) return false;
+        env->ExceptionClear();
+        return true;
+    };
+
+    jclass stringWriterClass = env->FindClass("java/io/StringWriter");
+    if (threw()) return {};
+    jclass printWriterClass = env->FindClass("java/io/PrintWriter");
+    if (threw()) return {};
+    jmethodID newStringWriter = env->GetMethodID(stringWriterClass, "<init>", "()V");
+    if (threw()) return {};
+    jmethodID newPrintWriter = env->GetMethodID(printWriterClass, "<init>", "(Ljava/io/Writer;)V");
+    if (threw()) return {};
+    jclass throwableClass = env->FindClass("java/lang/Throwable");
+    if (threw()) return {};
+    jmethodID printStackTrace = env->GetMethodID(throwableClass, "printStackTrace", "(Ljava/io/PrintWriter;)V");
+    if (threw()) return {};
+    jmethodID toString = env->GetMethodID(stringWriterClass, "toString", "()Ljava/lang/String;");
+    if (threw()) return {};
+
+    jobject stringWriter = env->NewObject(stringWriterClass, newStringWriter);
+    if (threw()) return {};
+    jobject printWriter = env->NewObject(printWriterClass, newPrintWriter, stringWriter);
+    if (threw()) return {};
+    env->CallVoidMethod(throwable, printStackTrace, printWriter);
+    if (threw()) return {};
+    // toString of a StringWriter returns a String, which JNI hands out as jobject
+    auto text = static_cast<jstring>(env->CallObjectMethod(stringWriter, toString)); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+    if (threw()) return {};
+
+    const char *chars = env->GetStringUTFChars(text, nullptr);
+    if (threw() || chars == nullptr) return {};
+    std::string trace = chars;
+    env->ReleaseStringUTFChars(text, chars);
+    return trace;
+}
+
+// HotSpot only writes which thread an exception ended through logJvmOutput, and the trace itself to
+// System.err, which leads nowhere in an app. The trace is logged here instead, a line at a time, as
+// the log cuts a message off at a few kilobytes
 void describeException(JNIEnv *env) {
-    if (!env->ExceptionCheck()) return;
-    env->ExceptionDescribe();
+    jthrowable throwable = env->ExceptionOccurred();
+    if (throwable == nullptr) return;
     env->ExceptionClear();
+
+    // Native-attached threads keep local references until detached; release the trace objects here.
+    std::string trace;
+    if (env->PushLocalFrame(16) == JNI_OK) {
+        trace = stackTrace(env, throwable);
+        env->PopLocalFrame(nullptr);
+    } else {
+        env->ExceptionClear();
+    }
+    env->DeleteLocalRef(throwable);
+    if (trace.empty()) {
+        __android_log_print(ANDROID_LOG_ERROR, TAG, "The JVM threw an exception it could not describe");
+        return;
+    }
+    std::istringstream lines(trace);
+    for (std::string line; std::getline(lines, line);) {
+        __android_log_print(ANDROID_LOG_ERROR, TAG, "%s", line.c_str());
+    }
 }
 
 // Why the JVM did not start, next to the JNI_CreateJavaVM codes, which are all negative
 constexpr int LOAD_FAILED = 1;
 constexpr int MAIN_MISSING = 2;
+constexpr int TAG_CHECKS_ON = 3;
 
 constexpr size_t JVM_THREAD_STACK_SIZE = 8UL * 1024 * 1024;
 
 constexpr size_t MEBIBYTE = 1024UL * 1024;
 constexpr jint RESERVATION_STEP_MB = 64;
 
+// HotSpot uses the top bits of pointers for flags and loses their memory tags.
+// Only the disposable patcher process is affected.
+bool disableTagChecks() {
+#if defined(__aarch64__)
+    const int control = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0);
+#endif
+    // Keep disabling heap pointer tagging even on devices without hardware MTE checks.
+    const bool disabled = mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, M_HEAP_TAGGING_LEVEL_NONE) != 0;
+#if defined(__aarch64__)
+    if (control >= 0 && (control & PR_MTE_TCF_MASK) != 0) {
+        if (!disabled) {
+            __android_log_print(ANDROID_LOG_ERROR, TAG, "Memory tag checks could not be turned off");
+            return false;
+        }
+        __android_log_print(ANDROID_LOG_WARN, TAG, "Memory tag checks turned off for the JVM");
+    }
+#else
+    (void) disabled;
+#endif
+    return true;
+}
+
 // Creates the JVM and finds the main method, returning 0 or why it could not
 int createJvm(Launch *launch, JNIEnv **env, jclass *mainClass, jmethodID *main) {
-    // HotSpot keeps flags in the top bits of native pointers, which a tagged heap rejects on free
-    mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, M_HEAP_TAGGING_LEVEL_NONE);
-
     // A release build starts the process as not dumpable, which hands /proc/self over to root, and
     // the I/O accounting of the run in /proc/self/io is then out of reach of the process itself
     prctl(PR_SET_DUMPABLE, 1);
+
+    // Runtime libraries allocate during loading, so turn checks off before dlopen.
+    if (!disableTagChecks()) return TAG_CHECKS_ON;
 
     void *handle = dlopen(launch->libjvm.c_str(), RTLD_NOW | RTLD_GLOBAL);
     if (handle == nullptr) {
