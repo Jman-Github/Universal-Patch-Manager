@@ -395,7 +395,7 @@ class BundleUpdateNotificationWorker(
             sections.forEach { section ->
                 style.addLine(section.header)
                 section.entries.forEach { entry ->
-                    style.addLine("- ${entry.displayLine}")
+                    style.addLine("• ${entry.displayLine}")
                 }
             }
             builder.setStyle(style)
@@ -467,7 +467,7 @@ class BundleUpdateNotificationWorker(
         flatMap { section ->
             buildList {
                 add(section.header)
-                section.entries.forEach { entry -> add("- ${entry.displayLine}") }
+                section.entries.forEach { entry -> add("• ${entry.displayLine}") }
             }
         }.joinToString("\n")
 

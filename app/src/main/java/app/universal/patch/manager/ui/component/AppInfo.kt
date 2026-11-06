@@ -20,9 +20,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
-import androidx.core.content.pm.PackageInfoCompat
 import app.universal.patch.manager.R
 import app.universal.patch.manager.domain.repository.appNamePackagePattern
+import app.universal.patch.manager.util.versionCodeFor
 
 @Composable
 fun AppInfo(
@@ -61,6 +61,7 @@ fun AppInfo(
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
                     .padding(20.dp)
             )
+            extraContent()
         } else if (appInfo == null) {
             if (packageName != null || iconOverride != null) {
                 AppIcon(null, null, Modifier.size(100.dp).padding(bottom = 5.dp),
@@ -137,15 +138,11 @@ fun appVersionLabel(
             versionCode
         )
     }
-    if (appInfo == null) return displayVersion
-
-    val versionCode = PackageInfoCompat.getLongVersionCode(appInfo)
-    val matchesPackage = appInfo.versionName == versionName || versionCode.toString() == versionName
-    if (!matchesPackage) return displayVersion
+    val versionCode = appInfo?.versionCodeFor(versionName) ?: return displayVersion
 
     return stringResource(
         R.string.app_version_with_code,
-        appInfo.versionName?.takeIf { it.isNotBlank() } ?: displayVersion,
+        displayVersion,
         versionCode
     )
 }
@@ -171,7 +168,8 @@ fun AppVersion(
     versionName: String? = appInfo?.versionName,
     modifier: Modifier = Modifier,
     style: TextStyle? = null,
-    prefixVersion: Boolean = false
+    prefixVersion: Boolean = false,
+    versionCodeOverride: Long? = null
 ) {
     val displayVersion = versionName?.takeIf { it.isNotBlank() } ?: return
 
@@ -179,7 +177,8 @@ fun AppVersion(
         text = appVersionLabel(
             versionName = displayVersion,
             appInfo = appInfo,
-            displayVersion = displayVersion
+            displayVersion = displayVersion,
+            versionCodeOverride = versionCodeOverride
         ).let { label ->
             if (prefixVersion) "v${label.removePrefix("v").removePrefix("V")}" else label
         },

@@ -151,6 +151,7 @@ class PreferencesManager(
         booleanPreference("dashboard_bundle_update_banner_collapsed", false)
     val autoCollapsePatcherSteps = booleanPreference("auto_collapse_patcher_steps", false)
     val showPatcherMemoryUsageGraph = booleanPreference("show_patcher_memory_usage_graph", true)
+    val pinPatcherResourceGraphs = booleanPreference("pin_patcher_resource_graphs", false)
     val compactPatcherResourceGraphs = booleanPreference("compact_patcher_resource_graphs", false)
     val showPatcherResourceGraphExtraInfo = booleanPreference("show_patcher_resource_graph_extra_info", false)
     val showCompactPatcherResourceGraphExtraInfo = booleanPreference("show_compact_patcher_resource_graph_extra_info", false)
@@ -585,6 +586,7 @@ class PreferencesManager(
     val splitMergeInstalledFilterSingleApks = booleanPreference("split_merge_installed_filter_single_apks", false)
     val splitMergeAutoCollapseSteps = booleanPreference("split_merge_auto_collapse_steps", false)
     val showSplitMergeMemoryUsageGraph = booleanPreference("show_split_merge_memory_usage_graph", true)
+    val pinSplitMergeResourceGraphs = booleanPreference("pin_split_merge_resource_graphs", false)
     val compactSplitMergeResourceGraphs = booleanPreference("compact_split_merge_resource_graphs", false)
     val showSplitMergeResourceGraphExtraInfo = booleanPreference("show_split_merge_resource_graph_extra_info", false)
     val showCompactSplitMergeResourceGraphExtraInfo = booleanPreference("show_compact_split_merge_resource_graph_extra_info", false)
@@ -677,6 +679,7 @@ class PreferencesManager(
         val includeGitHubPatInExports: Boolean? = null,
         val autoCollapsePatcherSteps: Boolean? = null,
         val showPatcherMemoryUsageGraph: Boolean? = null,
+        val pinPatcherResourceGraphs: Boolean? = null,
         val compactPatcherResourceGraphs: Boolean? = null,
         val showPatcherResourceGraphExtraInfo: Boolean? = null,
         val showCompactPatcherResourceGraphExtraInfo: Boolean? = null,
@@ -799,6 +802,7 @@ class PreferencesManager(
         val splitMergeInstalledFilterSingleApks: Boolean? = null,
         val splitMergeAutoCollapseSteps: Boolean? = null,
         val showSplitMergeMemoryUsageGraph: Boolean? = null,
+        val pinSplitMergeResourceGraphs: Boolean? = null,
         val compactSplitMergeResourceGraphs: Boolean? = null,
         val showSplitMergeResourceGraphExtraInfo: Boolean? = null,
         val showCompactSplitMergeResourceGraphExtraInfo: Boolean? = null,
@@ -965,6 +969,7 @@ class PreferencesManager(
             removeGmsCoreForPrimaryMount = removeGmsCoreForPrimaryMount.value,
             autoCollapsePatcherSteps = autoCollapsePatcherSteps.value,
             showPatcherMemoryUsageGraph = showPatcherMemoryUsageGraph.value,
+            pinPatcherResourceGraphs = pinPatcherResourceGraphs.value,
             compactPatcherResourceGraphs = compactPatcherResourceGraphs.value,
             showPatcherResourceGraphExtraInfo = showPatcherResourceGraphExtraInfo.value,
             showCompactPatcherResourceGraphExtraInfo = showCompactPatcherResourceGraphExtraInfo.value,
@@ -1081,6 +1086,7 @@ class PreferencesManager(
             splitMergeInstalledFilterSingleApks = splitMergeInstalledFilterSingleApks.value,
             splitMergeAutoCollapseSteps = splitMergeAutoCollapseSteps.value,
             showSplitMergeMemoryUsageGraph = showSplitMergeMemoryUsageGraph.value,
+            pinSplitMergeResourceGraphs = pinSplitMergeResourceGraphs.value,
             compactSplitMergeResourceGraphs = compactSplitMergeResourceGraphs.value,
             showSplitMergeResourceGraphExtraInfo = showSplitMergeResourceGraphExtraInfo.value,
             showCompactSplitMergeResourceGraphExtraInfo = showCompactSplitMergeResourceGraphExtraInfo.value,
@@ -1212,6 +1218,7 @@ class PreferencesManager(
         snapshot.removeGmsCoreForPrimaryMount?.let { removeGmsCoreForPrimaryMount.value = it }
         snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }
         snapshot.showPatcherMemoryUsageGraph?.let { showPatcherMemoryUsageGraph.value = it }
+        snapshot.pinPatcherResourceGraphs?.let { pinPatcherResourceGraphs.value = it }
         snapshot.compactPatcherResourceGraphs?.let { compactPatcherResourceGraphs.value = it }
         snapshot.showPatcherResourceGraphExtraInfo?.let { showPatcherResourceGraphExtraInfo.value = it }
         snapshot.showCompactPatcherResourceGraphExtraInfo?.let { showCompactPatcherResourceGraphExtraInfo.value = it }
@@ -1399,6 +1406,7 @@ class PreferencesManager(
         snapshot.splitMergeInstalledFilterSingleApks?.let { splitMergeInstalledFilterSingleApks.value = it }
         snapshot.splitMergeAutoCollapseSteps?.let { splitMergeAutoCollapseSteps.value = it }
         snapshot.showSplitMergeMemoryUsageGraph?.let { showSplitMergeMemoryUsageGraph.value = it }
+        snapshot.pinSplitMergeResourceGraphs?.let { pinSplitMergeResourceGraphs.value = it }
         snapshot.compactSplitMergeResourceGraphs?.let { compactSplitMergeResourceGraphs.value = it }
         snapshot.showSplitMergeResourceGraphExtraInfo?.let { showSplitMergeResourceGraphExtraInfo.value = it }
         snapshot.showCompactSplitMergeResourceGraphExtraInfo?.let { showCompactSplitMergeResourceGraphExtraInfo.value = it }

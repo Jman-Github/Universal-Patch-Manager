@@ -1618,6 +1618,21 @@ fun AdvancedSettingsScreen(
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
+                    targetKey = R.string.patcher_resource_graphs_pinned_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.pinPatcherResourceGraphs,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.patcher_resource_graphs_pinned_title,
+                        description = R.string.patcher_resource_graphs_pinned_description,
+                        enabled = patcherGraphsEnabled
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
                     targetKey = R.string.patcher_resource_graphs_compact_title,
                     activeKey = highlightTarget,
                     extraKeys = setOf(R.string.patcher_compact_resource_graph_options_title),
@@ -1929,6 +1944,21 @@ fun AdvancedSettingsScreen(
                             enabled = childEnabled
                         )
                     }
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.merger_resource_graphs_pinned_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.pinSplitMergeResourceGraphs,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.merger_resource_graphs_pinned_title,
+                        description = R.string.merger_resource_graphs_pinned_description,
+                        enabled = mergerGraphsEnabled
+                    )
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(

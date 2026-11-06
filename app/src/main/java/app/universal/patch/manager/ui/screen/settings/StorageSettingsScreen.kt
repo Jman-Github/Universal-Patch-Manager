@@ -60,6 +60,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -695,8 +696,16 @@ private fun StorageAreaItem(
                 Text(
                     text = stringResource(
                         R.string.storage_item_count,
-                        area.stats.fileCount,
-                        area.stats.directoryCount
+                        pluralStringResource(
+                            R.plurals.storage_file_count,
+                            area.stats.fileCount.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                            area.stats.fileCount
+                        ),
+                        pluralStringResource(
+                            R.plurals.storage_folder_count,
+                            area.stats.directoryCount.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                            area.stats.directoryCount
+                        )
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

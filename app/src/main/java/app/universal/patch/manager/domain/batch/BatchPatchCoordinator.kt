@@ -83,6 +83,7 @@ import app.universal.patch.manager.util.buildSavedAppVariantIdentity
 import app.universal.patch.manager.util.isSavedAppEntryForPackage
 import app.universal.patch.manager.util.simpleMessage
 import app.universal.patch.manager.util.toastHandle
+import app.universal.patch.manager.util.versionCodeFor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -1174,7 +1175,9 @@ class BatchPatchCoordinator(
                 useMount = item.useMount,
                 resetCreatedAt = true,
                 repatchSourcePath = item.repatchSourcePath,
-                updateRepatchSource = true
+                updateRepatchSource = true,
+                versionCode = info?.versionCodeFor(version),
+                updateVersionCode = true
             )
         } catch (error: Throwable) {
             if (copiedOutput && replacementStarted) {
@@ -2753,7 +2756,8 @@ class BatchPatchCoordinator(
         installType: InstallType,
         customInstallerPackageName: String?
     ): PersistedBatchPatchedItem {
-        val version = pm.getPackageInfo(sourceFile)?.versionName?.takeIf(String::isNotBlank)
+        val info = pm.getPackageInfo(sourceFile)
+        val version = info?.versionName?.takeIf(String::isNotBlank)
             ?: item.version
             ?: "unknown"
         val selectionPayload = (item.selectionPayload
@@ -2855,7 +2859,9 @@ class BatchPatchCoordinator(
                     sortOrderOverride = replacementSortOrder,
                     customInstallerPackageName = customInstallerPackageName,
                     repatchSourcePath = item.repatchSourcePath,
-                    updateRepatchSource = true
+                    updateRepatchSource = true,
+                    versionCode = info?.versionCodeFor(version),
+                    updateVersionCode = true
                 )
             }
             if (pendingHistoricalEntry != null) {

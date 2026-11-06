@@ -45,6 +45,7 @@ import app.revanced.manager.plugin.downloader.Scope as RevancedLegacyScope
 import app.universal.patch.manager.downloader.DownloaderBuilder as ModernDownloaderBuilder
 import app.universal.patch.manager.downloader.DownloaderHostApi as ModernDownloaderHostApi
 import app.universal.patch.manager.downloader.Scope as ModernScope
+import app.universal.patch.manager.downloader.toDownloaderDisplayName
 import app.universal.patch.manager.util.PM
 import app.universal.patch.manager.util.DownloadProgressNotifier
 import app.universal.patch.manager.util.tag
@@ -675,7 +676,7 @@ class DownloaderPluginRepository(
     ): ResolvedPluginPackage {
         val classNames = resolveClassNames(packageInfo, pluginContext)
         val classLoader = PathClassLoader(packageInfo.applicationInfo!!.sourceDir, app.classLoader)
-        val packageLabel = with(pm) { packageInfo.label() }
+        val packageLabel = with(pm) { packageInfo.label() }.toDownloaderDisplayName()
 
         val scopeImpl = object : LegacyScope, ModernScope, RevancedLegacyScope, RevancedModernScope {
             override val hostPackageName = app.packageName
@@ -697,7 +698,7 @@ class DownloaderPluginRepository(
             LoadedDownloaderPlugin(
                 packageName = packageInfo.packageName,
                 className = className,
-                name = downloader.resolveName(pluginContext, fallbackName),
+                name = downloader.resolveName(pluginContext, fallbackName).toDownloaderDisplayName(),
                 version = packageInfo.versionName ?: "0",
                 sourceId = sourceId,
                 getImpl = downloader.resolveGet(),

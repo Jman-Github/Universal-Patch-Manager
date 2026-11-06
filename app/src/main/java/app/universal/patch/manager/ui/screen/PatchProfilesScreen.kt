@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.CollectionDialog
 import app.universal.patch.manager.ui.component.minimalActionButtons
 import app.universal.patch.manager.util.managerStorageContext
 
@@ -1741,7 +1742,7 @@ private fun PatchProfilesOrderDialog(
         workingOrder.add(to.index, workingOrder.removeAt(from.index))
     }
 
-    AlertDialog(
+    CollectionDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {
             TextButton(onClick = { onConfirm(workingOrder.toList()) }, enabled = workingOrder.isNotEmpty()) {
@@ -1755,7 +1756,7 @@ private fun PatchProfilesOrderDialog(
         },
         title = { CenteredDialogTitle(text = stringResource(R.string.patch_profiles_reorder_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     text = stringResource(R.string.patch_profiles_reorder_description),
                     style = MaterialTheme.typography.bodyMedium,
@@ -1765,7 +1766,7 @@ private fun PatchProfilesOrderDialog(
                     thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 320.dp),
+                        .weight(1f),
                     reserveScrollbarSpace = true,
                     state = lazyListState
                 ) {

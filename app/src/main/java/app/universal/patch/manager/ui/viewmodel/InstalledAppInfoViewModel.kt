@@ -73,6 +73,7 @@ import app.universal.patch.manager.util.tag
 import app.universal.patch.manager.util.awaitUserConfirmation
 import app.universal.patch.manager.util.toast
 import app.universal.patch.manager.util.toastHandle
+import app.universal.patch.manager.util.versionCodeFor
 import app.universal.patch.manager.util.withRepeatingToast
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -174,6 +175,8 @@ class InstalledAppInfoViewModel(
     var hasSavedCopy by mutableStateOf(false)
         private set
     var savedFileExtension by mutableStateOf("apk")
+        private set
+    var displayedVersionCode by mutableStateOf<Long?>(null)
         private set
     var savedApkAbiLabel by mutableStateOf<String?>(null)
         private set
@@ -385,9 +388,11 @@ class InstalledAppInfoViewModel(
         val selection = appliedPatches ?: resolveAppliedSelection(app)
         val selectionPayload = app.selectionPayload
         val targetPackage = packageNameOverride ?: resolveDevicePackageName(app)
-        val resolvedVersion = versionName
-            ?: pm.getPackageInfo(targetPackage)?.versionName
-            ?: app.version
+        val installedInfo = pm.getPackageInfo(targetPackage)
+        val resolvedVersion = versionName ?: installedInfo?.versionName ?: app.version
+        val resolvedVersionCode = app.versionCode?.takeIf { resolvedVersion == app.version }
+            ?: savedApkFile(app)?.let(pm::getPackageInfo)?.versionCodeFor(resolvedVersion)
+            ?: installedInfo?.versionCodeFor(resolvedVersion)
         val newVariantIdentity = buildSavedAppVariantIdentity(
             appVersion = resolvedVersion,
             selectionPayload = selectionPayload,
@@ -423,7 +428,9 @@ class InstalledAppInfoViewModel(
                 updateUseMount = true,
                 customInstallerPackageName = customInstallerPackageName,
                 repatchSourcePath = app.repatchSourcePath,
-                updateRepatchSource = true
+                updateRepatchSource = true,
+                versionCode = resolvedVersionCode,
+                updateVersionCode = true
             )
         }
         if (pendingHistoricalEntry != null) {
@@ -1986,6 +1993,17 @@ class InstalledAppInfoViewModel(
         }
         val installedInfo = withContext(Dispatchers.IO) {
             pm.getPackageInfo(devicePackageName)
+        }
+        displayedVersionCode = withContext(Dispatchers.IO) {
+            app.versionCode
+                ?: savedInfo?.versionCodeFor(app.version)
+                ?: installedInfo?.versionCodeFor(app.version)
+                ?: app.repatchSourcePath?.let(::File)?.takeIf(File::isFile)
+                    ?.let(pm::getPackageInfo)
+                    ?.takeIf { info ->
+                        info.packageName == app.originalPackageName ||
+                            info.packageName == devicePackageName
+                    }?.versionCodeFor(app.version)
         }
         customInstallerLabel = if (
             app.installType == InstallType.CUSTOM && installedInfo != null

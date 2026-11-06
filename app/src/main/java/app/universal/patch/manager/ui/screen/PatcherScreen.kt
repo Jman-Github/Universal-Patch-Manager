@@ -94,6 +94,7 @@ import app.universal.patch.manager.ui.component.patcher.InstallerPickerDialog
 import app.universal.patch.manager.ui.component.patcher.PatcherInformation
 import app.universal.patch.manager.ui.component.patcher.PatcherInformationCard
 import app.universal.patch.manager.ui.component.patcher.PatcherResourceUsageCards
+import app.universal.patch.manager.ui.component.patcher.ResourceUsageProgressLayout
 import app.universal.patch.manager.ui.component.patcher.rememberResourceGraphState
 import app.universal.patch.manager.ui.component.patcher.Steps
 import app.universal.patch.manager.ui.model.StepCategory
@@ -149,6 +150,7 @@ fun PatcherScreen(
     val pickerScope = rememberCoroutineScope()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val showPatcherMemoryUsageGraph by prefs.showPatcherMemoryUsageGraph.getAsState()
+    val pinResourceGraphs by prefs.pinPatcherResourceGraphs.getAsState()
     val compactResourceGraphs by prefs.compactPatcherResourceGraphs.getAsState()
     val showGraphExtraInfo by prefs.showPatcherResourceGraphExtraInfo.getAsState()
     val showCompactGraphExtraInfo by prefs.showCompactPatcherResourceGraphExtraInfo.getAsState()
@@ -1495,72 +1497,81 @@ fun PatcherScreen(
                 drawStopIndicator = {}
             )
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(16.dp)
-            ) {
-                if (showPatcherMemoryUsageGraph && viewModel.patcherMemoryUsageSamples.isNotEmpty()) {
-                    item(key = "memory-usage") {
-                        PatcherResourceUsageCards(
-                            compact = compactResourceGraphs,
-                            showExtraInfo = if (compactResourceGraphs) showCompactGraphExtraInfo else showGraphExtraInfo,
-                            samples = viewModel.patcherMemoryUsageSamples,
-                            isActive = isPatchingActive,
-                            graphState = resourceGraphState
+            val pinGraphs = pinResourceGraphs && showPatcherMemoryUsageGraph && viewModel.patcherMemoryUsageSamples.isNotEmpty()
+            val resourceGraphs: @Composable () -> Unit = {
+                PatcherResourceUsageCards(
+                    compact = compactResourceGraphs,
+                    showExtraInfo = if (compactResourceGraphs) showCompactGraphExtraInfo else showGraphExtraInfo,
+                    samples = viewModel.patcherMemoryUsageSamples,
+                    isActive = isPatchingActive,
+                    graphState = resourceGraphState
+                )
+            }
+            ResourceUsageProgressLayout(
+                pinGraphs = pinGraphs,
+                graphContent = resourceGraphs
+            ) { progressModifier ->
+                LazyColumn(
+                    modifier = progressModifier,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(16.dp)
+                ) {
+                    if (!pinGraphs && showPatcherMemoryUsageGraph && viewModel.patcherMemoryUsageSamples.isNotEmpty()) {
+                        item(key = "memory-usage") {
+                            resourceGraphs()
+                        }
+                    }
+                    item(key = "patcher-information") {
+                        PatcherInformationCard(
+                            information = PatcherInformation(
+                                appVersion = viewModel.informationAppVersion,
+                                appVersionCode = viewModel.informationAppVersionCode,
+                                patchCount = viewModel.selectedPatchCount,
+                                patchBundles = viewModel.selectedPatchBundleLabels,
+                                fallbackApkSizeBytes = viewModel.fallbackInputSizeBytes,
+                                fallbackSplitApk = viewModel.fallbackInputIsSplitApk,
+                                fallbackPatcherEngine = viewModel.fallbackPatcherEngine,
+                                session = viewModel.patcherSessionInfo
+                            ),
+                            expanded = patcherInformationExpanded,
+                            onExpandedChange = { expanded ->
+                                pickerScope.launch {
+                                    prefs.patcherInformationExpanded.update(expanded)
+                                }
+                            }
                         )
                     }
-                }
-                item(key = "patcher-information") {
-                    PatcherInformationCard(
-                        information = PatcherInformation(
-                            appVersion = viewModel.informationAppVersion,
-                            appVersionCode = viewModel.informationAppVersionCode,
-                            patchCount = viewModel.selectedPatchCount,
-                            patchBundles = viewModel.selectedPatchBundleLabels,
-                            fallbackApkSizeBytes = viewModel.fallbackInputSizeBytes,
-                            fallbackSplitApk = viewModel.fallbackInputIsSplitApk,
-                            fallbackPatcherEngine = viewModel.fallbackPatcherEngine,
-                            session = viewModel.patcherSessionInfo
-                        ),
-                        expanded = patcherInformationExpanded,
-                        onExpandedChange = { expanded ->
-                            pickerScope.launch {
-                                prefs.patcherInformationExpanded.update(expanded)
-                            }
-                        }
-                    )
-                }
-                items(
-                    items = steps.toList(),
-                    key = { it.first }
-                ) { (category, steps) ->
-                    Steps(
-                        category = category,
-                        steps = steps,
-                        subStepsById = patcherProgress.subStepsById,
-                        isExpanded = expandedCategories.contains(category),
-                        autoExpandRunning = autoExpandRunningSteps,
-                        autoExpandRunningMainOnly = useExclusiveAutoExpand,
-                        continueOnPatchError = continueOnPatchError,
-                        onExpand = {
-                            if (useExclusiveAutoExpand) {
-                                expandedCategories.clear()
-                            }
-                            expandedCategories.add(category)
-                        },
-                        onClick = {
-                            if (expandedCategories.contains(category)) {
-                                expandedCategories.remove(category)
-                            } else {
+                    items(
+                        items = steps.toList(),
+                        key = { it.first }
+                    ) { (category, steps) ->
+                        Steps(
+                            category = category,
+                            steps = steps,
+                            subStepsById = patcherProgress.subStepsById,
+                            isExpanded = expandedCategories.contains(category),
+                            autoExpandRunning = autoExpandRunningSteps,
+                            autoExpandRunningMainOnly = useExclusiveAutoExpand,
+                            continueOnPatchError = continueOnPatchError,
+                            onExpand = {
+                                if (useExclusiveAutoExpand) {
+                                    expandedCategories.clear()
+                                }
                                 expandedCategories.add(category)
-                            }
-                        },
-                        autoCollapseCompleted = autoCollapsePatcherSteps
-                    )
-                }
-                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
-                    item(key = "legacy-android-memory-warning") {
+                            },
+                            onClick = {
+                                if (expandedCategories.contains(category)) {
+                                    expandedCategories.remove(category)
+                                } else {
+                                    expandedCategories.add(category)
+                                }
+                            },
+                            autoCollapseCompleted = autoCollapsePatcherSteps
+                        )
+                    }
+                    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
+                        item(key = "legacy-android-memory-warning") {
+                        }
                     }
                 }
             }

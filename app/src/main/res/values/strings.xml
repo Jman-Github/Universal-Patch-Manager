@@ -933,7 +933,7 @@ Patch profiles are not affected.</string>
     <string name="storage_open_app_storage_settings_failed">Could not open app storage settings</string>
     <string name="storage_calculating">Calculating...</string>
     <string name="storage_empty">Empty</string>
-    <string name="storage_item_count">%1$d files, %2$d folders</string>
+    <string name="storage_item_count">%1$s, %2$s</string>
     <string name="storage_not_available">Not available</string>
     <string name="system">System</string>
     <string name="light">Light</string>
@@ -2351,9 +2351,9 @@ Details: %2$s</string>
     <string name="batch_patch_state_succeeded">Finished</string>
     <string name="batch_patch_state_failed">Failed</string>
     <string name="batch_patch_state_cancelled">Cancelled</string>
-    <string name="batch_patch_cancel_title">Cancel batch patching?</string>
-    <string name="batch_patch_cancel_description">The current patch will stop and the remaining apps will not be patched.</string>
-    <string name="batch_patch_cancel_confirm">Stop patching</string>
+    <string name="batch_patch_cancel_title">Stop</string>
+    <string name="batch_patch_cancel_description">Are you sure you want to stop the batch patching process?</string>
+    <string name="batch_patch_cancel_confirm">Confirm</string>
     <string name="batch_patch_cancelling">Cancelling batch patching…</string>
     <string name="batch_patch_patching_app">Patching %1$s</string>
     <string name="batch_patch_installing_app">Installing %1$s</string>
@@ -2615,4 +2615,29 @@ Details: %2$s</string>
     <string name="runtime_progress_step">Step %1$d of %2$d</string>
     <string name="runtime_progress_bytes">%1$s / %2$s</string>
     <string name="runtime_progress_percent">%1$s downloaded</string>
+    <plurals name="storage_file_count">
+        <item quantity="one">%1$d file</item>
+        <item quantity="other">%1$d files</item>
+    </plurals>
+    <plurals name="storage_folder_count">
+        <item quantity="one">%1$d folder</item>
+        <item quantity="other">%1$d folders</item>
+    </plurals>
+    <plurals name="new_patches_quantity">
+        <item quantity="one">New patch</item>
+        <item quantity="other">New patches</item>
+    </plurals>
+    <plurals name="regular_patches_quantity">
+        <item quantity="one">Regular patch</item>
+        <item quantity="other">Regular patches</item>
+    </plurals>
+    <plurals name="universal_patches_quantity">
+        <item quantity="one">Universal patch</item>
+        <item quantity="other">Universal patches</item>
+    </plurals>
+    <string name="patcher_resource_graphs_pinned_title">Pin patcher resource graphs</string>
+    <string name="patcher_resource_graphs_pinned_description">Keep CPU, memory, and storage graphs above the patching steps while scrolling.</string>
+    <string name="merger_resource_graphs_pinned_title">Pin merger resource graphs</string>
+    <string name="merger_resource_graphs_pinned_description">Keep CPU, memory, and storage graphs above the merging steps while scrolling.</string>
+    <string name="resource_graph_pinning_search_keywords">pin pinning pinned fixed sticky graphs resource usage monitoring</string>
 </resources>

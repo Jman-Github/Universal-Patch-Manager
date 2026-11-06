@@ -100,7 +100,9 @@ internal class PendingHistoricalSavedEntry(
                 updateUseMount = true,
                 createdAtOverride = sourceApp.createdAt,
                 repatchSourcePath = sourceApp.repatchSourcePath,
-                updateRepatchSource = true
+                updateRepatchSource = true,
+                versionCode = sourceApp.versionCode,
+                updateVersionCode = true
             )
             historicalEntryPersisted = true
             if (sourceHasRetainedRepatchInput) {
@@ -278,7 +280,9 @@ class InstalledAppRepository(
         sortOrderOverride: Int? = null,
         customInstallerPackageName: String? = null,
         repatchSourcePath: String? = null,
-        updateRepatchSource: Boolean = false
+        updateRepatchSource: Boolean = false,
+        versionCode: Long? = null,
+        updateVersionCode: Boolean = versionCode != null
     ) {
         var createdRepatchSourcePath: String? = null
         try {
@@ -333,6 +337,11 @@ class InstalledAppRepository(
                         currentPackageName = currentPackageName,
                         originalPackageName = originalPackageName,
                         version = version,
+                        versionCode = when {
+                            updateVersionCode -> versionCode
+                            existingApp != null && existingApp.version == version -> existingApp.versionCode
+                            else -> null
+                        },
                         installType = installType,
                         sortOrder = sortOrder,
                         selectionPayload = selectionPayload,
@@ -422,7 +431,9 @@ class InstalledAppRepository(
             sortOrderOverride = previousApp.sortOrder,
             customInstallerPackageName = previousApp.customInstallerPackageName,
             repatchSourcePath = previousApp.repatchSourcePath,
-            updateRepatchSource = true
+            updateRepatchSource = true,
+            versionCode = previousApp.versionCode,
+            updateVersionCode = true
         )
     }
 

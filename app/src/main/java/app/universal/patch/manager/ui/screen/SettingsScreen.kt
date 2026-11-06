@@ -45,6 +45,7 @@ import app.universal.patch.manager.ui.component.ColumnWithScrollbar
 import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsCard
 import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsItem
+import app.universal.patch.manager.ui.model.matchesSettingsSearch
 import app.universal.patch.manager.ui.model.navigation.Settings
 import app.universal.patch.manager.ui.screen.settings.SettingsSearchState
 import app.universal.patch.manager.ui.screen.settings.SettingsSearchTarget
@@ -63,6 +64,7 @@ private data class SearchEntry(
     @StringRes val category: Int,
     val destination: Settings.Destination,
     val keywords: List<Int> = emptyList(),
+    @StringRes val targetId: Int = title,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -130,6 +132,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                     R.string.process_memory_limit,
                     R.string.morphe_bytecode_mode,
                     R.string.patcher_memory_usage_graph_title,
+                    R.string.patcher_resource_graphs_pinned_title,
                     R.string.patcher_resource_graphs_compact_title,
                     R.string.patcher_resource_graph_options_title,
                     R.string.patcher_compact_resource_graph_options_title,
@@ -138,6 +141,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                     R.string.patcher_auto_expand_running_steps_exclusive,
                     R.string.skip_split_merge_signing,
                     R.string.merge_split_memory_usage_graph_title,
+                    R.string.merger_resource_graphs_pinned_title,
                     R.string.merger_resource_graphs_compact_title,
                     R.string.merger_resource_graph_options_title,
                     R.string.merger_compact_resource_graph_options_title,
@@ -515,6 +519,13 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             ),
             SearchEntry(R.string.morphe_bytecode_mode, R.string.morphe_bytecode_mode_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.patcher_memory_usage_graph_title, R.string.patcher_memory_usage_graph_description, R.string.patcher_category, Settings.Patcher),
+            SearchEntry(
+                R.string.patcher_resource_graphs_pinned_title,
+                R.string.patcher_resource_graphs_pinned_description,
+                R.string.patcher_category,
+                Settings.Patcher,
+                keywords = listOf(R.string.resource_graph_pinning_search_keywords)
+            ),
             SearchEntry(R.string.patcher_resource_graphs_compact_title, R.string.patcher_resource_graphs_compact_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(
                 R.string.patcher_resource_graph_options_title,
@@ -535,6 +546,13 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.patcher_auto_expand_running_steps_exclusive, R.string.patcher_auto_expand_running_steps_exclusive_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.skip_split_merge_signing, R.string.skip_split_merge_signing_description, R.string.merge_split_flow_section, Settings.Patcher),
             SearchEntry(R.string.merge_split_memory_usage_graph_title, R.string.merge_split_memory_usage_graph_description, R.string.merge_split_flow_section, Settings.Patcher),
+            SearchEntry(
+                R.string.merger_resource_graphs_pinned_title,
+                R.string.merger_resource_graphs_pinned_description,
+                R.string.merge_split_flow_section,
+                Settings.Patcher,
+                keywords = listOf(R.string.resource_graph_pinning_search_keywords)
+            ),
             SearchEntry(R.string.merger_resource_graphs_compact_title, R.string.merger_resource_graphs_compact_description, R.string.merge_split_flow_section, Settings.Patcher),
             SearchEntry(
                 R.string.merger_resource_graph_options_title,
@@ -564,6 +582,34 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.dashboard_apps_visibility, R.string.dashboard_visibility_description, R.string.action_buttons_section, Settings.General),
             SearchEntry(R.string.dashboard_bundles_visibility, R.string.dashboard_visibility_description, R.string.action_buttons_section, Settings.General),
             SearchEntry(R.string.dashboard_bundles_actions, R.string.dashboard_actions_description, R.string.action_buttons_section, Settings.General),
+            SearchEntry(
+                R.string.patch_selection_action_visibility_reset,
+                null,
+                R.string.dashboard_apps_actions,
+                Settings.General,
+                targetId = R.string.dashboard_apps_visibility
+            ),
+            SearchEntry(
+                R.string.patch_selection_action_order_reset,
+                null,
+                R.string.dashboard_apps_actions,
+                Settings.General,
+                targetId = R.string.dashboard_apps_actions
+            ),
+            SearchEntry(
+                R.string.patch_selection_action_visibility_reset,
+                null,
+                R.string.dashboard_bundles_actions,
+                Settings.General,
+                targetId = R.string.dashboard_bundles_visibility
+            ),
+            SearchEntry(
+                R.string.patch_selection_action_order_reset,
+                null,
+                R.string.dashboard_bundles_actions,
+                Settings.General,
+                targetId = R.string.dashboard_bundles_actions
+            ),
             SearchEntry(R.string.patch_selection_action_order_title, R.string.patch_selection_action_order_description, R.string.action_buttons_section, Settings.General),
             SearchEntry(R.string.patch_selection_action_visibility_title, R.string.patch_selection_action_visibility_description, R.string.action_buttons_section, Settings.General),
             SearchEntry(R.string.minimal_patch_selection_view_title, R.string.minimal_patch_selection_view_description, R.string.patch_list_display_section, Settings.Patcher),
@@ -608,6 +654,8 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
         settingsEntries.filter { entry ->
             val searchText = buildString {
                 append(stringResource(entry.title))
+                append(' ')
+                append(stringResource(entry.category))
                 entry.description?.let { description ->
                     append(' ')
                     append(stringResource(description))
@@ -616,8 +664,8 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                     append(' ')
                     append(stringResource(keyword))
                 }
-            }.lowercase()
-            searchText.contains(normalizedQuery)
+            }
+            matchesSettingsSearch(searchText, normalizedQuery)
         }
     }
     val aboutSection = filteredSections.firstOrNull { it.destination == Settings.About }
@@ -771,7 +819,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                                     },
                                     onClick = {
                                         SettingsSearchState.setTarget(
-                                            SettingsSearchTarget(entry.destination, entry.title)
+                                            SettingsSearchTarget(entry.destination, entry.targetId)
                                         )
                                         navigate(entry.destination)
                                     }

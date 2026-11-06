@@ -87,6 +87,7 @@ import app.universal.patch.manager.ui.component.TransparentLoadingDialog
 import app.universal.patch.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.universal.patch.manager.ui.component.patcher.InstallerPickerDialog
 import app.universal.patch.manager.ui.component.patcher.PatcherResourceUsageCards
+import app.universal.patch.manager.ui.component.patcher.ResourceUsageProgressLayout
 import app.universal.patch.manager.ui.component.patcher.rememberResourceGraphState
 import app.universal.patch.manager.ui.component.patcher.MergerInformationCard
 import app.universal.patch.manager.ui.component.patcher.Steps
@@ -134,6 +135,7 @@ fun MergeSplitApkScreen(
     val skipSplitMergeSigning by prefs.skipSplitMergeSigning.getAsState()
     val splitMergeAutoCollapseSteps by prefs.splitMergeAutoCollapseSteps.getAsState()
     val showSplitMergeMemoryUsageGraph by prefs.showSplitMergeMemoryUsageGraph.getAsState()
+    val pinResourceGraphs by prefs.pinSplitMergeResourceGraphs.getAsState()
     val compactResourceGraphs by prefs.compactSplitMergeResourceGraphs.getAsState()
     val showGraphExtraInfo by prefs.showSplitMergeResourceGraphExtraInfo.getAsState()
     val showCompactGraphExtraInfo by prefs.showCompactSplitMergeResourceGraphExtraInfo.getAsState()
@@ -703,63 +705,72 @@ fun MergeSplitApkScreen(
                 drawStopIndicator = {}
             )
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (showSplitMergeMemoryUsageGraph && state.memoryUsageSamples.isNotEmpty()) {
-                    item(key = "resource-usage") {
-                        PatcherResourceUsageCards(
-                            samples = state.memoryUsageSamples,
-                            isActive = state.inProgress &&
-                                state.writeStep.status != SplitMergeStepStatus.COMPLETED,
-                            compact = compactResourceGraphs,
-                            showExtraInfo = if (compactResourceGraphs) showCompactGraphExtraInfo else showGraphExtraInfo,
-                            merger = true,
-                            graphState = resourceGraphState
-                        )
+            val pinGraphs = pinResourceGraphs && showSplitMergeMemoryUsageGraph && state.memoryUsageSamples.isNotEmpty()
+            val resourceGraphs: @Composable () -> Unit = {
+                PatcherResourceUsageCards(
+                    samples = state.memoryUsageSamples,
+                    isActive = state.inProgress &&
+                        state.writeStep.status != SplitMergeStepStatus.COMPLETED,
+                    compact = compactResourceGraphs,
+                    showExtraInfo = if (compactResourceGraphs) showCompactGraphExtraInfo else showGraphExtraInfo,
+                    merger = true,
+                    graphState = resourceGraphState
+                )
+            }
+            ResourceUsageProgressLayout(
+                pinGraphs = pinGraphs,
+                graphContent = resourceGraphs
+            ) { progressModifier ->
+                LazyColumn(
+                    modifier = progressModifier,
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (!pinGraphs && showSplitMergeMemoryUsageGraph && state.memoryUsageSamples.isNotEmpty()) {
+                        item(key = "resource-usage") {
+                            resourceGraphs()
+                        }
                     }
-                }
-                if (state.sessionInfo.startedAtElapsedRealtimeMs != null) {
-                    item(key = "merger-information") {
-                        MergerInformationCard(
-                            information = state.sessionInfo,
-                            expanded = mergerInformationExpanded,
-                            onExpandedChange = { expanded ->
-                                coroutineScope.launch {
-                                    prefs.splitMergeInformationExpanded.update(expanded)
+                    if (state.sessionInfo.startedAtElapsedRealtimeMs != null) {
+                        item(key = "merger-information") {
+                            MergerInformationCard(
+                                information = state.sessionInfo,
+                                expanded = mergerInformationExpanded,
+                                onExpandedChange = { expanded ->
+                                    coroutineScope.launch {
+                                        prefs.splitMergeInformationExpanded.update(expanded)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    items(stepsByCategory.toList(), key = { it.first }) { (category, steps) ->
+                        Steps(
+                            category = category,
+                            steps = steps,
+                            subStepsById = subStepsById,
+                            isExpanded = expandedCategories.contains(category),
+                            autoExpandRunning = splitMergeAutoExpandRunningSteps,
+                            autoExpandRunningMainOnly = useExclusiveAutoExpand,
+                            autoCollapseCompleted = splitMergeAutoCollapseSteps,
+                            onExpand = {
+                                if (useExclusiveAutoExpand) {
+                                    expandedCategories.clear()
+                                }
+                                expandedCategories.add(category)
+                            },
+                            onClick = {
+                                if (expandedCategories.contains(category)) {
+                                    expandedCategories.remove(category)
+                                } else {
+                                    expandedCategories.add(category)
                                 }
                             }
                         )
                     }
-                }
-                items(stepsByCategory.toList(), key = { it.first }) { (category, steps) ->
-                    Steps(
-                        category = category,
-                        steps = steps,
-                        subStepsById = subStepsById,
-                        isExpanded = expandedCategories.contains(category),
-                        autoExpandRunning = splitMergeAutoExpandRunningSteps,
-                        autoExpandRunningMainOnly = useExclusiveAutoExpand,
-                        autoCollapseCompleted = splitMergeAutoCollapseSteps,
-                        onExpand = {
-                            if (useExclusiveAutoExpand) {
-                                expandedCategories.clear()
-                            }
-                            expandedCategories.add(category)
-                        },
-                        onClick = {
-                            if (expandedCategories.contains(category)) {
-                                expandedCategories.remove(category)
-                            } else {
-                                expandedCategories.add(category)
-                            }
+                    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
+                        item(key = "legacy-android-memory-warning") {
                         }
-                    )
-                }
-                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
-                    item(key = "legacy-android-memory-warning") {
                     }
                 }
             }

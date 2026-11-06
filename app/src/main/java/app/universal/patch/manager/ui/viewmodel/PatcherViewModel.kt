@@ -153,6 +153,7 @@ import app.universal.patch.manager.util.toast
 import app.universal.patch.manager.util.awaitUserConfirmation
 import app.universal.patch.manager.util.toastHandle
 import app.universal.patch.manager.util.uiSafe
+import app.universal.patch.manager.util.versionCodeFor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -210,6 +211,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import androidx.core.content.pm.PackageInfoCompat
 
 private class PendingPatchedAppReplacement private constructor(
     private val target: File,
@@ -2602,7 +2604,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
 
             val finalPackageName = packageInfo.packageName
-            val finalVersion = packageInfo.versionName?.takeUnless { it.isBlank() } ?: version ?: "unspecified"
+            val versionPackageInfo = patchedPackageInfo ?: packageInfo
+            val finalVersion = versionPackageInfo.versionName?.takeUnless { it.isBlank() } ?: version ?: "unspecified"
+            val finalVersionCode = versionPackageInfo.versionCodeFor(finalVersion)
 
             val metadata = buildExportMetadata(patchedPackageInfo ?: packageInfo)
             withContext(Dispatchers.Main) {
@@ -2776,7 +2780,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             resetCreatedAt = true,
                             customInstallerPackageName = customInstallerPackageName,
                             repatchSourcePath = patchedRepatchSourcePath,
-                            updateRepatchSource = true
+                            updateRepatchSource = true,
+                            versionCode = finalVersionCode,
+                            updateVersionCode = true
                         )
                     effectiveShouldSaveForLater &&
                         savedCopyWritten &&
@@ -2792,7 +2798,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             useMount = usingMountInstall,
                             customInstallerPackageName = existingInstalled.customInstallerPackageName,
                             repatchSourcePath = patchedRepatchSourcePath,
-                            updateRepatchSource = true
+                            updateRepatchSource = true,
+                            versionCode = finalVersionCode,
+                            updateVersionCode = true
                         )
                     }
                     effectiveShouldSaveForLater &&
@@ -2807,7 +2815,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             useMount = usingMountInstall,
                             resetCreatedAt = true,
                             repatchSourcePath = patchedRepatchSourcePath,
-                            updateRepatchSource = true
+                            updateRepatchSource = true,
+                            versionCode = finalVersionCode,
+                            updateVersionCode = true
                         )
                 }
             }

@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.CollectionDialog
 import app.universal.patch.manager.ui.component.minimalActionButtons
 import android.content.pm.PackageInfo
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -430,8 +431,10 @@ private fun InstalledAppCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                if (bundleSummaries.isNotEmpty()) {
-                    val bundleLine = if (bundleSummaries.size == 1) {
+                if (bundleSummaries.isNotEmpty() || isMissingInstall) {
+                    val bundleLine = if (bundleSummaries.isEmpty()) {
+                        ""
+                    } else if (bundleSummaries.size == 1) {
                         val summary = bundleSummaries.first()
                         val versionText = summary.version?.let(::formatVersion)
                         listOfNotNull(summary.title, versionText).joinToString(" • ")
@@ -453,6 +456,13 @@ private fun InstalledAppCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f)
                         )
+                        if (isMissingInstall) {
+                            StatusChip(
+                                text = stringResource(R.string.patches_missing),
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
                         if (showBundleUpdateBadges && bundleSummaries.any { it.hasUpdate }) {
                             AppMetaPill(
                                 text = pluralStringResource(
@@ -463,15 +473,6 @@ private fun InstalledAppCard(
                                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
-                    }
-                }
-                if (isMissingInstall) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        StatusChip(
-                            text = stringResource(R.string.patches_missing),
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer
-                        )
                     }
                 }
                 val hasPatchContext = installedApp.selectionPayload != null || bundleSummaries.isNotEmpty()
@@ -752,7 +753,7 @@ private fun AppsOrderDialog(
         workingOrder.add(to.index, workingOrder.removeAt(from.index))
     }
 
-    AlertDialog(
+    CollectionDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {
             TextButton(onClick = { onConfirm(workingOrder.toList()) }, enabled = workingOrder.isNotEmpty()) {
@@ -766,7 +767,7 @@ private fun AppsOrderDialog(
         },
         title = { CenteredDialogTitle(text = stringResource(R.string.apps_reorder_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     text = stringResource(R.string.apps_reorder_description),
                     style = MaterialTheme.typography.bodyMedium,
@@ -776,7 +777,7 @@ private fun AppsOrderDialog(
                     thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 320.dp),
+                        .weight(1f),
                     reserveScrollbarSpace = true,
                     state = lazyListState
                 ) {

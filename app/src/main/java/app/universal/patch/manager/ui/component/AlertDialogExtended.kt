@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -60,11 +61,15 @@ fun AlertDialogExtended(
     textContentColor: Color = AlertDialogDefaults.textContentColor,
     tonalElevation: Dp = AlertDialogDefaults.TonalElevation,
     textHorizontalPadding: PaddingValues = TextHorizontalPadding,
-    textBottomPadding: Dp = 24.dp
+    textBottomPadding: Dp = 24.dp,
+    fillText: Boolean = false
 ) {
-    BasicAlertDialog(onDismissRequest = onDismissRequest) {
+    BasicAlertDialog(
+        onDismissRequest = onDismissRequest,
+        modifier = Modifier.imePadding()
+    ) {
         Surface(
-            modifier = modifier.imePadding(),
+            modifier = modifier,
             shape = shape,
             color = containerColor,
             tonalElevation = tonalElevation,
@@ -114,7 +119,7 @@ fun AlertDialogExtended(
                     ) {
                         Box(
                             Modifier
-                                .weight(weight = 1f, fill = false)
+                                .weight(weight = 1f, fill = fillText)
                                 .padding(bottom = textBottomPadding)
                                 .padding(textHorizontalPadding)
                                 .align(Alignment.Start)
@@ -167,3 +172,23 @@ private fun ContentStyle(
 }
 
 val TextHorizontalPadding = PaddingValues(horizontal = 24.dp)
+
+/** Shared geometry for collection ordering and patch-profile creation dialogs. */
+@Composable
+fun CollectionDialog(
+    onDismissRequest: () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    dismissButton: @Composable () -> Unit,
+    title: @Composable () -> Unit,
+    text: @Composable () -> Unit
+) {
+    AlertDialogExtended(
+        modifier = Modifier.fillMaxWidth().height(560.dp),
+        onDismissRequest = onDismissRequest,
+        confirmButton = confirmButton,
+        dismissButton = dismissButton,
+        title = title,
+        text = text,
+        fillText = true
+    )
+}

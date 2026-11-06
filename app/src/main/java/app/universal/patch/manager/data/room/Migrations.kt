@@ -325,3 +325,9 @@ val MIGRATION_20_21 = object : Migration(20, 21) {
         )
     }
 }
+
+val MIGRATION_21_22 = object : Migration(21, 22) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE installed_app ADD COLUMN version_code INTEGER")
+    }
+}

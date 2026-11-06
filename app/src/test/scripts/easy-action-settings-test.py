@@ -36,15 +36,21 @@ minimal_callback = block(minimal, "onValueChange = { enabled ->").split("->", 1)
 visibility_callback = block(dashboard, "onCheckedChange = { shown ->").split("->", 1)[1]
 move_callback = block(dashboard, "fun moveAction(")
 save_callback = block(dashboard, "fun saveOrder(")
+footer = dashboard.split("        FlowRow(", 1)[1]
+show_all_callback = block(footer, "TextButton(onClick = {")
+second_button = footer.index("TextButton(onClick = {", footer.index("TextButton(onClick = {") + 1)
+reset_order_callback = block(footer[second_button:], "TextButton(onClick = {")
 harness = """
 package regression
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.*
+import kotlin.coroutines.CoroutineContext
 import app.universal.patch.manager.ui.model.dashboardActionOrder
 
 class Preference<T>(var value: T) {
+    private val writes = Mutex()
     suspend fun get(): T { delay(5); return value }
-    suspend fun update(value: T) { delay(5); this.value = value }
+    suspend fun update(value: T) { writes.withLock { delay(5); this.value = value } }
 }
 class Prefs {
     val minimalActionButtonGroups = Preference(emptySet<String>())
@@ -55,9 +61,10 @@ class Prefs {
         mutex.withLock { block() }
     }
 }
-class Actions {
+class Actions(uiContext: CoroutineContext) {
     val prefs = Prefs()
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // Compose callbacks start on one UI dispatcher; DataStore serializes writes.
+    val scope = CoroutineScope(uiContext + SupervisorJob())
     val group = "apps"
     val defaults = listOf("storage", "add", "batch")
     val workingOrder = defaults.toMutableList() // Shared preview state, before recomposition.
@@ -68,10 +75,12 @@ class Actions {
     fun visible(id: String, shown: Boolean) = %s
     fun moveAction(id: String, offset: Int): Boolean { %s }
     fun saveOrder() { %s }
+    fun showAll() { %s }
+    fun resetOrder() { %s }
     suspend fun awaitWrites() { scope.coroutineContext[Job]!!.children.toList().joinAll() }
 }
 fun main() = runBlocking {
-    val actions = Actions()
+    val actions = Actions(coroutineContext)
     try {
         listOf("selection", "bundles", "saved", "batch", "profiles", "lsposed")
             .map { actions.minimal(it, true) }.joinAll()
@@ -95,10 +104,19 @@ fun main() = runBlocking {
         repeat(4) { check(!actions.moveAction("batch", -1)) }
         actions.awaitWrites()
         check(actions.orderPref.value == "batch,storage,add")
-        println("Concurrent minimal/visibility changes and repeated reorder callbacks passed.")
+        actions.prefs.dashboardHiddenActions.value = setOf("apps:add", "apps:batch", "bundles:add")
+        actions.showAll()
+        actions.awaitWrites()
+        check(actions.prefs.dashboardHiddenActions.value == setOf("bundles:add"))
+        actions.resetOrder()
+        actions.awaitWrites()
+        check(actions.workingOrder == actions.defaults)
+        check(actions.orderPref.value == "storage,add,batch")
+        check(actions.prefs.dashboardHiddenActions.value == setOf("bundles:add"))
+        println("Concurrent minimal/visibility changes, reorder, and group-scoped resets passed.")
     } finally { actions.scope.cancel() }
 }
-""" % (minimal_callback, visibility_callback, move_callback, save_callback)
+""" % (minimal_callback, visibility_callback, move_callback, save_callback, show_all_callback, reset_order_callback)
 
 discovery = (BASE / "ui/screen/PatchBundleDiscoveryPatchesScreen.kt").read_text(encoding="utf-8")
 local_patch_call = discovery.split("                        PatchItem(", 1)[1].split("\n                        )", 1)[0]

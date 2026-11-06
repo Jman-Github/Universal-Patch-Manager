@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.CollectionDialog
 import app.universal.patch.manager.ui.component.minimalActionButtons
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
@@ -117,6 +118,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -1169,7 +1171,7 @@ fun PatchesSelectorScreen(
             if (newHeaderShown) return null
             newHeaderShown = true
             return {
-                ListHeader(title = stringResource(R.string.patch_selector_sheet_filter_new_patches))
+                ListHeader(title = pluralStringResource(R.plurals.new_patches_quantity, newCompatiblePatches.size + newIncompatiblePatches.size))
             }
         }
 
@@ -1209,7 +1211,7 @@ fun PatchesSelectorScreen(
         if (nonUniversalSelected) {
             if (regularVisible.isNotEmpty()) {
                 item(contentType = 0) {
-                    ListHeader(title = stringResource(R.string.regular_patches))
+                    ListHeader(title = pluralStringResource(R.plurals.regular_patches_quantity, regularVisible.size))
                 }
             }
             patchList(
@@ -1238,7 +1240,7 @@ fun PatchesSelectorScreen(
                 compatible = true,
                 suggestedVersion = suggestedVersion
             ) {
-                ListHeader(title = stringResource(R.string.universal_patches))
+                ListHeader(title = pluralStringResource(R.plurals.universal_patches_quantity, universalVisible.size))
             }
         } else {
             patchList(
@@ -1248,11 +1250,11 @@ fun PatchesSelectorScreen(
                 compatible = true,
                 suggestedVersion = suggestedVersion
             ) {
-                ListHeader(title = stringResource(R.string.universal_patches))
+                ListHeader(title = pluralStringResource(R.plurals.universal_patches_quantity, universalVisible.size))
             }
             if (regularVisible.isNotEmpty()) {
                 item(contentType = 0) {
-                    ListHeader(title = stringResource(R.string.regular_patches))
+                    ListHeader(title = pluralStringResource(R.plurals.regular_patches_quantity, regularVisible.size))
                 }
             }
             patchList(
@@ -2628,7 +2630,7 @@ private fun PatchProfileBundleDialog(
 ) {
     val confirmEnabled = bundles.isNotEmpty() && selectedBundleUids.isNotEmpty()
 
-    AlertDialogExtended(
+    CollectionDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = onConfirm, enabled = confirmEnabled) {
@@ -2642,64 +2644,61 @@ private fun PatchProfileBundleDialog(
         },
         title = { CenteredDialogTitle(stringResource(R.string.patch_profile_select_bundles_title)) },
         text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
+            LazyColumnWithScrollbar(
+                modifier = Modifier.fillMaxSize(),
+                thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+                reserveScrollbarSpace = true,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(stringResource(R.string.patch_profile_select_bundles_description))
+                item { Text(stringResource(R.string.patch_profile_select_bundles_description)) }
                 if (bundles.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.patch_profile_select_bundles_empty),
-                        color = MaterialTheme.colorScheme.outline
-                    )
+                    item {
+                        Text(
+                            text = stringResource(R.string.patch_profile_select_bundles_empty),
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
                 } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 320.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(bundles, key = { it.uid }) { bundle ->
-                            val selected = bundle.uid in selectedBundleUids
-                            val toggle: () -> Unit = {
-                                onSelectionChanged()
-                                if (bundle.uid in selectedBundleUids) {
-                                    selectedBundleUids.remove(bundle.uid)
-                                } else {
-                                    selectedBundleUids.add(bundle.uid)
-                                }
+                    items(bundles, key = { it.uid }) { bundle ->
+                        val selected = bundle.uid in selectedBundleUids
+                        val toggle: () -> Unit = {
+                            onSelectionChanged()
+                            if (bundle.uid in selectedBundleUids) {
+                                selectedBundleUids.remove(bundle.uid)
+                            } else {
+                                selectedBundleUids.add(bundle.uid)
                             }
+                        }
 
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable(onClick = toggle),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                HapticCheckbox(
-                                    checked = selected,
-                                    onCheckedChange = { toggle() }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(onClick = toggle),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            HapticCheckbox(
+                                checked = selected,
+                                onCheckedChange = { toggle() }
+                            )
+
+                            Column {
+                                Text(
+                                    text = bundleDisplayNames[bundle.uid] ?: bundle.name,
+                                    style = MaterialTheme.typography.bodyLarge
                                 )
-
-                                Column {
+                                bundle.version?.let { version ->
                                     Text(
-                                        text = bundleDisplayNames[bundle.uid] ?: bundle.name,
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
-                                    bundle.version?.let { version ->
-                                        Text(
-                                            text = version,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    Text(
-                                        text = stringResource(bundleTypeLabelRes(bundleTypes[bundle.uid])),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.outline
+                                        text = version,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
+                                Text(
+                                    text = stringResource(bundleTypeLabelRes(bundleTypes[bundle.uid])),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
                             }
                         }
                     }
@@ -2738,7 +2737,7 @@ private fun PatchProfileNameDialog(
         keyboardController?.show()
     }
 
-    AlertDialogExtended(
+    CollectionDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(
@@ -2755,87 +2754,84 @@ private fun PatchProfileNameDialog(
         },
         title = { CenteredDialogTitle(stringResource(R.string.patch_profile_name_title)) },
         text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
+            LazyColumnWithScrollbar(
+                modifier = Modifier.fillMaxSize(),
+                thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+                reserveScrollbarSpace = true,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(stringResource(R.string.patch_profile_name_description))
-                TextField(
-                    value = nameFieldValue,
-                    onValueChange = {
-                        nameFieldValue = it
-                        onNameChange(it.text)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focusRequester),
-                    singleLine = true,
-                    enabled = !isSaving,
-                    placeholder = { Text(stringResource(R.string.patch_profile_name_hint)) },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            if (nameFieldValue.text.isNotBlank() && !isSaving) onConfirm()
-                        }
-                    )
-                )
-
-                if (profiles.isNotEmpty()) {
-                    Text(stringResource(R.string.patch_profile_update_existing_title))
-                    Text(
-                        text = stringResource(R.string.patch_profile_update_existing_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    LazyColumnWithScrollbar(
-                        thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+                item { Text(stringResource(R.string.patch_profile_name_description)) }
+                item {
+                    TextField(
+                        value = nameFieldValue,
+                        onValueChange = {
+                            nameFieldValue = it
+                            onNameChange(it.text)
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 240.dp),
-                        reserveScrollbarSpace = true
-                    ) {
-                        items(
-                            items = profiles,
-                            key = { it.uid }
-                        ) { profile ->
-                            val selected = selectedProfileId == profile.uid
-                            ListItem(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(
-                                        if (selected)
-                                            MaterialTheme.colorScheme.secondaryContainer
-                                        else
-                                            Color.Transparent
+                            .focusRequester(focusRequester),
+                        singleLine = true,
+                        enabled = !isSaving,
+                        placeholder = { Text(stringResource(R.string.patch_profile_name_hint)) },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                if (nameFieldValue.text.isNotBlank() && !isSaving) onConfirm()
+                            }
+                        )
+                    )
+                }
+
+                if (profiles.isNotEmpty()) {
+                    item { Text(stringResource(R.string.patch_profile_update_existing_title)) }
+                    item {
+                        Text(
+                            text = stringResource(R.string.patch_profile_update_existing_description),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    items(
+                        items = profiles,
+                        key = { it.uid }
+                    ) { profile ->
+                        val selected = selectedProfileId == profile.uid
+                        ListItem(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (selected)
+                                        MaterialTheme.colorScheme.secondaryContainer
+                                    else
+                                        Color.Transparent
+                                )
+                                .clickable(enabled = !isSaving) {
+                                    onProfileSelected(if (selected) null else profile)
+                                }
+                                .padding(horizontal = 4.dp),
+                            headlineContent = { Text(profile.name) },
+                            supportingContent = resolvePatchProfileAppVersion(
+                                appVersion = profile.appVersion,
+                                apkPath = profile.apkPath,
+                                apkVersion = profile.apkVersion,
+                                useSelectedApkVersion = profile.useSelectedApkVersion
+                            )?.let { version ->
+                                {
+                                    Text(
+                                        text = version.ifBlank { stringResource(R.string.any_version) },
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.bodySmall
                                     )
-                                    .clickable(enabled = !isSaving) {
-                                        onProfileSelected(if (selected) null else profile)
-                                    }
-                                    .padding(horizontal = 4.dp),
-                                headlineContent = { Text(profile.name) },
-                                supportingContent = resolvePatchProfileAppVersion(
-                                    appVersion = profile.appVersion,
-                                    apkPath = profile.apkPath,
-                                    apkVersion = profile.apkVersion,
-                                    useSelectedApkVersion = profile.useSelectedApkVersion
-                                )?.let { version ->
-                                    {
-                                        Text(
-                                            text = version.ifBlank { stringResource(R.string.any_version) },
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                    }
-                                },
-                                trailingContent = {
-                                    if (selected) {
-                                        Icon(Icons.Filled.Check, null)
-                                    }
-                                },
-                                colors = transparentListItemColors
-                            )
-                        }
+                                }
+                            },
+                            trailingContent = {
+                                if (selected) {
+                                    Icon(Icons.Filled.Check, null)
+                                }
+                            },
+                            colors = transparentListItemColors
+                        )
                     }
                 }
             }

@@ -82,7 +82,7 @@ val prReleaseVersionCode = if (prTestBuild) {
     }
     code
 } else null
-val managerDatabaseVersion = 21
+val managerDatabaseVersion = 22
 val devVersionNameSuffix = if (resolvedProjectVersion.contains('-')) "" else "-$devVersionSuffix"
 val libraryVersions = extensions.getByType<VersionCatalogsExtension>().named("libs")
 fun libraryVersion(alias: String): String =

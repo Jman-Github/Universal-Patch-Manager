@@ -32,5 +32,6 @@ data class InstalledApp(
     @ColumnInfo(name = "custom_installer_package_name")
     val customInstallerPackageName: String? = null,
     @ColumnInfo(name = "repatch_source_path") val repatchSourcePath: String? = null,
-    @ColumnInfo(name = "use_mount") val useMount: Boolean? = null
+    @ColumnInfo(name = "use_mount") val useMount: Boolean? = null,
+    @ColumnInfo(name = "version_code") val versionCode: Long? = null
 )
