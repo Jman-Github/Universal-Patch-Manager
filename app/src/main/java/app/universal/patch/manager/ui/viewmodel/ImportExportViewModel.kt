@@ -225,8 +225,10 @@ internal fun importedBackgroundWorkNeedsNotifications(
     announcementInterval: SearchForUpdatesBackgroundInterval,
     autoClearCacheInterval: AutoClearCacheInterval,
     deliveryMode: BundleUpdateDeliveryMode,
-    autoPatchEnabled: Boolean
+    autoPatchEnabled: Boolean,
+    runtimeInterval: SearchForUpdatesBackgroundInterval = SearchForUpdatesBackgroundInterval.NEVER
 ): Boolean = autoPatchEnabled ||
+    runtimeInterval != SearchForUpdatesBackgroundInterval.NEVER ||
     bundleInterval != SearchForUpdatesBackgroundInterval.NEVER ||
     managerInterval != SearchForUpdatesBackgroundInterval.NEVER ||
     announcementInterval != SearchForUpdatesBackgroundInterval.NEVER ||
@@ -254,6 +256,7 @@ class ImportExportViewModel(
     private val installerManager: InstallerManager
 ) : ViewModel() {
     data class ImportedNotificationRollback(
+        val runtimeInterval: SearchForUpdatesBackgroundInterval,
         val bundleInterval: SearchForUpdatesBackgroundInterval,
         val managerInterval: SearchForUpdatesBackgroundInterval,
         val announcementInterval: SearchForUpdatesBackgroundInterval,
@@ -1673,6 +1676,7 @@ class ImportExportViewModel(
         preferencesManager.importSettings(
             PreferencesManager.SettingsSnapshot(
                 announcementPushNotificationInterval = rollback.announcementInterval,
+                backgroundRuntimeUpdateInterval = rollback.runtimeInterval,
                 autoClearCacheInterval = rollback.autoClearCacheInterval,
                 searchForUpdatesBackgroundInterval = rollback.bundleInterval,
                 searchForManagerUpdatesBackgroundInterval = rollback.managerInterval,
@@ -1687,6 +1691,7 @@ class ImportExportViewModel(
     }
 
     private suspend fun syncImportedPeriodicWork() {
+        workerRepository.scheduleRuntimeUpdateWork(preferencesManager.backgroundRuntimeUpdateInterval.get())
         workerRepository.scheduleBundleUpdateNotificationWork(
             preferencesManager.searchForUpdatesBackgroundInterval.get()
         )
@@ -1706,6 +1711,7 @@ class ImportExportViewModel(
     }
 
     private fun suspendImportedPeriodicWork() {
+        workerRepository.scheduleRuntimeUpdateWork(SearchForUpdatesBackgroundInterval.NEVER)
         workerRepository.scheduleBundleUpdateNotificationWork(
             SearchForUpdatesBackgroundInterval.NEVER
         )
@@ -1787,6 +1793,7 @@ class ImportExportViewModel(
             ).permissionGranted
 
         val backgroundNotificationsEnabled = importedBackgroundWorkNeedsNotifications(
+            runtimeInterval = preferencesManager.backgroundRuntimeUpdateInterval.get(),
             bundleInterval = bundleInterval,
             managerInterval = managerInterval,
             announcementInterval = announcementInterval,
@@ -1801,6 +1808,8 @@ class ImportExportViewModel(
             needsShizukuPermission = needsShizukuPermission,
             notificationRollback = if (backgroundNotificationsEnabled) {
                 ImportedNotificationRollback(
+                    runtimeInterval = previousSettings.backgroundRuntimeUpdateInterval
+                        ?: SearchForUpdatesBackgroundInterval.NEVER,
                     bundleInterval = previousSettings.searchForUpdatesBackgroundInterval
                         ?: SearchForUpdatesBackgroundInterval.NEVER,
                     managerInterval = previousSettings.searchForManagerUpdatesBackgroundInterval

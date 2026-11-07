@@ -3,6 +3,8 @@ package app.universal.patch.manager.domain.manager
 import android.content.ComponentName
 import android.content.Context
 import android.util.Log
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import app.universal.patch.manager.R
 import app.universal.patch.manager.domain.manager.base.BasePreferencesManager
 import app.universal.patch.manager.domain.manager.base.EditorContext
@@ -352,6 +354,22 @@ class PreferencesManager(
         "background_bundle_update_time",
         SearchForUpdatesBackgroundInterval.NEVER
     )
+    val backgroundRuntimeUpdateInterval = enumPreference(
+        "background_runtime_update_time",
+        SearchForUpdatesBackgroundInterval.NEVER
+    )
+    internal val pendingRuntimeUpdatesJson = stringPreference("pending_runtime_updates", "")
+
+    suspend fun migrateBackgroundRuntimeUpdateInterval() {
+        dataStore.edit { settings ->
+            val runtimeKey = stringPreferencesKey("background_runtime_update_time")
+            if (settings[runtimeKey] == null) {
+                settings[runtimeKey] = settings[stringPreferencesKey("background_bundle_update_time")]
+                    ?: SearchForUpdatesBackgroundInterval.NEVER.name
+            }
+        }
+    }
+
     val searchForManagerUpdatesBackgroundInterval = enumPreference(
         "background_manager_update_time",
         SearchForUpdatesBackgroundInterval.NEVER
@@ -736,6 +754,7 @@ class PreferencesManager(
         val showBatteryOptimizationBanner: Boolean? = null,
         val allowPatchProfileBundleOverride: Boolean? = null,
         val searchForUpdatesBackgroundInterval: SearchForUpdatesBackgroundInterval? = null,
+        val backgroundRuntimeUpdateInterval: SearchForUpdatesBackgroundInterval? = null,
         val searchForManagerUpdatesBackgroundInterval: SearchForUpdatesBackgroundInterval? = null,
         val bundleUpdateDeliveryMode: BundleUpdateDeliveryMode? = null,
         val bundleChangelogFetchLimit: Int? = null,
@@ -929,6 +948,7 @@ class PreferencesManager(
             showBatteryOptimizationBanner = showBatteryOptimizationBanner.value,
             allowPatchProfileBundleOverride = allowPatchProfileBundleOverride.value,
             searchForUpdatesBackgroundInterval = searchForUpdatesBackgroundInterval.value,
+            backgroundRuntimeUpdateInterval = backgroundRuntimeUpdateInterval.value,
             searchForManagerUpdatesBackgroundInterval = searchForManagerUpdatesBackgroundInterval.value,
             bundleUpdateDeliveryMode = bundleUpdateDeliveryMode.value,
             bundleChangelogFetchLimit = bundleChangelogFetchLimit.value,
@@ -1183,6 +1203,7 @@ class PreferencesManager(
         snapshot.searchForUpdatesBackgroundInterval?.let {
             searchForUpdatesBackgroundInterval.value = it
         }
+        snapshot.backgroundRuntimeUpdateInterval?.let { backgroundRuntimeUpdateInterval.value = it }
         snapshot.searchForManagerUpdatesBackgroundInterval?.let {
             searchForManagerUpdatesBackgroundInterval.value = it
         }

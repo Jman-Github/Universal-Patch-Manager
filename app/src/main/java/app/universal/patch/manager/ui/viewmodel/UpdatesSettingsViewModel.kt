@@ -31,6 +31,7 @@ class UpdatesSettingsViewModel(
     val useManagerPrereleases = prefs.useManagerPrereleases
     val allowMeteredUpdates = prefs.allowMeteredUpdates
     val backgroundManagerUpdateInterval = prefs.searchForManagerUpdatesBackgroundInterval
+    val backgroundRuntimeUpdateInterval = prefs.backgroundRuntimeUpdateInterval
     val backgroundBundleUpdateInterval = prefs.searchForUpdatesBackgroundInterval
     val bundleUpdateDeliveryMode = prefs.bundleUpdateDeliveryMode
     val bundleChangelogFetchLimit = prefs.bundleChangelogFetchLimit
@@ -38,6 +39,15 @@ class UpdatesSettingsViewModel(
 
     val isConnected: Boolean
         get() = network.isConnected()
+
+    fun updateBackgroundRuntimeUpdateTime(interval: SearchForUpdatesBackgroundInterval) {
+        viewModelScope.launch {
+            uiSafe(app, R.string.failed_to_check_updates, "Failed to update runtime background schedule") {
+                backgroundRuntimeUpdateInterval.update(interval)
+                workerRepository.scheduleRuntimeUpdateWork(interval)
+            }
+        }
+    }
 
     fun updateBackgroundBundleUpdateTime(interval: SearchForUpdatesBackgroundInterval) {
         viewModelScope.launch {

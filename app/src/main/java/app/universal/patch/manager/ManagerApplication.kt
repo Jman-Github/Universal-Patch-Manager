@@ -202,6 +202,8 @@ class ManagerApplication : Application() {
             }.onFailure { error ->
                 Log.w(tag, "Failed to migrate legacy patch-profile installer settings", error)
             }
+            prefs.migrateBackgroundRuntimeUpdateInterval()
+            workerRepository.scheduleRuntimeUpdateWork(prefs.backgroundRuntimeUpdateInterval.get())
             workerRepository.ensureBundleUpdateNotificationWork(
                 prefs.searchForUpdatesBackgroundInterval.get()
             )

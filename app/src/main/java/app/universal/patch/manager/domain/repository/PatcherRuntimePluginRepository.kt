@@ -24,6 +24,7 @@ import app.universal.patch.manager.network.runtime.PatcherRuntimePluginSourceEnt
 import app.universal.patch.manager.network.runtime.PatcherRuntimePluginSourceState
 import app.universal.patch.manager.network.runtime.PatcherRuntimePluginState
 import app.universal.patch.manager.network.service.HttpService
+import app.universal.patch.manager.util.PendingRuntimeUpdate
 import app.universal.patch.manager.util.RuntimeUpdateNotifications
 import app.universal.patch.manager.util.DownloadProgressNotifier
 import app.universal.patch.manager.util.PM
@@ -383,6 +384,7 @@ class PatcherRuntimePluginRepository(
             entries.forEach { sourceFile(it) } // Validate storage paths before saving any settings.
             applySettings(settings.copy(patcherRuntimePluginSourcesJson = json.encodeToString(entries)), true)
             try {
+                reconcilePendingUpdates(entries)
                 reload()
             } catch (error: CancellationException) {
                 throw error
@@ -847,12 +849,49 @@ class PatcherRuntimePluginRepository(
         installedPluginPackageNames.value = installedPluginPackageNames.value - packageName
     }
 
-    suspend fun updateCheck() = withContext(Dispatchers.IO) {
+    val availableRuntimeVersions = combine(sourceStates, prefs.pendingRuntimeUpdatesJson.flow) { states, raw ->
+        decodePendingUpdates(raw).filter { it.matches(states[it.sourceId]?.entry) }
+            .associate { it.sourceId to it.version }
+    }
+
+    private fun decodePendingUpdates(raw: String): List<PendingRuntimeUpdate> =
+        runCatching { json.decodeFromString<List<PendingRuntimeUpdate>>(raw) }.getOrDefault(emptyList())
+
+    private fun PendingRuntimeUpdate.matches(entry: PatcherRuntimePluginSourceEntry?): Boolean =
+        entry != null && entry.trustedSignatureHex != null && !entry.isInternalSupport &&
+            installedVersionKey == entry.versionKey && prerelease == entry.releasePrereleaseFilter
+
+    private suspend fun reconcilePendingUpdates(
+        entries: List<PatcherRuntimePluginSourceEntry>,
+        checked: Map<String, PendingRuntimeUpdate?> = emptyMap(),
+        notify: Boolean = false
+    ) {
+        val sources = entries.associateBy { it.id }
+        val previous = decodePendingUpdates(prefs.pendingRuntimeUpdatesJson.get())
+        val pending = previous.filter { it.matches(sources[it.sourceId]) }
+            .associateByTo(linkedMapOf()) { it.sourceId }
+        checked.forEach { (id, update) ->
+            if (update != null && update.matches(sources[id])) pending[id] = update
+            else pending.remove(id)
+        }
+        val updates = pending.values.toList()
+        if (updates != previous) prefs.pendingRuntimeUpdatesJson.update(json.encodeToString(updates))
+        runCatching {
+            RuntimeUpdateNotifications.showAvailable(
+                app, updates.filter { sources[it.sourceId]?.autoUpdate == false }, onlyIfActive = !notify
+            )
+        }.onFailure { Log.w(tag, "Failed to show runtime updates", it) }
+    }
+
+    suspend fun updateCheck(background: Boolean = true) = withContext(Dispatchers.IO) {
         sourceMutex.withLock {
             if (!networkInfo.isConnected()) return@withLock
             if (!prefs.allowMeteredUpdates.get() && !networkInfo.isUnmetered()) return@withLock
             val entries = readSourceEntries().toMutableList()
-            if (entries.isEmpty()) return@withLock
+            if (entries.isEmpty()) {
+                reconcilePendingUpdates(entries, notify = background)
+                return@withLock
+            }
             val currentCatalog = try { catalog.refresh() } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -860,15 +899,14 @@ class PatcherRuntimePluginRepository(
                 catalog.cached()
             }
             reload()
-            val available = mutableListOf<String>()
-            val updated = mutableListOf<String>()
-            var checksComplete = true
+            val checked = linkedMapOf<String, PendingRuntimeUpdate?>()
+            val updated = mutableListOf<PendingRuntimeUpdate>()
             entries.indices.forEach { index ->
                 val entry = entries[index]
                 if (entry.trustedSignatureHex == null) return@forEach
                 try {
                     val state = sourceStates.value[entry.id]
-                    val name = state?.name ?: entry.assetSelector
+                    val name = (state?.name ?: entry.assetSelector.toReadableSourceName()).toRuntimeMainName()
                     val resolved = entry.catalogId?.let { catalogId ->
                         val item = currentCatalog.plugins.firstOrNull { it.id == catalogId }
                             ?: error("Runtime was removed from the catalog")
@@ -887,16 +925,22 @@ class PatcherRuntimePluginRepository(
                     // A filtered channel may only expose releases older than the
                     // installed runtime. Installation rejects these; do not advertise them.
                     if (resolved != null && entry.expectedVersionCode != null &&
-                        resolved.manifest.versionCode < entry.expectedVersionCode) return@forEach
+                        resolved.manifest.versionCode < entry.expectedVersionCode) {
+                        checked[entry.id] = null
+                        return@forEach
+                    }
                     // Local imports use "local:<sha>" rather than a release tag.
                     // For catalog runtimes, identical verified bytes are not an update.
                     val changed = if (resolved != null && entry.expectedSha256 != null) {
                         !resolved.manifest.sha256.equals(entry.expectedSha256, ignoreCase = true)
                     } else key != entry.versionKey
-                    if (!entry.autoUpdate) {
-                        if (changed) available += name
-                        return@forEach
-                    }
+                    val version = resolved?.manifest?.version ?: release!!.tagName
+                    val candidate = PendingRuntimeUpdate(
+                        entry.id, entry.versionKey, entry.releasePrereleaseFilter, name,
+                        if (version.firstOrNull()?.isDigit() == true) "v$version" else version
+                    )
+                    checked[entry.id] = candidate.takeIf { changed }
+                    if (!background || !entry.autoUpdate) return@forEach
                     val mode = shouldAutoUpdate(entry, state?.state)
                     if (mode == SourceUpdateMode.SKIP) return@forEach
                     if (!changed && mode != SourceUpdateMode.FORCE &&
@@ -912,15 +956,15 @@ class PatcherRuntimePluginRepository(
                     writeSourceEntries(entries)
                     reload()
                     if (changed && sourceStates.value[entry.id]?.state is PatcherRuntimePluginSourceState.State.Loaded)
-                        updated += name
+                        updated += candidate
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
-                    checksComplete = false
                     Log.e(tag, "Failed to check runtime source " + entry.repoUrl, error)
                 }
             }
-            runCatching { RuntimeUpdateNotifications.show(app, available, updated, checksComplete) }
+            reconcilePendingUpdates(entries, checked, notify = background)
+            runCatching { RuntimeUpdateNotifications.showCompleted(app, updated) }
                 .onFailure { Log.w(tag, "Failed to show runtime update notifications", it) }
         }
     }
@@ -1089,6 +1133,7 @@ class PatcherRuntimePluginRepository(
         prefs.patcherRuntimePluginSourcesJson.update(
             json.encodeToString(entries.sortedBy { "${it.repoUrl}|${it.assetSelector}|${it.id}" })
         )
+        reconcilePendingUpdates(entries)
     }
 
     private suspend fun readTrustedPackages(): Map<String, String> {

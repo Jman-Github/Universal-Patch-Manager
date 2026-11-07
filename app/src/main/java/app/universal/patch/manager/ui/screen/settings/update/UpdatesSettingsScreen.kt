@@ -77,6 +77,7 @@ fun UpdatesSettingsScreen(
     val coroutineScope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     val managerInterval by vm.backgroundManagerUpdateInterval.getAsState()
+    val runtimeInterval by vm.backgroundRuntimeUpdateInterval.getAsState()
     val backgroundInterval by vm.backgroundBundleUpdateInterval.getAsState()
     val announcementSystemEnabled by vm.announcementSystemEnabled.getAsState()
     val announcementPushNotificationInterval by vm.announcementPushNotificationInterval.getAsState()
@@ -87,12 +88,16 @@ fun UpdatesSettingsScreen(
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     var showBackgroundUpdateDialog by rememberSaveable { mutableStateOf(false) }
     var showBackgroundManagerUpdateDialog by rememberSaveable { mutableStateOf(false) }
+    var showBackgroundRuntimeUpdateDialog by rememberSaveable { mutableStateOf(false) }
     var showAnnouncementNotificationDialog by rememberSaveable { mutableStateOf(false) }
     var showDeliveryModeDialog by rememberSaveable { mutableStateOf(false) }
     var pendingInterval by rememberSaveable {
         mutableStateOf<SearchForUpdatesBackgroundInterval?>(null)
     }
     var pendingManagerInterval by rememberSaveable {
+        mutableStateOf<SearchForUpdatesBackgroundInterval?>(null)
+    }
+    var pendingRuntimeInterval by rememberSaveable {
         mutableStateOf<SearchForUpdatesBackgroundInterval?>(null)
     }
     var pendingDeliveryMode by rememberSaveable {
@@ -120,6 +125,7 @@ fun UpdatesSettingsScreen(
             if (!batteryOptimizationDisabled) {
                 if (pendingInterval != null ||
                     pendingManagerInterval != null ||
+                    pendingRuntimeInterval != null ||
                     pendingDeliveryMode != null ||
                     pendingAnnouncementInterval != null
                 ) {
@@ -142,6 +148,14 @@ fun UpdatesSettingsScreen(
                 } else {
                     vm.updateBackgroundManagerUpdateTime(interval)
                     pendingManagerInterval = null
+                }
+            }
+            pendingRuntimeInterval?.let { interval ->
+                if (!context.hasNotificationPermission()) {
+                    showNotificationPermissionDialog = true
+                } else {
+                    vm.updateBackgroundRuntimeUpdateTime(interval)
+                    pendingRuntimeInterval = null
                 }
             }
 
@@ -167,6 +181,7 @@ fun UpdatesSettingsScreen(
         lifecycleOwner,
         backgroundInterval,
         managerInterval,
+        runtimeInterval,
         announcementPushNotificationInterval
     ) {
         val observer = LifecycleEventObserver { _, event ->
@@ -177,6 +192,7 @@ fun UpdatesSettingsScreen(
                 powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
             if ((backgroundInterval != SearchForUpdatesBackgroundInterval.NEVER ||
                     managerInterval != SearchForUpdatesBackgroundInterval.NEVER ||
+                    runtimeInterval != SearchForUpdatesBackgroundInterval.NEVER ||
                     announcementPushNotificationInterval != SearchForUpdatesBackgroundInterval.NEVER) &&
                 !batteryOptimizationDisabled
             ) {
@@ -184,10 +200,14 @@ fun UpdatesSettingsScreen(
                 showBatteryOptimizationDialog = false
                 pendingInterval = null
                 pendingManagerInterval = null
+                pendingRuntimeInterval = null
                 pendingDeliveryMode = null
                 pendingAnnouncementInterval = null
                 if (backgroundInterval != SearchForUpdatesBackgroundInterval.NEVER) {
                     vm.updateBackgroundBundleUpdateTime(SearchForUpdatesBackgroundInterval.NEVER)
+                }
+                if (runtimeInterval != SearchForUpdatesBackgroundInterval.NEVER) {
+                    vm.updateBackgroundRuntimeUpdateTime(SearchForUpdatesBackgroundInterval.NEVER)
                 }
                 if (managerInterval != SearchForUpdatesBackgroundInterval.NEVER) {
                     vm.updateBackgroundManagerUpdateTime(SearchForUpdatesBackgroundInterval.NEVER)
@@ -212,6 +232,10 @@ fun UpdatesSettingsScreen(
                 vm.updateBackgroundManagerUpdateTime(interval)
                 pendingManagerInterval = null
             }
+            pendingRuntimeInterval?.let { interval ->
+                vm.updateBackgroundRuntimeUpdateTime(interval)
+                pendingRuntimeInterval = null
+            }
             pendingDeliveryMode?.let { mode ->
                 vm.updateBundleUpdateDeliveryMode(mode)
                 pendingDeliveryMode = null
@@ -223,6 +247,7 @@ fun UpdatesSettingsScreen(
         }
         pendingInterval = null
         pendingManagerInterval = null
+        pendingRuntimeInterval = null
         pendingDeliveryMode = null
         pendingAnnouncementInterval = null
     }
@@ -233,6 +258,7 @@ fun UpdatesSettingsScreen(
                 showNotificationPermissionDialog = false
                 pendingInterval = null
                 pendingManagerInterval = null
+                pendingRuntimeInterval = null
                 pendingDeliveryMode = null
                 pendingAnnouncementInterval = null
             },
@@ -264,6 +290,7 @@ fun UpdatesSettingsScreen(
                         showNotificationPermissionDialog = false
                         pendingInterval = null
                         pendingManagerInterval = null
+                        pendingRuntimeInterval = null
                         pendingDeliveryMode = null
                         pendingAnnouncementInterval = null
                     }
@@ -292,6 +319,7 @@ fun UpdatesSettingsScreen(
                 if (!batteryOptimizationDisabled) {
                     pendingInterval = interval
                     pendingManagerInterval = null
+                    pendingRuntimeInterval = null
                     pendingDeliveryMode = null
                     pendingAnnouncementInterval = null
                     showBatteryOptimizationDialog = true
@@ -301,6 +329,7 @@ fun UpdatesSettingsScreen(
                 if (!context.hasNotificationPermission()) {
                     pendingInterval = interval
                     pendingManagerInterval = null
+                    pendingRuntimeInterval = null
                     pendingDeliveryMode = null
                     pendingAnnouncementInterval = null
                     showNotificationPermissionDialog = true
@@ -330,6 +359,7 @@ fun UpdatesSettingsScreen(
                     powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
                 if (!batteryOptimizationDisabled) {
                     pendingInterval = null
+                    pendingRuntimeInterval = null
                     pendingManagerInterval = interval
                     pendingDeliveryMode = null
                     pendingAnnouncementInterval = null
@@ -339,6 +369,7 @@ fun UpdatesSettingsScreen(
 
                 if (!context.hasNotificationPermission()) {
                     pendingInterval = null
+                    pendingRuntimeInterval = null
                     pendingManagerInterval = interval
                     pendingDeliveryMode = null
                     pendingAnnouncementInterval = null
@@ -348,6 +379,47 @@ fun UpdatesSettingsScreen(
 
                 vm.updateBackgroundManagerUpdateTime(interval)
                 pendingManagerInterval = null
+            }
+        )
+    }
+
+    if (showBackgroundRuntimeUpdateDialog) {
+        BackgroundBundleUpdateTimeDialog(
+            title = stringResource(R.string.background_runtime_update),
+            current = runtimeInterval,
+            onDismiss = { showBackgroundRuntimeUpdateDialog = false },
+            onConfirm = { interval ->
+                if (interval == SearchForUpdatesBackgroundInterval.NEVER) {
+                    vm.updateBackgroundRuntimeUpdateTime(interval)
+                    pendingRuntimeInterval = null
+                    return@BackgroundBundleUpdateTimeDialog
+                }
+
+                val powerManager = context.getSystemService(PowerManager::class.java)
+                val batteryOptimizationDisabled =
+                    powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
+                if (!batteryOptimizationDisabled) {
+                    pendingInterval = null
+                    pendingManagerInterval = null
+                    pendingRuntimeInterval = interval
+                    pendingDeliveryMode = null
+                    pendingAnnouncementInterval = null
+                    showBatteryOptimizationDialog = true
+                    return@BackgroundBundleUpdateTimeDialog
+                }
+
+                if (!context.hasNotificationPermission()) {
+                    pendingInterval = null
+                    pendingManagerInterval = null
+                    pendingRuntimeInterval = interval
+                    pendingDeliveryMode = null
+                    pendingAnnouncementInterval = null
+                    showNotificationPermissionDialog = true
+                    return@BackgroundBundleUpdateTimeDialog
+                }
+
+                vm.updateBackgroundRuntimeUpdateTime(interval)
+                pendingRuntimeInterval = null
             }
         )
     }
@@ -367,6 +439,7 @@ fun UpdatesSettingsScreen(
                     if (!batteryOptimizationDisabled) {
                         pendingInterval = null
                         pendingManagerInterval = null
+                        pendingRuntimeInterval = null
                         pendingDeliveryMode = mode
                         pendingAnnouncementInterval = null
                         showBatteryOptimizationDialog = true
@@ -376,6 +449,7 @@ fun UpdatesSettingsScreen(
                     if (!context.hasNotificationPermission()) {
                         pendingInterval = null
                         pendingManagerInterval = null
+                        pendingRuntimeInterval = null
                         pendingDeliveryMode = mode
                         pendingAnnouncementInterval = null
                         showNotificationPermissionDialog = true
@@ -385,6 +459,7 @@ fun UpdatesSettingsScreen(
 
                 pendingInterval = null
                 pendingManagerInterval = null
+                pendingRuntimeInterval = null
                 pendingDeliveryMode = null
                 pendingAnnouncementInterval = null
                 vm.updateBundleUpdateDeliveryMode(mode)
@@ -410,6 +485,7 @@ fun UpdatesSettingsScreen(
                 if (!batteryOptimizationDisabled) {
                     pendingInterval = null
                     pendingManagerInterval = null
+                    pendingRuntimeInterval = null
                     pendingDeliveryMode = null
                     pendingAnnouncementInterval = interval
                     showBatteryOptimizationDialog = true
@@ -419,6 +495,7 @@ fun UpdatesSettingsScreen(
                 if (!context.hasNotificationPermission()) {
                     pendingInterval = null
                     pendingManagerInterval = null
+                    pendingRuntimeInterval = null
                     pendingDeliveryMode = null
                     pendingAnnouncementInterval = interval
                     showNotificationPermissionDialog = true
@@ -437,6 +514,7 @@ fun UpdatesSettingsScreen(
                 showBatteryOptimizationDialog = false
                 pendingInterval = null
                 pendingManagerInterval = null
+                pendingRuntimeInterval = null
                 pendingDeliveryMode = null
                 pendingAnnouncementInterval = null
             },
@@ -770,6 +848,28 @@ fun UpdatesSettingsScreen(
                             backgroundInterval != vm.backgroundBundleUpdateInterval.default,
                         primaryActionLabel = stringResource(R.string.settings),
                         onPrimaryAction = { showBackgroundUpdateDialog = true }
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.background_runtime_update,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsConfigurableItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.background_runtime_update),
+                        supportingContent = stringResource(R.string.background_runtime_update_description),
+                        secondaryActionLabel = stringResource(R.string.reset),
+                        onSecondaryAction = {
+                            vm.updateBackgroundRuntimeUpdateTime(
+                                vm.backgroundRuntimeUpdateInterval.default
+                            )
+                        },
+                        secondaryActionEnabled =
+                            runtimeInterval != vm.backgroundRuntimeUpdateInterval.default,
+                        primaryActionLabel = stringResource(R.string.settings),
+                        onPrimaryAction = { showBackgroundRuntimeUpdateDialog = true }
                     )
                 }
                 ExpressiveSettingsDivider()

@@ -28,8 +28,13 @@ package android.app
 class Application {
     val filesDir = java.io.File(System.getProperty("java.io.tmpdir"))
     val assets = Assets()
+    fun getString(id: Int, vararg args: Any): String = "No compatible runtime release: " + args.joinToString()
 }
 class Assets { fun open(name: String): java.io.InputStream = error("Unexpected asset access: $name") }
+""",
+    "R.kt": """
+package app.universal.patch.manager
+object R { object string { const val runtime_catalog_no_compatible_release = 1 } }
 """,
     "Device.kt": """
 package android.os

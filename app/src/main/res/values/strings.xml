@@ -2092,7 +2092,7 @@ Details: %2$s</string>
     <string name="manual_update_check_description">Manually check for updates</string>
     <string name="patches_and_manager">Patch Bundles &amp; Manager</string>
     <string name="update_on_metered_connections">Update on metered connections</string>
-    <string name="update_on_metered_connections_description">Allow patch and manager updates over metered networks</string>
+    <string name="update_on_metered_connections_description">Allow manager, bundle, and runtime updates over metered networks</string>
     <string name="update_checking_manager">Check for updates on launch</string>
     <string name="update_checking_manager_description">Check for new versions of UP Manager when the application starts</string>
     <string name="manager_prereleases">Use pre-releases</string>
@@ -2667,4 +2667,22 @@ Details: %2$s</string>
     <string name="catalog_changed_refresh">Catalog changed; refresh the catalog</string>
     <string name="catalog_changed_history">Catalog changed; refresh release history</string>
     <string name="catalog_export_stream_error">Could not open output stream for bundle export</string>
+    <string name="background_runtime_update">Background runtime updates</string>
+    <string name="background_runtime_update_description">Checks for runtime plugin updates in the background and notifies you about available or installed updates</string>
+    <plurals name="runtime_updates_found">
+        <item quantity="one">Runtime plugin update found</item>
+        <item quantity="other">Runtime plugin updates found</item>
+    </plurals>
+    <plurals name="runtime_updates_available_count">
+        <item quantity="one">%1$d new runtime plugin update is available:</item>
+        <item quantity="other">%1$d new runtime plugin updates are available:</item>
+    </plurals>
+    <plurals name="runtime_updates_installed">
+        <item quantity="one">Runtime plugin updated</item>
+        <item quantity="other">Runtime plugins updated</item>
+    </plurals>
+    <plurals name="runtime_updates_installed_count">
+        <item quantity="one">%1$d runtime plugin was updated:</item>
+        <item quantity="other">%1$d runtime plugins were updated:</item>
+    </plurals>
 </resources>

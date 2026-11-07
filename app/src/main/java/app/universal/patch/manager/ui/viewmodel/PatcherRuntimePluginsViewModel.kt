@@ -178,8 +178,17 @@ class PatcherRuntimePluginsViewModel(
 
     init { refreshCatalog() }
 
+    val availableRuntimeVersions = runtimePluginRepository.availableRuntimeVersions
+
     fun refreshPlugins() = viewModelScope.launch {
         reloadPlugins()
+        try {
+            runtimePluginRepository.updateCheck(background = false)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            android.util.Log.w("RuntimeUpdates", "Failed to check for runtime updates", error)
+        }
     }
 
     fun acknowledgeNewPlugins() = viewModelScope.launch {

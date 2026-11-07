@@ -53,6 +53,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import app.universal.patch.manager.ui.component.bundle.BundleMetaPill
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -110,6 +111,7 @@ fun PatcherRuntimePluginsSettingsScreen(
 ) {
     val topAppBarScrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     val pluginStates by viewModel.runtimePluginStates.collectAsStateWithLifecycle(emptyMap())
+    val availableVersions by viewModel.availableRuntimeVersions.collectAsStateWithLifecycle(emptyMap())
     val sourceStates by viewModel.runtimePluginSourceStates.collectAsStateWithLifecycle(emptyMap())
     val loadedRuntimes by viewModel.loadedRuntimes.collectAsStateWithLifecycle(emptyMap())
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -215,6 +217,7 @@ fun PatcherRuntimePluginsSettingsScreen(
                     item(key = "source:$sourceId") {
                         ManagedRuntimeCard(
                             source = source,
+                            updateVersion = availableVersions[sourceId],
                             viewModel = viewModel,
                             remoteSourceBusyState = remoteSourceBusyState,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
@@ -373,6 +376,7 @@ private fun RuntimeImportCard(
 @Composable
 private fun ManagedRuntimeCard(
     source: PatcherRuntimePluginSourceState,
+    updateVersion: String?,
     viewModel: PatcherRuntimePluginsViewModel,
     remoteSourceBusyState: PatcherRuntimePluginsViewModel.RemoteSourceBusyState?,
     modifier: Modifier = Modifier
@@ -393,6 +397,7 @@ private fun ManagedRuntimeCard(
     RuntimePluginCard(
         title = sourceName,
         version = source.version,
+        updateVersion = updateVersion,
         status = when (source.state) {
             is PatcherRuntimePluginSourceState.State.Loaded ->
                 stringResource(R.string.downloader_source_state_loaded)
@@ -685,6 +690,7 @@ private fun RuntimePluginCard(
     onPrimaryAction: () -> Unit,
     onSecondaryAction: () -> Unit,
     modifier: Modifier = Modifier,
+    updateVersion: String? = null,
     middleActionLabel: String? = null,
     onMiddleAction: (() -> Unit)? = null,
     footerActionLabel: String? = null,
@@ -765,6 +771,15 @@ private fun RuntimePluginCard(
                 }
             }
         )
+        updateVersion?.let { version ->
+            Box(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp)) {
+                BundleMetaPill(
+                    text = stringResource(R.string.bundle_update_manual_available_with_version, version),
+                    enabled = true,
+                    isAccent = true
+                )
+            }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()

@@ -639,7 +639,7 @@ fun BundleItemPlaceholder(
 }
 
 @Composable
-private fun BundleMetaPill(
+internal fun BundleMetaPill(
     text: String,
     enabled: Boolean,
     isAccent: Boolean = false,

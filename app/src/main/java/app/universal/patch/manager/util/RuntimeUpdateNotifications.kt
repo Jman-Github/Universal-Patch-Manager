@@ -9,12 +9,53 @@ import android.content.Intent
 import app.universal.patch.manager.MainActivity
 import app.universal.patch.manager.R
 import app.universal.patch.manager.util.permission.hasNotificationPermission
+import kotlinx.serialization.Serializable
+
+@Serializable
+internal data class PendingRuntimeUpdate(
+    val sourceId: String,
+    val installedVersionKey: String?,
+    val prerelease: Boolean?,
+    val name: String,
+    val version: String
+) {
+    val displayLine: String get() = "$name $version"
+}
 
 internal object RuntimeUpdateNotifications {
-    fun show(context: Context, available: List<String>, updated: List<String>, checksComplete: Boolean) {
+    private const val AVAILABLE_ID = 9017
+    private const val UPDATED_ID = 9018
+
+    fun showAvailable(context: Context, updates: List<PendingRuntimeUpdate>, onlyIfActive: Boolean = false) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
-        // Clear stale availability when no sources still need a manual update.
-        if (checksComplete && available.isEmpty()) manager.cancel(9017)
+        if (updates.isEmpty()) {
+            manager.cancel(AVAILABLE_ID)
+            return
+        }
+        if (onlyIfActive && manager.activeNotifications.none { it.id == AVAILABLE_ID && it.tag == null }) return
+        val count = updates.size
+        val title = context.resources.getQuantityString(R.plurals.runtime_updates_found, count)
+        val header = context.resources.getQuantityString(R.plurals.runtime_updates_available_count, count, count)
+        publish(context, manager, AVAILABLE_ID, title, header, updates)
+    }
+
+    fun showCompleted(context: Context, updates: List<PendingRuntimeUpdate>) {
+        if (updates.isEmpty()) return
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        val count = updates.size
+        val title = context.resources.getQuantityString(R.plurals.runtime_updates_installed, count)
+        val header = context.resources.getQuantityString(R.plurals.runtime_updates_installed_count, count, count)
+        publish(context, manager, UPDATED_ID, title, header, updates)
+    }
+
+    private fun publish(
+        context: Context,
+        manager: NotificationManager,
+        id: Int,
+        title: String,
+        header: String,
+        updates: List<PendingRuntimeUpdate>
+    ) {
         if (!context.hasNotificationPermission()) return
         val channel = "runtime-updates"
         manager.createNotificationChannel(NotificationChannel(
@@ -24,24 +65,17 @@ internal object RuntimeUpdateNotifications {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("open_patcher_runtimes", true)
         }
-        val pendingIntent = PendingIntent.getActivity(context, 9017, intent,
+        val pendingIntent = PendingIntent.getActivity(context, id, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        fun publish(id: Int, titleRes: Int, names: List<String>) {
-            if (names.isEmpty()) return
-            val title = context.getString(titleRes)
-            val style = Notification.InboxStyle().setBigContentTitle(title)
-            names.distinct().forEach { style.addLine("• $it") }
-            manager.notify(id, Notification.Builder(context, channel)
-                .setContentTitle(title)
-                .setContentText(names.distinct().joinToString(", "))
-                .setStyle(style)
-                .applyManagerNotificationIcon(context)
-                .setContentIntent(pendingIntent)
-                .setOnlyAlertOnce(true)
-                .setAutoCancel(true)
-                .build())
-        }
-        publish(9017, R.string.runtime_updates_available, available)
-        publish(9018, R.string.runtime_updates_completed, updated)
+        val body = updates.joinToString(separator = "\n", prefix = "$header\n") { "\u2022 ${it.displayLine}" }
+        manager.notify(id, Notification.Builder(context, channel)
+            .setContentTitle(title)
+            .setContentText(header)
+            .setStyle(Notification.BigTextStyle().bigText(body))
+            .applyManagerNotificationIcon(context)
+            .setContentIntent(pendingIntent)
+            .setOnlyAlertOnce(true)
+            .setAutoCancel(true)
+            .build())
     }
 }

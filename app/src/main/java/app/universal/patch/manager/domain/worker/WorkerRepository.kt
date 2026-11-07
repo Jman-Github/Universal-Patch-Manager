@@ -9,7 +9,10 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import androidx.work.Constraints
+import androidx.work.NetworkType
 import androidx.work.ExistingPeriodicWorkPolicy
+import app.universal.patch.manager.patcher.worker.RuntimeUpdateWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OutOfQuotaPolicy
@@ -213,6 +216,18 @@ class WorkerRepository(app: Application) {
             }
         }
         return builder.build() to notificationManager
+    }
+
+    fun scheduleRuntimeUpdateWork(interval: SearchForUpdatesBackgroundInterval) {
+        val workId = "runtime-update-notifications"
+        if (interval == SearchForUpdatesBackgroundInterval.NEVER) {
+            workManager.cancelUniqueWork(workId)
+            return
+        }
+        val request = PeriodicWorkRequestBuilder<RuntimeUpdateWorker>(interval.value, TimeUnit.MINUTES)
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .build()
+        workManager.enqueueUniquePeriodicWork(workId, ExistingPeriodicWorkPolicy.UPDATE, request)
     }
 
     fun scheduleBundleUpdateNotificationWork(
