@@ -1,12 +1,12 @@
 package app.universal.patch.manager.patcher.worker
 
+import app.universal.patch.manager.util.applyManagerNotificationIcon
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.drawable.Icon
 import android.os.PowerManager
 import android.util.Log
 import androidx.work.WorkerParameters
@@ -127,8 +127,7 @@ class ManagerUpdateNotificationWorker(
         return Notification.Builder(applicationContext, managerNotificationChannel.id)
             .setContentTitle(title)
             .setContentText(description)
-            .setLargeIcon(Icon.createWithResource(applicationContext, R.drawable.ic_notification))
-            .setSmallIcon(Icon.createWithResource(applicationContext, R.drawable.ic_notification_status))
+            .applyManagerNotificationIcon(applicationContext)
             .setContentIntent(pendingIntent)
             .setOnlyAlertOnce(true)
             .setAutoCancel(true)

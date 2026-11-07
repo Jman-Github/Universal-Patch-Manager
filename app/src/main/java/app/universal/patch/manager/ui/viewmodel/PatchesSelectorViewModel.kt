@@ -70,6 +70,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -754,31 +755,36 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         bundle.uid.takeIf { required.isNotEmpty() }?.let { it to required }
     }.toMap().toPersistentMap()
 
-    val profiles = combine(
-        patchProfileRepository.profilesForPackageFlow(packageName),
-        patchBundleRepository.bundleInfoFlow,
-        patchBundleRepository.sources
-    ) { profiles, bundleInfoSnapshot, sources ->
-        if (profiles.isEmpty()) return@combine emptyList()
+    val profiles = patchProfileRepository.profilesForPackageFlow(packageName).flatMapLatest { profiles ->
+        flow {
+            // Saved profiles must remain selectable while bundle metadata loads
+            // or legacy local-bundle remapping performs runtime inspection.
+            emit(profiles)
+            if (profiles.isEmpty()) return@flow
+            emitAll(combine(
+                patchBundleRepository.bundleInfoFlow,
+                patchBundleRepository.sources
+            ) { bundleInfoSnapshot, sources ->
+                withContext(Dispatchers.Default) {
+                    val signatureMap = bundleInfoSnapshot.mapValues { (_, info) ->
+                        info.patches.map { it.name.trim().lowercase() }.toSet()
+                    }
 
-        val signatureMap = bundleInfoSnapshot.mapValues { (_, info) ->
-            info.patches.map { it.name.trim().lowercase() }.toSet()
-        }
-
-        profiles.map { profile ->
-            val remappedPayload = profile.payload.remapLocalBundles(sources, signatureMap)
-            if (remappedPayload !== profile.payload) {
-                viewModelScope.launch(Dispatchers.Default) {
-                    patchProfileRepository.updateProfile(
-                        uid = profile.uid,
-                        packageName = profile.packageName,
-                        appVersion = profile.appVersion,
-                        name = profile.name,
-                        payload = remappedPayload
-                    )
+                    profiles.map { profile ->
+                        val remappedPayload = profile.payload.remapLocalBundles(sources, signatureMap)
+                        if (remappedPayload !== profile.payload) {
+                            viewModelScope.launch(Dispatchers.Default) {
+                                patchProfileRepository.updateRemappedPayload(
+                                    uid = profile.uid,
+                                    expectedPayload = profile.payload,
+                                    payload = remappedPayload
+                                )
+                            }
+                            profile.copy(payload = remappedPayload)
+                        } else profile
+                    }
                 }
-                profile.copy(payload = remappedPayload)
-            } else profile
+            })
         }
     }
 

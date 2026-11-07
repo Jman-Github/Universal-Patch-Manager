@@ -16,10 +16,33 @@ class LegacyUrVBackupTest {
         ?: "src/test/fixtures/urv-import")
     private fun raw(name: String) = File(fixtures, name).readText()
 
+    // New nullable settings may appear when re-exporting an older backup.
+    // Every field present in the frozen URV export must still match exactly.
+    private fun assertLegacyValues(expected: JsonElement, actual: JsonElement) {
+        when (expected) {
+            is JsonObject -> {
+                val restored = actual.jsonObject
+                expected.forEach { (key, value) ->
+                    assertTrue("Missing legacy field: $key", key in restored)
+                    assertLegacyValues(value, restored.getValue(key))
+                }
+                (restored.keys - expected.keys).forEach { key ->
+                    assertEquals("Unexpected non-default field: $key", JsonNull, restored.getValue(key))
+                }
+            }
+            is JsonArray -> {
+                val restored = actual.jsonArray
+                assertEquals(expected.size, restored.size)
+                expected.zip(restored).forEach { (before, after) -> assertLegacyValues(before, after) }
+            }
+            else -> assertEquals(expected, actual)
+        }
+    }
+
     @Test fun everythingBackupRetainsAllSectionsAndOptionTypes() {
         val raw = raw("urv_everything.json")
         val backup = json.decodeFromString<EverythingExportFile>(raw)
-        assertEquals(Json.parseToJsonElement(raw), json.encodeToJsonElement(backup))
+        assertLegacyValues(Json.parseToJsonElement(raw), json.encodeToJsonElement(backup))
         assertEquals(1, backup.version)
         assertEquals("URV user profile", backup.patchProfiles.profiles.single().name)
         assertEquals(Theme.DARK, backup.managerSettings.settings.theme)
@@ -33,7 +56,7 @@ class LegacyUrVBackupTest {
     @Test fun standaloneSettingsRetainCredentialsAndCustomizations() {
         val raw = raw("urv_manager_settings.json")
         val backup = json.decodeFromString<ManagerSettingsExportFile>(raw)
-        assertEquals(Json.parseToJsonElement(raw), json.encodeToJsonElement(backup))
+        assertLegacyValues(Json.parseToJsonElement(raw), json.encodeToJsonElement(backup))
         val settings = normalizeImportedManagerSettings(backup.settings)
         assertEquals("https://api.revanced.app", settings.api)
         assertEquals("fixture-key", settings.keystoreAlias)
@@ -59,7 +82,7 @@ class LegacyUrVBackupTest {
             val backup = json.decodeFromString<PatchSelectionExportFile>(raw)
             assertEquals(version, backup.version)
             assertEquals(listOf("Patch"), backup.bundles.single().selection.getValue("com.example.app"))
-            assertEquals(Json.parseToJsonElement(raw), json.encodeToJsonElement(backup))
+            assertLegacyValues(Json.parseToJsonElement(raw), json.encodeToJsonElement(backup))
         }
     }
 

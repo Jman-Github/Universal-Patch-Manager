@@ -39,18 +39,18 @@ fun BundleSelector(sources: List<PatchBundleSource>, onFinish: (PatchBundleSourc
     ModalBottomSheet(
         onDismissRequest = { onFinish(null) }
     ) {
+        Text(
+            text = stringResource(R.string.select),
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp, bottom = 12.dp)
+        )
+        HorizontalDivider()
         ColumnWithScrollbar(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = stringResource(R.string.select),
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-            HorizontalDivider()
             sources.forEachIndexed { index, source ->
                 Column(
                     modifier = Modifier

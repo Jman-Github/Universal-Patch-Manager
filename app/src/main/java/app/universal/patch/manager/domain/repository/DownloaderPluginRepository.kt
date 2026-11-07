@@ -1,5 +1,6 @@
 package app.universal.patch.manager.domain.repository
 
+import app.universal.patch.manager.network.downloader.toDownloaderMainName
 import android.app.Application
 import android.content.Context
 import android.content.ContextWrapper
@@ -44,6 +45,7 @@ import app.revanced.manager.plugin.downloader.Scope as RevancedLegacyScope
 import app.universal.patch.manager.downloader.DownloaderBuilder as ModernDownloaderBuilder
 import app.universal.patch.manager.downloader.DownloaderHostApi as ModernDownloaderHostApi
 import app.universal.patch.manager.downloader.Scope as ModernScope
+import app.universal.patch.manager.downloader.toDownloaderDisplayName
 import app.universal.patch.manager.util.PM
 import app.universal.patch.manager.util.DownloadProgressNotifier
 import app.universal.patch.manager.util.tag
@@ -406,8 +408,7 @@ class DownloaderPluginRepository(
         val entries = readSourceEntries().map { entry ->
             if (entry.id == id) {
                 entry.copy(
-                    latest = enabled,
-                    prerelease = if (enabled) false else entry.prerelease
+                    latest = enabled
                 )
             } else {
                 entry
@@ -675,7 +676,7 @@ class DownloaderPluginRepository(
     ): ResolvedPluginPackage {
         val classNames = resolveClassNames(packageInfo, pluginContext)
         val classLoader = PathClassLoader(packageInfo.applicationInfo!!.sourceDir, app.classLoader)
-        val packageLabel = with(pm) { packageInfo.label() }
+        val packageLabel = with(pm) { packageInfo.label() }.toDownloaderDisplayName()
 
         val scopeImpl = object : LegacyScope, ModernScope, RevancedLegacyScope, RevancedModernScope {
             override val hostPackageName = app.packageName
@@ -697,7 +698,7 @@ class DownloaderPluginRepository(
             LoadedDownloaderPlugin(
                 packageName = packageInfo.packageName,
                 className = className,
-                name = downloader.resolveName(pluginContext, fallbackName),
+                name = downloader.resolveName(pluginContext, fallbackName).toDownloaderDisplayName(),
                 version = packageInfo.versionName ?: "0",
                 sourceId = sourceId,
                 getImpl = downloader.resolveGet(),
@@ -971,8 +972,14 @@ class DownloaderPluginRepository(
         if (tempFile.exists()) tempFile.delete()
         val progressNotification = downloadProgressNotifier.begin(
             _sourceStates.value[entry.id]?.name?.let {
-                app.getString(R.string.downloader_download_title, it)
-            } ?: asset.name
+                app.getString(R.string.downloader_download_title, it.toDownloaderMainName())
+            } ?: app.getString(R.string.downloader_download_title, when {
+                asset.name.contains("apkcombo", true) -> "APKCombo"
+                asset.name.contains("apkmirror", true) -> "APKMirror"
+                asset.name.contains("apkpure", true) -> "APKPure"
+                asset.name.contains("play-store", true) -> "Play Store"
+                else -> entry.assetSelector.toReadableSourceName().toDownloaderMainName()
+            })
         )
 
         runCatching {
@@ -985,7 +992,7 @@ class DownloaderPluginRepository(
             )
             val packageInfo = readArchivePackageInfo(tempFile)
             pm.getArchiveLabel(tempFile, packageInfo)?.let { name ->
-                progressNotification.updateTitle(app.getString(R.string.downloader_download_title, name))
+                progressNotification.updateTitle(app.getString(R.string.downloader_download_title, name.toDownloaderMainName()))
             }
             if (entry.trustedSignatureHex != null) {
                 when (val trust = verifyArchiveTrust(entry, packageInfo)) {

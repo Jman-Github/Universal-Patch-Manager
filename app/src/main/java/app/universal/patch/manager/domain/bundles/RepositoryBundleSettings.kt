@@ -37,7 +37,7 @@ data class RepositoryBundleSettings(
     ): RepositoryBundleSettings {
         val channelSpecified = prereleases != null || latest != null
         return copy(
-            usePrereleases = if (channelSpecified) prereleases == true && latest != true else usePrereleases,
+            usePrereleases = prereleases ?: usePrereleases,
             useLatest = if (channelSpecified) latest == true else useLatest,
             useSpecificVersion = pinned ?: useSpecificVersion,
             selectedVersion = if (pinned != null) selected else selectedVersion

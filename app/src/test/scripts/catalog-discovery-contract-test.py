@@ -50,6 +50,7 @@ with tempfile.TemporaryDirectory(prefix="catalog-contract-") as temporary:
                     encoding="utf-8")
     classes = temporary / "classes"
     sources = [core, MAIN / "network/api/CatalogAppsIndex.kt",
+               MAIN / "network/api/ExternalBundlesEndpoints.kt",
                MAIN / "network/dto/ExternalBundlesGraphql.kt",
                MAIN / "network/utils/APIResponse.kt",
                MAIN / "ui/component/LazyScrollbarGeometry.kt",

@@ -1,20 +1,19 @@
 package app.universal.patch.manager.patcher.patch
 
-import app.universal.patch.manager.BuildConfig
-import app.universal.patch.manager.patcher.reseam.ReseamRuntimeBridge
+import app.universal.patch.manager.network.runtime.PatcherRuntimeKind
+import app.universal.patch.manager.patcher.runtime.PatcherRuntimePluginRegistry
 
 fun patcherEngineDisplayName(
     bundleType: PatchBundleType?,
     usesRevancedPatcher22: Boolean = false
-): String? = when (bundleType) {
-    PatchBundleType.MORPHE -> "Morphe ${BuildConfig.MORPHE_PATCHER_VERSION}"
-    PatchBundleType.REVANCED -> if (usesRevancedPatcher22) {
-        "ReVanced ${BuildConfig.REVANCED_PATCHER_V22_VERSION}"
-    } else {
-        "ReVanced ${BuildConfig.REVANCED_PATCHER_V21_VERSION}"
+): String? {
+    val kind = when (bundleType) {
+        PatchBundleType.MORPHE -> PatcherRuntimeKind.MORPHE
+        PatchBundleType.RESEAM -> PatcherRuntimeKind.RESEAM
+        PatchBundleType.REVANCED -> if (usesRevancedPatcher22) PatcherRuntimeKind.REVANCED_V22 else PatcherRuntimeKind.REVANCED_V21
+        PatchBundleType.AMPLE -> return "Ample"
+        null -> return null
     }
-    PatchBundleType.RESEAM -> runCatching { ReseamRuntimeBridge.engineVersion() }.getOrNull()
-        ?.let { "Reseam $it" } ?: "Reseam"
-    PatchBundleType.AMPLE -> "Ample"
-    null -> null
+    val runtime = PatcherRuntimePluginRegistry.runtimeFor(kind)
+    return runtime?.upstreamVersion?.let { "${kind.displayName} $it" } ?: kind.displayName
 }

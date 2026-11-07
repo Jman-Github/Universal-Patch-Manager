@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.viewmodel
 
+import app.universal.patch.manager.util.selectSuggestedPatchVersion
+
 import app.universal.patch.manager.patcher.runtime.PatcherJvm
 import android.app.Activity
 import android.app.Application
@@ -234,7 +236,7 @@ class SelectedAppInfoViewModel(
                     .map { it.toPatcherPatch() }
                     .toSet()
                     .revancedMostCommonCompatibleVersions(countUnusedPatches = true)[activePackageName]
-                pickRecommendedVersion(versionCounts.orEmpty())
+                selectSuggestedPatchVersion(versionCounts.orEmpty())
             }
             PatchBundleType.MORPHE,
             PatchBundleType.RESEAM,
@@ -455,6 +457,9 @@ class SelectedAppInfoViewModel(
         allowUniversalPatches = prefs.disableUniversalPatchCheck.getBlocking()
 
         viewModelScope.launch {
+            // Cached app-list previews can open this screen before execution metadata is ready.
+            // Do not prune a remembered selection against the initial empty bundle state.
+            bundleRepository.awaitReady()
             selectedAppState
                 .flatMapLatest { app ->
                     bundleRepository.scopedBundleInfoFlow(app.packageName, app.version, app.versionCode)
@@ -604,6 +609,7 @@ class SelectedAppInfoViewModel(
 
     private fun loadProfileConfiguration(id: Int) {
         viewModelScope.launch(Dispatchers.Default) {
+            bundleRepository.awaitReady()
             val profile = patchProfileRepository.getProfile(id) ?: run {
                 withContext(Dispatchers.Main) {
                     app.toast(app.getString(R.string.patch_profile_launch_error))
@@ -712,6 +718,7 @@ class SelectedAppInfoViewModel(
     private fun applySavedSelectionPayload(payload: PatchProfilePayload) {
         val hasPayloadOptions = payload.bundles.any { it.options.isNotEmpty() }
         viewModelScope.launch(Dispatchers.Default) {
+            bundleRepository.awaitReady()
             val sourcesList = bundleRepository.sources.first()
             val bundleInfoSnapshot = bundleRepository.bundleInfoFlow.first()
             val signatureMap = bundleInfoSnapshot.mapValues { (_, info) ->
@@ -1922,7 +1929,7 @@ class SelectedAppInfoViewModel(
                     .toSet()
                     .revancedMostCommonCompatibleVersions(countUnusedPatches = true)[packageName]
                     ?: return null
-                pickRecommendedVersion(versionCounts)
+                selectSuggestedPatchVersion(versionCounts)
             }
 
             PatchBundleType.MORPHE,
@@ -1959,32 +1966,7 @@ class SelectedAppInfoViewModel(
             versions.mapValues { (_, stats) -> stats.totalPatchCount }
         }
 
-        return pickRecommendedVersion(selectedVersions)
-    }
-
-    private fun pickRecommendedVersion(versions: Map<String, Int>): String? {
-        if (versions.isEmpty()) return null
-        if (versions.keys.size < 2) return versions.keys.firstOrNull()
-        return versions.entries.maxWithOrNull { a, b ->
-            val count = a.value.compareTo(b.value)
-            if (count != 0) count else compareVersionStrings(a.key, b.key)
-        }?.key
-    }
-
-    private fun compareVersionStrings(first: String, second: String): Int {
-        val aParts = first.split(Regex("[^0-9]+"))
-            .filter { it.isNotBlank() }
-            .map { it.toIntOrNull() ?: 0 }
-        val bParts = second.split(Regex("[^0-9]+"))
-            .filter { it.isNotBlank() }
-            .map { it.toIntOrNull() ?: 0 }
-        val max = maxOf(aParts.size, bParts.size)
-        for (index in 0 until max) {
-            val a = aParts.getOrElse(index) { 0 }
-            val b = bParts.getOrElse(index) { 0 }
-            if (a != b) return a.compareTo(b)
-        }
-        return first.compareTo(second, ignoreCase = true)
+        return selectSuggestedPatchVersion(selectedVersions)
     }
 
     private data class MorpheVersionStats(

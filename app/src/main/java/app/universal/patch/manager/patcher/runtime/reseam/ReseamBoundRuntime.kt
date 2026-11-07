@@ -26,7 +26,7 @@ class ReseamBoundRuntime(private val context: Context,
         require((selected.keys - available.keys).isEmpty()) {
             "Selected Reseam patch sources are unavailable. Re-open patch selection and select patches again."
         }
-        val runtime = ReseamRuntimeAssets.prepareBundledRuntime(context)
+        val runtime = ReseamRuntimeAssets.prepareSelectedRuntime(context)
         val params = mapOf(
             "cacheDir" to cacheDir, "packageName" to packageName,
             "inputFile" to inputFile, "outputFile" to outputFile,

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import app.universal.patch.manager.data.room.AppDatabase
 import app.universal.patch.manager.data.room.MIGRATION_1_2
+import app.universal.patch.manager.data.room.MIGRATION_21_22
 import app.universal.patch.manager.data.room.MIGRATION_2_3
 import app.universal.patch.manager.data.room.MIGRATION_3_4
 import app.universal.patch.manager.data.room.MIGRATION_4_5
@@ -49,7 +50,8 @@ val databaseModule = module {
                 MIGRATION_17_18,
                 MIGRATION_18_19,
                 MIGRATION_19_20,
-                MIGRATION_20_21
+                MIGRATION_20_21,
+                MIGRATION_21_22
             )
             .build()
 

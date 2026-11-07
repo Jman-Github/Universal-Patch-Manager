@@ -3,6 +3,8 @@ package app.universal.patch.manager.domain.manager
 import android.content.ComponentName
 import android.content.Context
 import android.util.Log
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import app.universal.patch.manager.R
 import app.universal.patch.manager.domain.manager.base.BasePreferencesManager
 import app.universal.patch.manager.domain.manager.base.EditorContext
@@ -116,6 +118,7 @@ class PreferencesManager(
     val skipSplitMergeSigning = booleanPreference("skip_split_merge_signing", false)
     val disableApkSignatureChecks = booleanPreference("disable_apk_signature_checks", false)
     val injectSignatureMetadataAfterPatching = booleanPreference("inject_signature_metadata_after_patching", false)
+    val artMemoryLimit = intPreference("patcher_art_memory_mb", 1024)
     val useJvmRuntime = booleanPreference("patcher_jvm", true)
     val morpheBytecodeMode = enumPreference("morphe_bytecode_mode", MorpheBytecodeMode.FAST)
     val patcherLogMode = enumPreference("patcher_log_mode", PatcherLogMode.DEFAULT)
@@ -150,6 +153,7 @@ class PreferencesManager(
         booleanPreference("dashboard_bundle_update_banner_collapsed", false)
     val autoCollapsePatcherSteps = booleanPreference("auto_collapse_patcher_steps", false)
     val showPatcherMemoryUsageGraph = booleanPreference("show_patcher_memory_usage_graph", true)
+    val pinPatcherResourceGraphs = booleanPreference("pin_patcher_resource_graphs", false)
     val compactPatcherResourceGraphs = booleanPreference("compact_patcher_resource_graphs", false)
     val showPatcherResourceGraphExtraInfo = booleanPreference("show_patcher_resource_graph_extra_info", false)
     val showCompactPatcherResourceGraphExtraInfo = booleanPreference("show_compact_patcher_resource_graph_extra_info", false)
@@ -306,6 +310,13 @@ class PreferencesManager(
         }
     }
 
+    val runtimeSetupDownloading = booleanPreference("runtime_setup_downloading", false)
+    val runtimeSetupVersion = intPreference("runtime_setup_version", 0)
+    // Local restore state is deliberately excluded from exported settings.
+    val runtimeSetupFromBackup = booleanPreference("runtime_setup_from_backup", false)
+    val runtimeRestorePending = booleanPreference("runtime_restore_pending", false)
+    val runtimeRestoreRequest = stringPreference("runtime_restore_request", "")
+    val runtimeSetupSelection = stringSetPreference("runtime_setup_selection", emptySet())
     val firstLaunch = booleanPreference("first_launch", true)
     val managerAutoUpdates = booleanPreference("manager_auto_updates", false)
     val showManagerUpdateDialogOnLaunch = booleanPreference("show_manager_update_dialog_on_launch", true)
@@ -343,6 +354,22 @@ class PreferencesManager(
         "background_bundle_update_time",
         SearchForUpdatesBackgroundInterval.NEVER
     )
+    val backgroundRuntimeUpdateInterval = enumPreference(
+        "background_runtime_update_time",
+        SearchForUpdatesBackgroundInterval.NEVER
+    )
+    internal val pendingRuntimeUpdatesJson = stringPreference("pending_runtime_updates", "")
+
+    suspend fun migrateBackgroundRuntimeUpdateInterval() {
+        dataStore.edit { settings ->
+            val runtimeKey = stringPreferencesKey("background_runtime_update_time")
+            if (settings[runtimeKey] == null) {
+                settings[runtimeKey] = settings[stringPreferencesKey("background_bundle_update_time")]
+                    ?: SearchForUpdatesBackgroundInterval.NEVER.name
+            }
+        }
+    }
+
     val searchForManagerUpdatesBackgroundInterval = enumPreference(
         "background_manager_update_time",
         SearchForUpdatesBackgroundInterval.NEVER
@@ -402,9 +429,22 @@ class PreferencesManager(
     val patchSelectionShowOptionPreviews =
         booleanPreference("patch_selection_show_option_previews", true)
 
+    private val patchSelectionDisplayRestoreFlags = intPreference("patch_selection_display_restore_flags", 0)
+
     suspend fun setMinimalPatchSelectionView(enabled: Boolean) = edit {
-        patchSelectionShowVersionTags.value = !enabled
-        patchSelectionShowOptionPreviews.value = !enabled
+        if (enabled) {
+            val flags = (if (patchSelectionShowVersionTags.value) 1 else 0) or
+                (if (patchSelectionShowOptionPreviews.value) 2 else 0)
+            if (flags != 0) patchSelectionDisplayRestoreFlags.value = flags
+            patchSelectionShowVersionTags.value = false
+            patchSelectionShowOptionPreviews.value = false
+        } else {
+            // Zero means minimal view was reached by disabling both details separately.
+            val flags = patchSelectionDisplayRestoreFlags.value.takeIf { it in 1..3 } ?: 3
+            patchSelectionShowVersionTags.value = flags and 1 != 0
+            patchSelectionShowOptionPreviews.value = flags and 2 != 0
+            patchSelectionDisplayRestoreFlags.value = 0
+        }
     }
 
     val pathSelectorFavorites = stringSetPreference("path_selector_favorites", emptySet())
@@ -541,6 +581,10 @@ class PreferencesManager(
 
     val pathSelectorSortMode = stringPreference("path_selector_sort_mode", "MODIFIED_DESC")
     val pathSelectorSearchQuery = stringPreference("path_selector_search_query", "")
+    val minimalActionButtonGroups = stringSetPreference("minimal_action_button_groups", emptySet())
+    val dashboardAppsActionOrder = stringPreference("dashboard_apps_action_order", "storage,add,batch")
+    val dashboardBundlesActionOrder = stringPreference("dashboard_bundles_action_order", "discovery,add")
+    val dashboardHiddenActions = stringSetPreference("dashboard_hidden_actions", emptySet())
     // Code adapted from Morphe, see third-party/NOTICE for more information
     // https://github.com/MorpheApp/morphe-manager/commit/205956fa9c9bdf6b4ab13cc2d1880077936bc436
     val pathSelectorShowHiddenFiles = booleanPreference("path_selector_show_hidden_files", false)
@@ -560,6 +604,7 @@ class PreferencesManager(
     val splitMergeInstalledFilterSingleApks = booleanPreference("split_merge_installed_filter_single_apks", false)
     val splitMergeAutoCollapseSteps = booleanPreference("split_merge_auto_collapse_steps", false)
     val showSplitMergeMemoryUsageGraph = booleanPreference("show_split_merge_memory_usage_graph", true)
+    val pinSplitMergeResourceGraphs = booleanPreference("pin_split_merge_resource_graphs", false)
     val compactSplitMergeResourceGraphs = booleanPreference("compact_split_merge_resource_graphs", false)
     val showSplitMergeResourceGraphExtraInfo = booleanPreference("show_split_merge_resource_graph_extra_info", false)
     val showCompactSplitMergeResourceGraphExtraInfo = booleanPreference("show_compact_split_merge_resource_graph_extra_info", false)
@@ -639,6 +684,7 @@ class PreferencesManager(
         val skipSplitMergeSigning: Boolean? = null,
         val disableApkSignatureChecks: Boolean? = null,
         val injectSignatureMetadataAfterPatching: Boolean? = null,
+        val artMemoryLimit: Int? = null,
         val useJvmRuntime: Boolean? = null,
         val morpheBytecodeMode: String? = null,
         val patcherLogMode: PatcherLogMode? = null,
@@ -651,6 +697,7 @@ class PreferencesManager(
         val includeGitHubPatInExports: Boolean? = null,
         val autoCollapsePatcherSteps: Boolean? = null,
         val showPatcherMemoryUsageGraph: Boolean? = null,
+        val pinPatcherResourceGraphs: Boolean? = null,
         val compactPatcherResourceGraphs: Boolean? = null,
         val showPatcherResourceGraphExtraInfo: Boolean? = null,
         val showCompactPatcherResourceGraphExtraInfo: Boolean? = null,
@@ -707,6 +754,7 @@ class PreferencesManager(
         val showBatteryOptimizationBanner: Boolean? = null,
         val allowPatchProfileBundleOverride: Boolean? = null,
         val searchForUpdatesBackgroundInterval: SearchForUpdatesBackgroundInterval? = null,
+        val backgroundRuntimeUpdateInterval: SearchForUpdatesBackgroundInterval? = null,
         val searchForManagerUpdatesBackgroundInterval: SearchForUpdatesBackgroundInterval? = null,
         val bundleUpdateDeliveryMode: BundleUpdateDeliveryMode? = null,
         val bundleChangelogFetchLimit: Int? = null,
@@ -728,6 +776,7 @@ class PreferencesManager(
         val patchSelectionHiddenActions: Set<String>? = null,
         val patchSelectionShowVersionTags: Boolean? = null,
         val patchSelectionShowOptionPreviews: Boolean? = null,
+        val patchSelectionDisplayRestoreFlags: Int? = null,
         val patchBundleActionOrder: String? = null,
         val patchBundleHiddenActions: Set<String>? = null,
         val batchResultActionOrder: String? = null,
@@ -752,6 +801,10 @@ class PreferencesManager(
         // https://github.com/MorpheApp/morphe-manager/commit/46e37e2915dc92b6a655127155935e63c0b04efc
         val pathSelectorSortMode: String? = null,
         val pathSelectorSearchQuery: String? = null,
+        val minimalActionButtonGroups: Set<String>? = null,
+        val dashboardAppsActionOrder: String? = null,
+        val dashboardBundlesActionOrder: String? = null,
+        val dashboardHiddenActions: Set<String>? = null,
         val pathSelectorShowHiddenFiles: Boolean? = null,
         val filePickerLastDirectories: Map<String, String>? = null,
         val appSelectorFilterInstalledOnly: Boolean? = null,
@@ -768,6 +821,7 @@ class PreferencesManager(
         val splitMergeInstalledFilterSingleApks: Boolean? = null,
         val splitMergeAutoCollapseSteps: Boolean? = null,
         val showSplitMergeMemoryUsageGraph: Boolean? = null,
+        val pinSplitMergeResourceGraphs: Boolean? = null,
         val compactSplitMergeResourceGraphs: Boolean? = null,
         val showSplitMergeResourceGraphExtraInfo: Boolean? = null,
         val showCompactSplitMergeResourceGraphExtraInfo: Boolean? = null,
@@ -793,7 +847,13 @@ class PreferencesManager(
         snapshot
     }
 
-    suspend fun importSettings(snapshot: SettingsSnapshot) = edit {
+    suspend fun importSettings(snapshot: SettingsSnapshot, restoreRuntimes: Boolean = false) = edit {
+        if (restoreRuntimes) {
+            runtimeSetupFromBackup.value = true
+            runtimeRestorePending.value = true
+            runtimeRestoreRequest.value = java.util.UUID.randomUUID().toString()
+            runtimeSetupDownloading.value = false
+        }
         val imported = normalizeImportedManagerSettings(snapshot)
         importAppearanceSettings(imported)
         importCoreUpdateSettings(imported)
@@ -888,6 +948,7 @@ class PreferencesManager(
             showBatteryOptimizationBanner = showBatteryOptimizationBanner.value,
             allowPatchProfileBundleOverride = allowPatchProfileBundleOverride.value,
             searchForUpdatesBackgroundInterval = searchForUpdatesBackgroundInterval.value,
+            backgroundRuntimeUpdateInterval = backgroundRuntimeUpdateInterval.value,
             searchForManagerUpdatesBackgroundInterval = searchForManagerUpdatesBackgroundInterval.value,
             bundleUpdateDeliveryMode = bundleUpdateDeliveryMode.value,
             bundleChangelogFetchLimit = bundleChangelogFetchLimit.value,
@@ -920,6 +981,7 @@ class PreferencesManager(
             skipSplitMergeSigning = skipSplitMergeSigning.value,
             disableApkSignatureChecks = disableApkSignatureChecks.value,
             injectSignatureMetadataAfterPatching = injectSignatureMetadataAfterPatching.value,
+            artMemoryLimit = artMemoryLimit.value,
             useJvmRuntime = useJvmRuntime.value,
             morpheBytecodeMode = morpheBytecodeMode.value.runtimeValue,
             patcherLogMode = patcherLogMode.value,
@@ -927,6 +989,7 @@ class PreferencesManager(
             removeGmsCoreForPrimaryMount = removeGmsCoreForPrimaryMount.value,
             autoCollapsePatcherSteps = autoCollapsePatcherSteps.value,
             showPatcherMemoryUsageGraph = showPatcherMemoryUsageGraph.value,
+            pinPatcherResourceGraphs = pinPatcherResourceGraphs.value,
             compactPatcherResourceGraphs = compactPatcherResourceGraphs.value,
             showPatcherResourceGraphExtraInfo = showPatcherResourceGraphExtraInfo.value,
             showCompactPatcherResourceGraphExtraInfo = showCompactPatcherResourceGraphExtraInfo.value,
@@ -988,6 +1051,7 @@ class PreferencesManager(
             patchSelectionHiddenActions = patchSelectionHiddenActions.value,
             patchSelectionShowVersionTags = patchSelectionShowVersionTags.value,
             patchSelectionShowOptionPreviews = patchSelectionShowOptionPreviews.value,
+            patchSelectionDisplayRestoreFlags = patchSelectionDisplayRestoreFlags.value,
             patchBundleActionOrder = patchBundleActionOrder.value,
             patchBundleHiddenActions = patchBundleHiddenActions.value,
             batchResultActionOrder = batchResultActionOrder.value,
@@ -1020,6 +1084,10 @@ class PreferencesManager(
             // https://github.com/MorpheApp/morphe-manager/commit/46e37e2915dc92b6a655127155935e63c0b04efc
             pathSelectorSortMode = pathSelectorSortMode.value,
             pathSelectorSearchQuery = pathSelectorSearchQuery.value,
+            minimalActionButtonGroups = minimalActionButtonGroups.value,
+            dashboardAppsActionOrder = dashboardAppsActionOrder.value,
+            dashboardBundlesActionOrder = dashboardBundlesActionOrder.value,
+            dashboardHiddenActions = dashboardHiddenActions.value,
             pathSelectorShowHiddenFiles = pathSelectorShowHiddenFiles.value,
             filePickerLastDirectories = filePickerDirectoryPreferences.mapValues { (_, preference) ->
                 preference.value
@@ -1038,6 +1106,7 @@ class PreferencesManager(
             splitMergeInstalledFilterSingleApks = splitMergeInstalledFilterSingleApks.value,
             splitMergeAutoCollapseSteps = splitMergeAutoCollapseSteps.value,
             showSplitMergeMemoryUsageGraph = showSplitMergeMemoryUsageGraph.value,
+            pinSplitMergeResourceGraphs = pinSplitMergeResourceGraphs.value,
             compactSplitMergeResourceGraphs = compactSplitMergeResourceGraphs.value,
             showSplitMergeResourceGraphExtraInfo = showSplitMergeResourceGraphExtraInfo.value,
             showCompactSplitMergeResourceGraphExtraInfo = showCompactSplitMergeResourceGraphExtraInfo.value,
@@ -1134,6 +1203,7 @@ class PreferencesManager(
         snapshot.searchForUpdatesBackgroundInterval?.let {
             searchForUpdatesBackgroundInterval.value = it
         }
+        snapshot.backgroundRuntimeUpdateInterval?.let { backgroundRuntimeUpdateInterval.value = it }
         snapshot.searchForManagerUpdatesBackgroundInterval?.let {
             searchForManagerUpdatesBackgroundInterval.value = it
         }
@@ -1159,6 +1229,7 @@ class PreferencesManager(
         snapshot.skipSplitMergeSigning?.let { skipSplitMergeSigning.value = it }
         snapshot.disableApkSignatureChecks?.let { disableApkSignatureChecks.value = it }
         snapshot.injectSignatureMetadataAfterPatching?.let { injectSignatureMetadataAfterPatching.value = it }
+        snapshot.artMemoryLimit?.let { artMemoryLimit.value = it.coerceIn(512, 2048) }
         snapshot.useJvmRuntime?.let { useJvmRuntime.value = it }
         snapshot.morpheBytecodeMode?.let {
             morpheBytecodeMode.value = MorpheBytecodeMode.fromRuntimeValue(it)
@@ -1168,6 +1239,7 @@ class PreferencesManager(
         snapshot.removeGmsCoreForPrimaryMount?.let { removeGmsCoreForPrimaryMount.value = it }
         snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }
         snapshot.showPatcherMemoryUsageGraph?.let { showPatcherMemoryUsageGraph.value = it }
+        snapshot.pinPatcherResourceGraphs?.let { pinPatcherResourceGraphs.value = it }
         snapshot.compactPatcherResourceGraphs?.let { compactPatcherResourceGraphs.value = it }
         snapshot.showPatcherResourceGraphExtraInfo?.let { showPatcherResourceGraphExtraInfo.value = it }
         snapshot.showCompactPatcherResourceGraphExtraInfo?.let { showCompactPatcherResourceGraphExtraInfo.value = it }
@@ -1262,6 +1334,10 @@ class PreferencesManager(
         snapshot.patchSelectionSortSelectionMode?.let { patchSelectionSortSelectionMode.value = it }
         snapshot.patchSelectionActionOrder?.let { patchSelectionActionOrder.value = it }
         snapshot.patchSelectionHiddenActions?.let { patchSelectionHiddenActions.value = it }
+        if (snapshot.patchSelectionShowVersionTags != null || snapshot.patchSelectionShowOptionPreviews != null) {
+            patchSelectionDisplayRestoreFlags.value =
+                snapshot.patchSelectionDisplayRestoreFlags?.takeIf { it in 0..3 } ?: 0
+        }
         snapshot.patchSelectionShowVersionTags?.let { patchSelectionShowVersionTags.value = it }
         snapshot.patchSelectionShowOptionPreviews?.let {
             patchSelectionShowOptionPreviews.value = it
@@ -1317,6 +1393,10 @@ class PreferencesManager(
             val preference = filePickerDirectoryPreferences[name] ?: return@forEach
             sanitizeImportedPickerDirectory(directory)?.let { preference.value = it }
         }
+        snapshot.minimalActionButtonGroups?.let { minimalActionButtonGroups.value = it }
+        snapshot.dashboardAppsActionOrder?.let { dashboardAppsActionOrder.value = it }
+        snapshot.dashboardBundlesActionOrder?.let { dashboardBundlesActionOrder.value = it }
+        snapshot.dashboardHiddenActions?.let { dashboardHiddenActions.value = it }
         snapshot.pathSelectorShowHiddenFiles?.let { pathSelectorShowHiddenFiles.value = it }
         snapshot.appSelectorFilterInstalledOnly?.let { appSelectorFilterInstalledOnly.value = it }
         snapshot.appSelectorFilterPatchesAvailable?.let { appSelectorFilterPatchesAvailable.value = it }
@@ -1347,6 +1427,7 @@ class PreferencesManager(
         snapshot.splitMergeInstalledFilterSingleApks?.let { splitMergeInstalledFilterSingleApks.value = it }
         snapshot.splitMergeAutoCollapseSteps?.let { splitMergeAutoCollapseSteps.value = it }
         snapshot.showSplitMergeMemoryUsageGraph?.let { showSplitMergeMemoryUsageGraph.value = it }
+        snapshot.pinSplitMergeResourceGraphs?.let { pinSplitMergeResourceGraphs.value = it }
         snapshot.compactSplitMergeResourceGraphs?.let { compactSplitMergeResourceGraphs.value = it }
         snapshot.showSplitMergeResourceGraphExtraInfo?.let { showSplitMergeResourceGraphExtraInfo.value = it }
         snapshot.showCompactSplitMergeResourceGraphExtraInfo?.let { showCompactSplitMergeResourceGraphExtraInfo.value = it }

@@ -88,9 +88,7 @@ class AdvancedSettingsViewModel(
 
     fun updateAnnouncementSystemEnabled(enabled: Boolean) = viewModelScope.launch(Dispatchers.Default) {
         prefs.announcementSystemEnabled.update(enabled)
-        if (!enabled) {
-            prefs.announcementPushNotificationInterval.update(SearchForUpdatesBackgroundInterval.NEVER)
-        }
+
         workerRepository.scheduleAnnouncementNotificationWork(
             if (enabled) {
                 prefs.announcementPushNotificationInterval.get()

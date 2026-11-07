@@ -59,7 +59,7 @@ class PatcherJvm private constructor(
             }
             checkCancelled()
             val installed = installation.install(requireNotNull(engine.host),
-                if (engine == RuntimeEngine.REVANCED21 || engine == RuntimeEngine.REVANCED_LEGACY || engine == RuntimeEngine.REVANCED22)
+                if (engine != RuntimeEngine.TOOLS)
                     runtimeClassPath?.let(::File) else null)
             if (JarFile(installed.hostJar).use {
                     it.getJarEntry("app/universal/patch/manager/patcher/host/GcOverheadWatch.class") == null
@@ -73,6 +73,9 @@ class PatcherJvm private constructor(
             val tuning = JvmTuning.options(Process.is64Bit()) + debug
             val options = listOf(
                 "-Djava.class.path=" + installed.hostJar, "-Djava.io.tmpdir=" + fs.tempDir,
+                // Bundled JNI libraries load from unnamed modules.
+                // https://github.com/MorpheApp/morphe-manager/commit/e785b35cc5159a9f65e28b3d240f345d3c6555d3
+                "--enable-native-access=ALL-UNNAMED",
                 "-Djdk.lang.Process.launchMechanism=FORK", "-Xmx" + requestedHeapMb + "m", "-Xrs",
                 "-XX:-UsePerfData", "-XX:ErrorFile=" + errorFile
             ) + tuning

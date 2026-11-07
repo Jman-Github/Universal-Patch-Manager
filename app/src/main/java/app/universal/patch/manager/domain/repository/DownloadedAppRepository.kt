@@ -204,7 +204,7 @@ class DownloadedAppRepository(
             if (markUsed) dao.markUsed(it.packageName, it.version)
         }
 
-    suspend fun delete(downloadedApps: Collection<DownloadedApp>) {
+    suspend fun delete(downloadedApps: Collection<DownloadedApp>) = CacheCleanupGuard.withCacheInUse {
         deleteStoredApps(downloadedApps)
         dao.delete(downloadedApps)
     }

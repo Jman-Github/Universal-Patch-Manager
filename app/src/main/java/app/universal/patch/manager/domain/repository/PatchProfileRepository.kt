@@ -89,6 +89,14 @@ class PatchProfileRepository(
         entity.toDomain()
     }
 
+    suspend fun updateRemappedPayload(
+        uid: Int,
+        expectedPayload: PatchProfilePayload,
+        payload: PatchProfilePayload
+    ): Boolean = patchOptionInputManager.updateReferences {
+        dao.updateRemappedPayload(uid, expectedPayload, payload)
+    }
+
     suspend fun updateProfileApk(
         uid: Int,
         apkPath: String?,

@@ -334,6 +334,21 @@ private fun ReVancedManager(
     vm: MainViewModel,
     disableScreenSlideTransitions: Boolean
 ) {
+    val runtimeRepository: app.universal.patch.manager.domain.repository.PatcherRuntimePluginRepository = koinInject()
+    val runtimeSetupRequired by runtimeRepository.runtimeSetupRequired.collectAsStateWithLifecycle(null)
+    if (runtimeSetupRequired == null) {
+        Box(
+            modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+            contentAlignment = androidx.compose.ui.Alignment.Center
+        ) {
+            androidx.compose.material3.CircularProgressIndicator()
+        }
+        return
+    }
+    if (runtimeSetupRequired == true) {
+        app.universal.patch.manager.ui.screen.settings.RuntimeCatalogScreen(onboarding = true)
+        return
+    }
     val navController = rememberNavController()
     val dashboardVm: DashboardViewModel = koinViewModel()
     val batchPatcherVm: BatchPatcherViewModel = koinViewModel()
@@ -371,6 +386,10 @@ private fun ReVancedManager(
             launchSingleTop = true
             popUpTo(Dashboard) { inclusive = false }
         }
+    }
+
+    EventEffect(vm.runtimeUpdateDeepLinkFlow) {
+        navController.navigate(Settings.PatcherRuntimes) { launchSingleTop = true }
     }
 
     EventEffect(vm.managerUpdateDeepLinkFlow) {
@@ -438,6 +457,18 @@ private fun ReVancedManager(
         navController.navigate(Dashboard) {
             launchSingleTop = true
             popUpTo(Dashboard) { inclusive = false }
+        }
+    }
+
+    EventEffect(vm.patchedAppsRequestFlow) { packages ->
+        // Recreate Dashboard so a previously selected tab cannot hide the Apps tab.
+        navController.navigate(Dashboard) {
+            popUpTo(Dashboard) { inclusive = true }
+        }
+        packages.singleOrNull()?.let { packageName ->
+            navController.navigate(InstalledApplicationInfo(packageName)) {
+                launchSingleTop = true
+            }
         }
     }
 

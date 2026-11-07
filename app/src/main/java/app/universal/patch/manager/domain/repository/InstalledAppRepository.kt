@@ -100,7 +100,9 @@ internal class PendingHistoricalSavedEntry(
                 updateUseMount = true,
                 createdAtOverride = sourceApp.createdAt,
                 repatchSourcePath = sourceApp.repatchSourcePath,
-                updateRepatchSource = true
+                updateRepatchSource = true,
+                versionCode = sourceApp.versionCode,
+                updateVersionCode = true
             )
             historicalEntryPersisted = true
             if (sourceHasRetainedRepatchInput) {
@@ -212,6 +214,9 @@ class InstalledAppRepository(
 
     suspend fun get(packageName: String) = dao.get(packageName)
 
+    suspend fun rememberVersionCode(app: InstalledApp, versionCode: Long) =
+        dao.rememberVersionCode(app.currentPackageName, app.version, versionCode)
+
     suspend fun updateSignatureWorkflow(packageName: String, enabled: Boolean): InstalledApp? {
         val app = dao.get(packageName) ?: return null
         val payload = app.selectionPayload ?: return null
@@ -278,7 +283,9 @@ class InstalledAppRepository(
         sortOrderOverride: Int? = null,
         customInstallerPackageName: String? = null,
         repatchSourcePath: String? = null,
-        updateRepatchSource: Boolean = false
+        updateRepatchSource: Boolean = false,
+        versionCode: Long? = null,
+        updateVersionCode: Boolean = versionCode != null
     ) {
         var createdRepatchSourcePath: String? = null
         try {
@@ -333,6 +340,11 @@ class InstalledAppRepository(
                         currentPackageName = currentPackageName,
                         originalPackageName = originalPackageName,
                         version = version,
+                        versionCode = when {
+                            updateVersionCode -> versionCode
+                            existingApp != null && existingApp.version == version -> existingApp.versionCode
+                            else -> null
+                        },
                         installType = installType,
                         sortOrder = sortOrder,
                         selectionPayload = selectionPayload,
@@ -422,7 +434,9 @@ class InstalledAppRepository(
             sortOrderOverride = previousApp.sortOrder,
             customInstallerPackageName = previousApp.customInstallerPackageName,
             repatchSourcePath = previousApp.repatchSourcePath,
-            updateRepatchSource = true
+            updateRepatchSource = true,
+            versionCode = previousApp.versionCode,
+            updateVersionCode = true
         )
     }
 

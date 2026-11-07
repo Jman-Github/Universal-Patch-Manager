@@ -311,8 +311,8 @@ class Filesystem(private val app: Application) {
         var replacementStarted = false
         var keepBackup = false
         try {
-            source.copyTo(staging, overwrite = true)
-            check(staging.isFile && staging.length() == source.length()) {
+            SharedApkFiles.copy(source, staging, sharedApkRoots())
+            check(staging.isFile && SharedApkFiles.identical(staging, source)) {
                 "Failed to verify the retained original app staging copy"
             }
             if (target.isFile) {
@@ -324,17 +324,19 @@ class Filesystem(private val app: Application) {
 
             replacementStarted = true
             if (!staging.renameTo(target)) {
-                staging.copyTo(target, overwrite = true)
+                check(!target.exists() || target.delete())
+                staging.copyTo(target, overwrite = false)
             }
-            check(target.isFile && target.length() == source.length()) {
+            check(target.isFile && SharedApkFiles.identical(target, source)) {
                 "Failed to verify the retained original app"
             }
         } catch (error: Throwable) {
             if (replacementStarted) {
                 val restoreError = runCatching {
                     if (backup.isFile) {
-                        backup.copyTo(target, overwrite = true)
-                        check(target.isFile && target.length() == backup.length()) {
+                        check(!target.exists() || target.delete())
+                        backup.copyTo(target, overwrite = false)
+                        check(target.isFile && SharedApkFiles.identical(target, backup)) {
                             "Failed to verify the restored retained original app"
                         }
                     } else {
@@ -376,7 +378,7 @@ class Filesystem(private val app: Application) {
             compareByDescending<File> { candidate ->
                 if (exactStem != null && candidate.name.startsWith("$exactStem.")) 1 else 0
             }.thenByDescending { candidate -> candidate.lastModified() }
-        )
+        ).map(SharedApkFiles::resolve)
     }
 
     fun findOriginalAppFile(
@@ -406,12 +408,8 @@ class Filesystem(private val app: Application) {
         return candidates.any { candidate -> filesMatch(file, candidate) }
     }
 
-    private fun filesMatch(first: File, second: File): Boolean {
-        if (!first.isFile || !second.isFile) return false
-        if (first.safeCanonicalPath() == second.safeCanonicalPath()) return true
-        if (first.length() != second.length()) return false
-        return filesHaveSameContent(first, second)
-    }
+    private fun filesMatch(first: File, second: File): Boolean =
+        SharedApkFiles.identical(first, second)
 
     private fun filesHaveSameContent(first: File, second: File): Boolean {
         var identical = false
@@ -548,6 +546,17 @@ class Filesystem(private val app: Application) {
         return patchProfileInputsDir.resolve("profile_${profileId}.$sanitized")
     }
 
+    private fun sharedApkRoots() = listOf(
+        app.getDir("downloaded-apps", Context.MODE_PRIVATE), originalAppsDir, repatchInputsDir,
+        repatchInputStagingDir
+    )
+
+    fun deduplicateRetainedApks(commitIfIdle: (() -> Unit) -> Boolean) = SharedApkFiles.deduplicate(
+        listOf(originalAppsDir, repatchInputsDir, repatchInputStagingDir),
+        app.getDir("downloaded-apps", Context.MODE_PRIVATE),
+        commitIfIdle
+    )
+
     fun stageRepatchInputFile(source: File): File {
         check(source.isFile) { "Repatch input source is unavailable" }
         val extension = source.extension.lowercase(Locale.ROOT)
@@ -558,8 +567,8 @@ class Filesystem(private val app: Application) {
         }
         val target = repatchInputStagingDir.resolve("input_${UUID.randomUUID()}.$extension")
         return try {
-            source.copyTo(target, overwrite = false)
-            check(target.isFile && target.length() == source.length()) {
+            SharedApkFiles.copy(source, target, sharedApkRoots())
+            check(target.isFile && SharedApkFiles.identical(target, source)) {
                 "Failed to verify the retained Repatch input"
             }
             target
@@ -614,8 +623,8 @@ class Filesystem(private val app: Application) {
         reusableFile?.let { return PersistedRepatchInput(it, created = false) }
         val target = entryDir.resolve("input_${UUID.randomUUID()}.$extension")
         return try {
-            source.copyTo(target, overwrite = false)
-            check(target.isFile && target.length() == source.length()) {
+            SharedApkFiles.copy(source, target, sharedApkRoots())
+            check(target.isFile && SharedApkFiles.identical(target, source)) {
                 "Failed to verify the persisted Repatch input"
             }
             PersistedRepatchInput(target, created = true)

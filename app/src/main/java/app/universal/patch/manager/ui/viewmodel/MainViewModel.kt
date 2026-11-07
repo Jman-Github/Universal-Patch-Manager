@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.viewmodel
 
+import app.universal.patch.manager.data.platform.SharedApkFiles
 import android.app.Activity
 import android.app.Application
 import android.content.Intent
@@ -69,6 +70,8 @@ class MainViewModel(
     val legacyImportActivityFlow = legacyImportActivityChannel.receiveAsFlow()
     private val bundleDeepLinkChannel = Channel<BundleDeepLink>(Channel.BUFFERED)
     val bundleDeepLinkFlow = bundleDeepLinkChannel.receiveAsFlow()
+    private val runtimeUpdateDeepLinkChannel = Channel<Unit>(Channel.BUFFERED)
+    val runtimeUpdateDeepLinkFlow = runtimeUpdateDeepLinkChannel.receiveAsFlow()
     private val managerUpdateDeepLinkChannel = Channel<Unit>(Channel.BUFFERED)
     val managerUpdateDeepLinkFlow = managerUpdateDeepLinkChannel.receiveAsFlow()
     private val announcementDeepLinkChannel =
@@ -82,6 +85,8 @@ class MainViewModel(
     val batchPatchRequestFlow = batchPatchRequestChannel.receiveAsFlow()
     private val dashboardRequestChannel = Channel<Unit>(Channel.BUFFERED)
     val dashboardRequestFlow = dashboardRequestChannel.receiveAsFlow()
+    private val patchedAppsRequestChannel = Channel<List<String>>(Channel.BUFFERED)
+    val patchedAppsRequestFlow = patchedAppsRequestChannel.receiveAsFlow()
     private var initialIntentHandled = false
 
     private suspend fun suggestedVersion(packageName: String): String? {
@@ -123,7 +128,7 @@ class MainViewModel(
         val sourcePath = sourceRecord.repatchSourcePath
             ?.takeIf(String::isNotBlank)
             ?: return null
-        val file = File(sourcePath).takeIf(File::isFile) ?: return null
+        val file = SharedApkFiles.resolve(File(sourcePath)).takeIf(File::isFile) ?: return null
         return SelectedApp.Local(
             packageName = packageName,
             version = sourceRecord.version,
@@ -203,6 +208,10 @@ class MainViewModel(
 
     fun handleIntent(intent: Intent?) {
         if (handleBatchIntent(intent)) return
+        if (intent?.getBooleanExtra("open_patcher_runtimes", false) == true) {
+            runtimeUpdateDeepLinkChannel.trySend(Unit)
+            return
+        }
         if (ManagerUpdateDeepLinkIntent.shouldOpenManagerUpdate(intent)) {
             managerUpdateDeepLinkChannel.trySend(Unit)
         }
@@ -235,7 +244,8 @@ class MainViewModel(
         if (action !in setOf(
                 BatchPatchIntents.ACTION_PATCH_APP,
                 BatchPatchIntents.ACTION_CHECK_UPDATES,
-                BatchPatchIntents.ACTION_SHOW_RESULT
+                BatchPatchIntents.ACTION_SHOW_RESULT,
+                BatchPatchIntents.ACTION_SHOW_APPS
             )
         ) return false
 
@@ -246,6 +256,9 @@ class MainViewModel(
         }
 
         when (action) {
+            BatchPatchIntents.ACTION_SHOW_APPS -> {
+                patchedAppsRequestChannel.trySend(BatchPatchIntents.packageNames(intent))
+            }
             BatchPatchIntents.ACTION_SHOW_RESULT -> {
                 val packages = BatchPatchIntents.packageNames(intent)
                 if (packages.isEmpty()) {

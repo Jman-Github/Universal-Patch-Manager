@@ -129,6 +129,8 @@ fun AppSelectorScreen(
     vm: AppSelectorViewModel = koinViewModel()
 ) {
     val prefs = koinInject<PreferencesManager>()
+    val appNames = koinInject<app.universal.patch.manager.domain.repository.AppNameRepository>()
+    val cachedAppNames by appNames.names.collectAsStateWithLifecycle()
     val fs = koinInject<Filesystem>()
     val storageRoots = remember { fs.storageRoots() }
     val allowIncompatiblePatches by prefs.disablePatchVersionCompatCheck.getAsState()
@@ -240,12 +242,27 @@ fun AppSelectorScreen(
 
     val appList by vm.appList.collectAsStateWithLifecycle(initialValue = emptyList())
     val notInstalledLabel = stringResource(R.string.not_installed)
-    var appDisplayLabels by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    // Keep names for this list even after the bounded repository cache evicts them.
+    // Replacing the list or leaving the screen releases this screen-owned data.
+    var resolvedDisplayLabels by remember(appList) { mutableStateOf<Map<String, String>>(emptyMap()) }
+    val appDisplayLabels = remember(resolvedDisplayLabels, cachedAppNames) {
+        cachedAppNames + resolvedDisplayLabels.filter { (pkg, label) -> label != pkg }
+    }
     LaunchedEffect(appList) {
-        appDisplayLabels = appList.associate { it.packageName to it.packageName }
-        appDisplayLabels = withContext(Dispatchers.IO) {
-            appList.associate { app ->
-                app.packageName to (app.packageInfo?.let(vm::loadLabel) ?: app.packageName)
+        // Start remote lookups as each local batch is ready, rather than waiting
+        // for PackageManager to read every installed app in a large list first.
+        appList.chunked(32).forEach { batch ->
+            val localLabels = withContext(Dispatchers.IO) {
+                batch.associate { app ->
+                    app.packageName to (app.packageInfo?.let(vm::loadLabel) ?: app.packageName)
+                }
+            }
+            resolvedDisplayLabels = resolvedDisplayLabels + localLabels
+            batch.filter { localLabels[it.packageName] == it.packageName }.forEach { app ->
+                launch {
+                    val name = appNames.resolve(app.packageName)
+                    resolvedDisplayLabels = resolvedDisplayLabels + (app.packageName to name)
+                }
             }
         }
     }
@@ -280,12 +297,9 @@ fun AppSelectorScreen(
             }
             .filter { app ->
                 if (filterText.isBlank()) return@filter true
-                val searchableLabel = if (app.packageInfo == null) {
-                    notInstalledLabel
-                } else {
-                    appDisplayLabels.getOrElse(app.packageName) { app.packageName }
-                }
+                val searchableLabel = appDisplayLabels.getOrElse(app.packageName) { app.packageName }
                 searchableLabel.contains(filterText, true) ||
+                    (app.packageInfo == null && notInstalledLabel.contains(filterText, true)) ||
                     app.packageName.contains(filterText, true)
             }
             .sortedWith(
@@ -806,6 +820,7 @@ private fun AppSelectorCard(
             ) {
                 AppIcon(
                     packageInfo = packageInfo,
+                    packageName = packageName,
                     contentDescription = null,
                     modifier = Modifier.size(44.dp)
                 )

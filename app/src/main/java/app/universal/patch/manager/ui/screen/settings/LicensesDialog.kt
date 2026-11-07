@@ -112,7 +112,10 @@ fun LicensesDialog(onDismiss: () -> Unit) {
                 )
             }
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
+            app.universal.patch.manager.ui.component.LazyColumnWithScrollbar(
+                modifier = Modifier.fillMaxSize(),
+                thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH
+            ) {
                 items(libraries) { library ->
                     ListItem(
                         modifier = Modifier.clickable { selectedLibrary = library },
@@ -203,19 +206,14 @@ private fun AboutViewerDialog(
                     text = title,
                     style = MaterialTheme.typography.titleLarge
                 )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 320.dp, max = 620.dp)
-                        .let { base ->
-                            if (scrollable) {
-                                base.verticalScroll(rememberScrollState())
-                            } else {
-                                base
-                            }
-                        }
-                ) {
-                    content()
+                val contentModifier = Modifier.fillMaxWidth().heightIn(min = 320.dp, max = 620.dp)
+                if (scrollable) {
+                    app.universal.patch.manager.ui.component.ColumnWithScrollbar(
+                        modifier = contentModifier,
+                        thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH
+                    ) { content() }
+                } else {
+                    Box(modifier = contentModifier) { content() }
                 }
                 Box(
                     modifier = Modifier.fillMaxWidth(),

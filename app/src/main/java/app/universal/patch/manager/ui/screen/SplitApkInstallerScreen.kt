@@ -392,12 +392,12 @@ fun SplitApkInstallerScreen(
             )
         }
     ) { paddingValues ->
-        Column(
+        app.universal.patch.manager.ui.component.ColumnWithScrollbar(
+            state = contentScrollState,
             modifier = Modifier
                 .padding(paddingValues)
                 .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-                .verticalScroll(contentScrollState),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Card(

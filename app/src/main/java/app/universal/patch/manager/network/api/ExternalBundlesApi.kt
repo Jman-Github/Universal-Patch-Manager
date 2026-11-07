@@ -1,6 +1,7 @@
 package app.universal.patch.manager.network.api
 
 import android.app.Application
+import app.universal.patch.manager.R
 import app.universal.patch.manager.network.dto.*
 import app.universal.patch.manager.network.service.HttpService
 import app.universal.patch.manager.network.utils.APIFailure
@@ -128,7 +129,7 @@ private fun sourceUrlComparison(url: String): JsonObject {
 }
 
 /** Read-only registry queries. Pages and details share a bounded, persistent cache. */
-class ExternalBundlesApi(private val client: HttpService, app: Application) {
+class ExternalBundlesApi(private val client: HttpService, private val app: Application) {
     private val cacheDir = File(app.cacheDir, "registry_graphql").also { it.mkdirs() }
     private val requestMutex = Mutex()
     private val discoveryMutex = Mutex()
@@ -208,7 +209,7 @@ class ExternalBundlesApi(private val client: HttpService, app: Application) {
                 } catch (cancel: CancellationException) {
                     throw cancel
                 } catch (error: Exception) {
-                    failure(error.message ?: "Catalog search failed")
+                    failure(error.message ?: app.getString(R.string.catalog_search_failed))
                 }
             }
         }
@@ -479,7 +480,7 @@ class ExternalBundlesApi(private val client: HttpService, app: Application) {
             val response = graphql<HistoricalReleaseData>(CatalogHistoryQueries.RELEASE,
                 buildJsonObject { put("id", id) }, cacheIdentity = generation).getOrThrow()
             requireHistoryGeneration(response.generation, generation)
-            val release = response.release ?: error("Release metadata is unavailable")
+            val release = response.release ?: error(app.getString(R.string.catalog_release_metadata_unavailable))
             if (release.metadataDocumentUrl == null) return@catalogResult release
             // Large original release documents are byte chunks, not independent UTF-8 strings.
             val bytes = java.io.ByteArrayOutputStream()
@@ -489,7 +490,7 @@ class ExternalBundlesApi(private val client: HttpService, app: Application) {
                     buildJsonObject { put("id", id); put("offset", offset) },
                     cacheIdentity = generation).getOrThrow()
                 requireHistoryGeneration(page.generation, generation)
-                val document = page.release?.document ?: error("Release document is unavailable")
+                val document = page.release?.document ?: error(app.getString(R.string.catalog_release_document_unavailable))
                 require(document.encoding == "base64" && document.totalBytes in 0..8 * 1024 * 1024) {
                     "Release document is too large to display"
                 }
@@ -542,7 +543,7 @@ class ExternalBundlesApi(private val client: HttpService, app: Application) {
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (error: Exception) {
-                failure(error.message ?: "Catalog request failed")
+                failure(error.message ?: app.getString(R.string.catalog_request_failed))
             }
         }
 
@@ -565,11 +566,11 @@ class ExternalBundlesApi(private val client: HttpService, app: Application) {
         } else queryBundles(identity, 1, host = host, forceRefresh = true,
             sort = "id_asc", includeReleaseNotes = false)
             .getOrNull()?.bundle?.firstOrNull()
-        if (current == null) return failure("Bundle metadata is unavailable")
+        if (current == null) return failure(app.getString(R.string.catalog_bundle_metadata_unavailable))
         // A zero count can mean stale metadata, not an empty bundle. Check freshness
         // before discarding those flags when converting the catalog row to a snapshot.
         if (!current.hasCurrentPatchMetadata()) {
-            return failure("Verified patch metadata is not yet available")
+            return failure(app.getString(R.string.catalog_patch_metadata_unavailable))
         }
         val node = current.toSnapshot(host)
         if (node.sourceUrl.trimEnd('/') != bundle.sourceUrl.trimEnd('/') ||
@@ -579,8 +580,8 @@ class ExternalBundlesApi(private val client: HttpService, app: Application) {
             (!bundle.downloadUrl.isNullOrBlank() && node.downloadUrl != bundle.downloadUrl) ||
             (!bundle.fileHash.isNullOrBlank() && node.fileHash != bundle.fileHash)) {
             return failure(if (generation == null)
-                "This bundle changed. Refresh discovery before viewing its patches."
-                else "This bundle changed. Refresh release history before viewing its patches.")
+                app.getString(R.string.catalog_bundle_changed_discovery)
+                else app.getString(R.string.catalog_bundle_changed_history))
         }
         val artifactIdentity = listOf(bundle.fileHash, bundle.downloadUrl, bundle.version,
             bundle.bundleType, bundle.patchCount).joinToString("|")
@@ -628,7 +629,7 @@ class ExternalBundlesApi(private val client: HttpService, app: Application) {
                 is APIResponse.Failure -> return APIResponse.Failure(page.error)
             }
         }
-        if (result.size < bundle.patchCount) return failure("Verified patch metadata is not yet available")
+        if (result.size < bundle.patchCount) return failure(app.getString(R.string.catalog_patch_metadata_unavailable))
         return APIResponse.Success(result)
     }
 
@@ -685,11 +686,11 @@ class ExternalBundlesApi(private val client: HttpService, app: Application) {
                 cached()?.let { return@withLock APIResponse.Success(it) }
             }
             if (now < retryAt || (!forceRefresh && now < (failedRequests[key]?.first ?: 0L))) {
-                return@withLock failure(if (now < retryAt) "Catalog unavailable. Try again later."
-                    else failedRequests[key]?.second ?: "Catalog unavailable. Try again later.")
+                return@withLock failure(if (now < retryAt) app.getString(R.string.catalog_unavailable)
+                    else failedRequests[key]?.second ?: app.getString(R.string.catalog_unavailable))
             }
             if (requestBudget != null && --requestBudget.remaining < 0) {
-                return@withLock failure("Catalog search exceeded its request budget")
+                return@withLock failure(app.getString(R.string.catalog_search_budget_exceeded))
             }
             try {
                 val responseAndBody = withTimeoutOrNull(ExternalBundlesEndpoints.HOST_QUERY_TIMEOUT_MS) {
@@ -700,8 +701,8 @@ class ExternalBundlesApi(private val client: HttpService, app: Application) {
                         header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                         setBody(payload)
                     }.let { it to it.bodyAsText() }
-                } ?: return@withLock failure<T>("Catalog request timed out").also {
-                    recordFailure(key, "Catalog request timed out")
+                } ?: return@withLock failure<T>(app.getString(R.string.catalog_request_timeout)).also {
+                    recordFailure(key, app.getString(R.string.catalog_request_timeout))
                 }
                 val (response, body) = responseAndBody
                 if (!response.status.isSuccess()) {
@@ -715,14 +716,14 @@ class ExternalBundlesApi(private val client: HttpService, app: Application) {
                         retryAt = failedAt + (retryMillis ?: FAILURE_TTL_MS).coerceAtLeast(1000L)
                     }
                     val resourceError = if (body.trim() == "error code: 1102") " (Cloudflare 1102)" else ""
-                    val message = "Catalog request failed: HTTP ${response.status.value}$resourceError"
+                    val message = app.getString(R.string.catalog_request_http_error, response.status.value, resourceError)
                     recordFailure(key, message)
                     return@withLock failure(message)
                 }
                 val decoded = client.json.decodeFromString<GraphqlResponse<T>>(body)
                 if (!decoded.errors.isNullOrEmpty() || decoded.data == null) {
                     val message = decoded.errors?.joinToString { it.message.orEmpty() }
-                        ?: "GraphQL response missing data"
+                        ?: app.getString(R.string.catalog_response_missing_data)
                     recordFailure(key, message)
                     return@withLock failure(message)
                 }
@@ -736,7 +737,7 @@ class ExternalBundlesApi(private val client: HttpService, app: Application) {
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (error: Exception) {
-                val message = error.message ?: "Catalog request failed"
+                val message = error.message ?: app.getString(R.string.catalog_request_failed)
                 recordFailure(key, message)
                 failure(message)
             }

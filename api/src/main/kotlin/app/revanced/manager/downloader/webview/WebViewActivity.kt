@@ -26,6 +26,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.parcelize.Parcelize
+import app.universal.patch.manager.downloader.toDownloaderDisplayName
 
 @OptIn(DownloaderHostApi::class)
 @DownloaderHostApi
@@ -51,7 +52,7 @@ class WebViewActivity : ComponentActivity() {
 
         val params = intent.getParcelableExtra<Parameters>(KEY)!!
         actionBar?.apply {
-            title = params.title
+            title = params.title.toDownloaderDisplayName()
             setHomeAsUpIndicator(android.R.drawable.ic_menu_close_clear_cancel)
             setDisplayHomeAsUpEnabled(true)
         }

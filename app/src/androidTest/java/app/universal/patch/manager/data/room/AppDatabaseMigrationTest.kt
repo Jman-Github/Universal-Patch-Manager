@@ -117,6 +117,56 @@ class AppDatabaseMigrationTest {
         }
     }
 
+    @Test
+    fun migrate21To22PreservesSavedMetadataWithUnknownVersionCode() {
+        val packageName = "com.example.saved"
+        migrationHelper.createDatabase(DATABASE_21, 21).apply {
+            execSQL(
+                """
+                INSERT INTO installed_app (
+                    current_package_name, original_package_name, version, install_type,
+                    sort_order, selection_payload, created_at, custom_installer_package_name,
+                    repatch_source_path, use_mount
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """.trimIndent(),
+                arrayOf<Any?>(packageName, packageName, "4.3.2360", "SAVED", 7,
+                    "{}", 1234L, null, "/retained/original.apk", 0),
+            )
+            close()
+        }
+        val migrated = migrationHelper.runMigrationsAndValidate(
+            DATABASE_21, 22, true, MIGRATION_21_22,
+        )
+        try {
+            migrated.query(
+                "SELECT version, version_code, sort_order, selection_payload, created_at, " +
+                    "repatch_source_path, use_mount FROM installed_app WHERE current_package_name = ?",
+                arrayOf(packageName),
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("4.3.2360", cursor.getString(0))
+                assertTrue(cursor.isNull(1))
+                assertEquals(7, cursor.getInt(2))
+                assertEquals("{}", cursor.getString(3))
+                assertEquals(1234L, cursor.getLong(4))
+                assertEquals("/retained/original.apk", cursor.getString(5))
+                assertEquals(0, cursor.getInt(6))
+            }
+            // Android long version codes must survive without being truncated to Int.
+            val longVersionCode = 4_294_969_656L
+            migrated.execSQL(
+                "UPDATE installed_app SET version_code = ? WHERE current_package_name = ?",
+                arrayOf(longVersionCode, packageName),
+            )
+            migrated.query("SELECT version_code FROM installed_app").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(longVersionCode, cursor.getLong(0))
+            }
+        } finally {
+            migrated.close()
+        }
+    }
+
     private fun SupportSQLiteDatabase.lsposedModuleColumns(): List<String> =
         query("PRAGMA table_info(`lsposed_modules`)").use { cursor ->
             val nameIndex = cursor.getColumnIndexOrThrow("name")
@@ -128,6 +178,7 @@ class AppDatabaseMigrationTest {
     private companion object {
         const val DATABASE_16 = "lsposed-migration-16"
         const val DATABASE_17 = "lsposed-migration-17"
+        const val DATABASE_21 = "saved-app-migration-21"
         const val PACKAGE_NAME = "com.example.module"
 
         val EXPECTED_COLUMNS = listOf(

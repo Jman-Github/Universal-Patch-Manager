@@ -7,6 +7,7 @@ import app.universal.patch.manager.patcher.worker.AutoPatchWorker
 import app.universal.patch.manager.patcher.worker.BundleUpdateNotificationWorker
 import app.universal.patch.manager.patcher.worker.ManagerUpdateNotificationWorker
 import app.universal.patch.manager.patcher.worker.PatcherWorker
+import app.universal.patch.manager.worker.RuntimeRestoreWorker
 import app.universal.patch.manager.worker.RootMountReconcileWorker
 import app.universal.patch.manager.worker.RootMountReconciliationScheduler
 import org.koin.androidx.workmanager.dsl.workerOf
@@ -19,6 +20,7 @@ val workerModule = module {
     workerOf(::AutoPatchWorker)
     workerOf(::BundleUpdateNotificationWorker)
     workerOf(::ManagerUpdateNotificationWorker)
+    workerOf(::RuntimeRestoreWorker)
     workerOf(::RootMountReconcileWorker)
     single<RootReconciliationScheduling> { RootMountReconciliationScheduler(get()) }
 }

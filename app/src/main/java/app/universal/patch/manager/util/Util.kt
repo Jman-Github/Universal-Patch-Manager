@@ -17,9 +17,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
-import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -307,44 +307,28 @@ fun <T> EventEffect(flow: Flow<T>, vararg keys: Any?, state: Lifecycle.State = L
     }
 }
 
-const val isScrollingUpSensitivity = 10
-
 @Composable
 fun LazyListState.isScrollingUp(): State<Boolean> {
-    return remember(this) {
-        var previousIndex by mutableIntStateOf(firstVisibleItemIndex)
-        var previousScrollOffset by mutableIntStateOf(firstVisibleItemScrollOffset)
-
-        derivedStateOf {
-            val indexChanged = previousIndex != firstVisibleItemIndex
-            val offsetChanged =
-                kotlin.math.abs(previousScrollOffset - firstVisibleItemScrollOffset) > isScrollingUpSensitivity
-
-            if (indexChanged) {
-                previousIndex > firstVisibleItemIndex
-            } else if (offsetChanged) {
-                previousScrollOffset > firstVisibleItemScrollOffset
-            } else {
-                true
-            }.also {
-                previousIndex = firstVisibleItemIndex
-                previousScrollOffset = firstVisibleItemScrollOffset
-            }
-        }
+    val tracker = remember(this) {
+        ScrollDirectionTracker(initialIndex = firstVisibleItemIndex,
+            initialOffset = firstVisibleItemScrollOffset)
     }
+    val scrollingUp = remember(this) { mutableStateOf(true) }
+    LaunchedEffect(this) {
+        snapshotFlow { firstVisibleItemIndex to firstVisibleItemScrollOffset }
+            .collect { (index, offset) -> scrollingUp.value = tracker.update(index, offset) }
+    }
+    return scrollingUp
 }
 
-// TODO: support sensitivity
 @Composable
 fun ScrollState.isScrollingUp(): State<Boolean> {
-    return remember(this) {
-        var previousScrollOffset by mutableIntStateOf(value)
-        derivedStateOf {
-            (previousScrollOffset >= value).also {
-                previousScrollOffset = value
-            }
-        }
+    val tracker = remember(this) { ScrollDirectionTracker(initialOffset = value) }
+    val scrollingUp = remember(this) { mutableStateOf(true) }
+    LaunchedEffect(this) {
+        snapshotFlow { value }.collect { scrollingUp.value = tracker.update(0, it) }
     }
+    return scrollingUp
 }
 
 val LazyListState.isScrollingUp: Boolean @Composable get() = this.isScrollingUp().value

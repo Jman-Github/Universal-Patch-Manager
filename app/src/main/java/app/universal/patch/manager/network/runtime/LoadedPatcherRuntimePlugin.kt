@@ -12,7 +12,8 @@ data class LoadedPatcherRuntimePlugin(
     // Capture file identity now so replacing a managed APK at the same path/version
     // still emits a runtime change and refreshes bundles loaded by that runtime.
     val apkLastModified: Long = apkFile.lastModified(),
-    val apkSize: Long = apkFile.length()
+    val apkSize: Long = apkFile.length(),
+    val upstreamVersion: String? = null
 ) {
     val id: String = sourceId ?: packageName
 }
@@ -21,12 +22,13 @@ fun String.toRuntimeMainName(): String {
     val original = trim()
     val withoutPrefix = original.substringAfterLast(':', original).trim()
     val normalized = withoutPrefix
-        .replace(Regex("(?i)revanced[ ._-]*runtime[ ._-]*v?21"), "ReVanced v21")
-        .replace(Regex("(?i)revanced[ ._-]*v?21"), "ReVanced v21")
+        .replace(Regex("(?i)revanced[ ._-]*(?:runtime[ ._-]*)?v?(21|22)\\b")) {
+            "ReVanced v${it.groupValues[1]}"
+        }
         .replace(Regex("(?i)\\s+runtime\\b"), "")
         .replace(Regex("(?i)\\s+plugin\\b"), "")
         .replace(Regex("\\s+"), " ")
         .trim()
 
-    return normalized.ifBlank { original }
+    return normalized.replace(Regex("(?i)reseam"), "Reseam").ifBlank { original }
 }
