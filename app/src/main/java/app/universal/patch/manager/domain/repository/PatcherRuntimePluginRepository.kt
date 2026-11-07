@@ -11,6 +11,7 @@ import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.IntentFilter
 import app.universal.patch.manager.R
+import app.universal.patch.manager.patcher.runtime.PatcherRuntimePluginRegistry
 import app.universal.patch.manager.data.platform.NetworkInfo
 import app.universal.patch.manager.domain.manager.PreferencesManager
 import app.universal.patch.manager.network.api.UpmAPI
@@ -82,6 +83,8 @@ class PatcherRuntimePluginRepository(
     private val reloadMutex = Mutex()
     private val trustMutex = Mutex()
     private val sourceMutex = Mutex()
+    private val archiveCleanupRequests = kotlinx.coroutines.channels.Channel<Unit>(
+        kotlinx.coroutines.channels.Channel.CONFLATED)
     private val _pluginStates = MutableStateFlow(emptyMap<String, PatcherRuntimePluginState>())
     private val _sourceStates = MutableStateFlow(emptyMap<String, PatcherRuntimePluginSourceState>())
     private val _hasLoadedInitialState = MutableStateFlow(false)
@@ -118,6 +121,38 @@ class PatcherRuntimePluginRepository(
     }
 
     init {
+        scope.launch(Dispatchers.IO) {
+            for (request in archiveCleanupRequests) {
+                sourceMutex.withLock {
+                    try {
+                        // A corrupt preferences document must never be treated as an empty source list.
+                        val raw = prefs.patcherRuntimePluginSourcesJson.get()
+                        val entries = if (raw.isBlank()) emptyList() else
+                            json.decodeFromString<List<PatcherRuntimePluginSourceEntry>>(raw).map { it.withInternalSupportPolicy() }
+                        PatcherRuntimePluginRegistry.withRetainedFiles { retained ->
+                            // A failed replacement may still need recovery files in its former source folder.
+                            if (entries.all { entry ->
+                                    val state = _sourceStates.value[entry.id]
+                                    state != null && state.entry == entry && state.state is PatcherRuntimePluginSourceState.State.Loaded
+                                }) {
+                                pruneOrphanRuntimeDirectories(managedSourceRoot, entries.map { it.id }.toSet(), retained)
+                            }
+                            entries.forEach { entry ->
+                                val state = _sourceStates.value[entry.id]
+                                // Preserve recovery copies until the selected archive has loaded successfully.
+                                if (state != null && state.entry == entry && state.state is PatcherRuntimePluginSourceState.State.Loaded) {
+                                    pruneRuntimeArchives(managedSourceDirectory(entry.id), sourceFile(entry), retained)
+                                }
+                            }
+                        }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        Log.w(tag, "Failed to clean obsolete runtime archives; will retry after reload", error)
+                    }
+                }
+            }
+        }
         runCatching {
             val filter = IntentFilter().apply {
                 PACKAGE_ACTIONS.forEach(::addAction)
@@ -223,6 +258,7 @@ class PatcherRuntimePluginRepository(
 
             _pluginStates.value = installedPlugins
             _sourceStates.value = managedSources
+            archiveCleanupRequests.trySend(Unit)
             installedPluginPackageNames.value = installedPlugins.keys
             installedPluginPackageSnapshots.value = installedPackages.associate {
                 it.packageName to Triple(it.versionName, it.applicationInfo?.sourceDir, it.lastUpdateTime)
@@ -519,17 +555,14 @@ class PatcherRuntimePluginRepository(
             removePlugin(item.packageName)
         }
         val entries = readSourceEntries()
-        val obsolete = entries.filter { it.catalogId == item.id && it.id != replacement.id }
         val updated = entries.filterNot { it.catalogId == item.id || it.id == replacement.id } + replacement
         writeSourceEntries(updated)
         reload()
         check(_sourceStates.value[replacement.id]?.state is PatcherRuntimePluginSourceState.State.Loaded) {
             "The verified ${item.name} replacement could not be loaded. Try setup again."
         }
-        obsolete.forEach { managedSourceDirectory(it.id).deleteRecursively() }
-        managedSourceDirectory(replacement.id).listFiles()?.filter {
-            it.extension == "apk" && it != active
-        }?.forEach { it.delete() }
+        // Reload queues cleanup under sourceMutex; selected old runtimes remain protected.
+        archiveCleanupRequests.trySend(Unit)
     }
 
     suspend fun importCatalogFile(file: File): String = withContext(Dispatchers.IO) {

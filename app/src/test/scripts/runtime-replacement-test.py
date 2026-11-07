@@ -52,6 +52,7 @@ class Repository(val root: File) {
     val events = mutableListOf<String>()
     val pm = PM(events)
     val app = App()
+    val archiveCleanupRequests = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
     val signingPackageInfoFlags = 0
     var valid = true
     var entries = emptyList<PatcherRuntimePluginSourceEntry>()
@@ -100,8 +101,9 @@ fun main(args: Array<String>) = runBlocking {
     success.activateCatalogReplacement(item, replacement)
     check(success.events == listOf("verified", "resolved", "uninstall", "removed", "activated", "reloaded"))
     check(!success.pm.installed && success.sourceFile(replacement).isFile)
-    check(!success.sourceFile(replacement.copy(archiveName = "old.apk")).exists())
-    check(!success.managedSourceDirectory("duplicate").exists())
+    check(success.sourceFile(replacement.copy(archiveName = "old.apk")).exists())
+    check(success.archiveCleanupRequests.tryReceive().isSuccess)
+    check(success.managedSourceDirectory("duplicate").exists()) // Deferred cleanup protects runtime users.
     check(success.sourceFile(unrelated).isFile)
 
     val cancelled = fixture("cancelled")
