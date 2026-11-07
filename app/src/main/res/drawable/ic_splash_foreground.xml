@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Vector geometry from assets/icons/icon.svg, with the launcher's existing safe-zone padding. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="512" android:viewportHeight="512">
+    <group android:pivotX="256" android:pivotY="256" android:scaleX="0.6666667" android:scaleY="0.6666667">
+    <path android:fillColor="#E5FFF7" android:pathData="M154,126H219A28,28 0,0 1,247,154V219A28,28 0,0 1,219,247H154A28,28 0,0 1,126,219V154A28,28 0,0 1,154,126Z" />
+    <path android:fillColor="#AAF57E" android:pathData="M293,126H358A28,28 0,0 1,386,154V219A28,28 0,0 1,358,247H293A28,28 0,0 1,265,219V154A28,28 0,0 1,293,126Z" />
+    <path android:fillColor="#64E5CF" android:pathData="M154,265H219A28,28 0,0 1,247,293V358A28,28 0,0 1,219,386H154A28,28 0,0 1,126,358V293A28,28 0,0 1,154,265Z" />
+    <path android:fillColor="#DCFDF0" android:pathData="M293,265H358A28,28 0,0 1,386,293V358A28,28 0,0 1,358,386H293A28,28 0,0 1,265,358V293A28,28 0,0 1,293,265Z" />
+    <path android:fillColor="#103C46" android:pathData="M190,256a66,66 0,1 0,132,0a66,66 0,1 0,-132,0" />
+    <path android:pathData="M200,256a56,56 0,1 0,112,0a56,56 0,1 0,-112,0">
+        <aapt:attr name="android:fillColor">
+            <gradient android:startX="200" android:startY="200" android:endX="312" android:endY="312"
+                android:startColor="#B6F78E" android:endColor="#54DFC1" android:type="linear" />
+        </aapt:attr>
+    </path>
+    <path android:fillColor="#123E47" android:pathData="M244,220H268V244H292V268H268V292H244V268H220V244H244Z" />
+    <path android:fillColor="#178A8E" android:fillAlpha="0.47" android:pathData="M151,161a8,8 0,1 0,16,0a8,8 0,1 0,-16,0" />
+    <path android:fillColor="#178A8E" android:fillAlpha="0.47" android:pathData="M342,351a8,8 0,1 0,16,0a8,8 0,1 0,-16,0" />
+    </group>
+</vector>
