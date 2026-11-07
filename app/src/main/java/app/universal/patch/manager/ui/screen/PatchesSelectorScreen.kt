@@ -2644,10 +2644,10 @@ private fun PatchProfileBundleDialog(
         },
         title = { CenteredDialogTitle(stringResource(R.string.patch_profile_select_bundles_title)) },
         text = {
-            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(stringResource(R.string.patch_profile_select_bundles_description))
                 LazyColumnWithScrollbar(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f, fill = false),
                     thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                     reserveScrollbarSpace = true,
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -2756,84 +2756,84 @@ private fun PatchProfileNameDialog(
         },
         title = { CenteredDialogTitle(stringResource(R.string.patch_profile_name_title)) },
         text = {
-            LazyColumnWithScrollbar(
-                modifier = Modifier.fillMaxSize(),
-                thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
-                reserveScrollbarSpace = true,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                item { Text(stringResource(R.string.patch_profile_name_description)) }
-                item {
-                    TextField(
-                        value = nameFieldValue,
-                        onValueChange = {
-                            nameFieldValue = it
-                            onNameChange(it.text)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(focusRequester),
-                        singleLine = true,
-                        enabled = !isSaving,
-                        placeholder = { Text(stringResource(R.string.patch_profile_name_hint)) },
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(
-                            onDone = {
-                                if (nameFieldValue.text.isNotBlank() && !isSaving) onConfirm()
-                            }
-                        )
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.patch_profile_name_description))
+                TextField(
+                    value = nameFieldValue,
+                    onValueChange = {
+                        nameFieldValue = it
+                        onNameChange(it.text)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    singleLine = true,
+                    enabled = !isSaving,
+                    placeholder = { Text(stringResource(R.string.patch_profile_name_hint)) },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (nameFieldValue.text.isNotBlank() && !isSaving) onConfirm()
+                        }
                     )
-                }
+                )
 
                 if (profiles.isNotEmpty()) {
-                    item { Text(stringResource(R.string.patch_profile_update_existing_title)) }
-                    item {
-                        Text(
-                            text = stringResource(R.string.patch_profile_update_existing_description),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    items(
-                        items = profiles,
-                        key = { it.uid }
-                    ) { profile ->
-                        val selected = selectedProfileId == profile.uid
-                        ListItem(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(
-                                    if (selected)
-                                        MaterialTheme.colorScheme.secondaryContainer
-                                    else
-                                        Color.Transparent
-                                )
-                                .clickable(enabled = !isSaving) {
-                                    onProfileSelected(if (selected) null else profile)
-                                }
-                                .padding(horizontal = 4.dp),
-                            headlineContent = { Text(profile.name) },
-                            supportingContent = resolvePatchProfileAppVersion(
-                                appVersion = profile.appVersion,
-                                apkPath = profile.apkPath,
-                                apkVersion = profile.apkVersion,
-                                useSelectedApkVersion = profile.useSelectedApkVersion
-                            )?.let { version ->
-                                {
-                                    Text(
-                                        text = version.ifBlank { stringResource(R.string.any_version) },
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        style = MaterialTheme.typography.bodySmall
+                    LazyColumnWithScrollbar(
+                        thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+                        modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+                        reserveScrollbarSpace = true,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        item { Text(stringResource(R.string.patch_profile_update_existing_title)) }
+                        item {
+                            Text(
+                                text = stringResource(R.string.patch_profile_update_existing_description),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        items(
+                            items = profiles,
+                            key = { it.uid }
+                        ) { profile ->
+                            val selected = selectedProfileId == profile.uid
+                            ListItem(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(
+                                        if (selected)
+                                            MaterialTheme.colorScheme.secondaryContainer
+                                        else
+                                            Color.Transparent
                                     )
-                                }
-                            },
-                            trailingContent = {
-                                if (selected) {
-                                    Icon(Icons.Filled.Check, null)
-                                }
-                            },
-                            colors = transparentListItemColors
-                        )
+                                    .clickable(enabled = !isSaving) {
+                                        onProfileSelected(if (selected) null else profile)
+                                    }
+                                    .padding(horizontal = 4.dp),
+                                headlineContent = { Text(profile.name) },
+                                supportingContent = resolvePatchProfileAppVersion(
+                                    appVersion = profile.appVersion,
+                                    apkPath = profile.apkPath,
+                                    apkVersion = profile.apkVersion,
+                                    useSelectedApkVersion = profile.useSelectedApkVersion
+                                )?.let { version ->
+                                    {
+                                        Text(
+                                            text = version.ifBlank { stringResource(R.string.any_version) },
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                },
+                                trailingContent = {
+                                    if (selected) {
+                                        Icon(Icons.Filled.Check, null)
+                                    }
+                                },
+                                colors = transparentListItemColors
+                            )
+                        }
                     }
                 }
             }

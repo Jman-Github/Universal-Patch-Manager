@@ -111,7 +111,7 @@ class PreferencesHarness {
     suspend fun edit(block: PreferencesHarness.() -> Unit) { block() }
     %s
 }
-data class SourceEntry(val id: String, val prerelease: Boolean, val latest: Boolean)
+data class SourceEntry(val id: String, val prerelease: Boolean, val latest: Boolean, val isInternalSupport: Boolean = false)
 %s
 %s
 class SettingsTransitionsTest {

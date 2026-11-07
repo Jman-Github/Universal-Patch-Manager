@@ -1756,7 +1756,7 @@ private fun PatchProfilesOrderDialog(
         },
         title = { CenteredDialogTitle(text = stringResource(R.string.patch_profiles_reorder_title)) },
         text = {
-            Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     text = stringResource(R.string.patch_profiles_reorder_description),
                     style = MaterialTheme.typography.bodyMedium,
@@ -1766,7 +1766,7 @@ private fun PatchProfilesOrderDialog(
                     thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f),
+                        .weight(1f, fill = false),
                     reserveScrollbarSpace = true,
                     state = lazyListState
                 ) {

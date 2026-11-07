@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -183,12 +183,11 @@ fun CollectionDialog(
     text: @Composable () -> Unit
 ) {
     AlertDialogExtended(
-        modifier = Modifier.fillMaxWidth().height(560.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(max = 560.dp),
         onDismissRequest = onDismissRequest,
         confirmButton = confirmButton,
         dismissButton = dismissButton,
         title = title,
-        text = text,
-        fillText = true
+        text = text
     )
 }

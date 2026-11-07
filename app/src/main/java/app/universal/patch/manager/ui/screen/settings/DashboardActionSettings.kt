@@ -34,7 +34,6 @@ import app.universal.patch.manager.ui.component.settings.SettingsSearchHighlight
 import app.universal.patch.manager.ui.model.dashboardActionOrder
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun DashboardActionSettings(
     prefs: PreferencesManager,
@@ -188,11 +187,12 @@ internal fun DashboardActionSettings(
                 }
             )
         }
-        FlowRow(
+        Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
+            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = {
+            TextButton(modifier = Modifier.weight(1f), onClick = {
                 scope.launch {
                     prefs.edit {
                         prefs.dashboardHiddenActions.value = prefs.dashboardHiddenActions.value
@@ -202,7 +202,7 @@ internal fun DashboardActionSettings(
             }) {
                 Text(stringResource(R.string.patch_selection_action_visibility_reset))
             }
-            TextButton(onClick = {
+            TextButton(modifier = Modifier.weight(1f), onClick = {
                 workingOrder.clear()
                 workingOrder.addAll(defaults)
                 saveOrder()
