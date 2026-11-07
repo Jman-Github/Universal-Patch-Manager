@@ -2644,61 +2644,63 @@ private fun PatchProfileBundleDialog(
         },
         title = { CenteredDialogTitle(stringResource(R.string.patch_profile_select_bundles_title)) },
         text = {
-            LazyColumnWithScrollbar(
-                modifier = Modifier.fillMaxSize(),
-                thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
-                reserveScrollbarSpace = true,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                item { Text(stringResource(R.string.patch_profile_select_bundles_description)) }
-                if (bundles.isEmpty()) {
-                    item {
-                        Text(
-                            text = stringResource(R.string.patch_profile_select_bundles_empty),
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
-                } else {
-                    items(bundles, key = { it.uid }) { bundle ->
-                        val selected = bundle.uid in selectedBundleUids
-                        val toggle: () -> Unit = {
-                            onSelectionChanged()
-                            if (bundle.uid in selectedBundleUids) {
-                                selectedBundleUids.remove(bundle.uid)
-                            } else {
-                                selectedBundleUids.add(bundle.uid)
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable(onClick = toggle),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            HapticCheckbox(
-                                checked = selected,
-                                onCheckedChange = { toggle() }
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.patch_profile_select_bundles_description))
+                LazyColumnWithScrollbar(
+                    modifier = Modifier.weight(1f),
+                    thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+                    reserveScrollbarSpace = true,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (bundles.isEmpty()) {
+                        item {
+                            Text(
+                                text = stringResource(R.string.patch_profile_select_bundles_empty),
+                                color = MaterialTheme.colorScheme.outline
                             )
+                        }
+                    } else {
+                        items(bundles, key = { it.uid }) { bundle ->
+                            val selected = bundle.uid in selectedBundleUids
+                            val toggle: () -> Unit = {
+                                onSelectionChanged()
+                                if (bundle.uid in selectedBundleUids) {
+                                    selectedBundleUids.remove(bundle.uid)
+                                } else {
+                                    selectedBundleUids.add(bundle.uid)
+                                }
+                            }
 
-                            Column {
-                                Text(
-                                    text = bundleDisplayNames[bundle.uid] ?: bundle.name,
-                                    style = MaterialTheme.typography.bodyLarge
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(onClick = toggle),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                HapticCheckbox(
+                                    checked = selected,
+                                    onCheckedChange = { toggle() }
                                 )
-                                bundle.version?.let { version ->
+
+                                Column {
                                     Text(
-                                        text = version,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        text = bundleDisplayNames[bundle.uid] ?: bundle.name,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    bundle.version?.let { version ->
+                                        Text(
+                                            text = version,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Text(
+                                        text = stringResource(bundleTypeLabelRes(bundleTypes[bundle.uid])),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline
                                     )
                                 }
-                                Text(
-                                    text = stringResource(bundleTypeLabelRes(bundleTypes[bundle.uid])),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
                             }
                         }
                     }

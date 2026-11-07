@@ -214,6 +214,9 @@ class InstalledAppRepository(
 
     suspend fun get(packageName: String) = dao.get(packageName)
 
+    suspend fun rememberVersionCode(app: InstalledApp, versionCode: Long) =
+        dao.rememberVersionCode(app.currentPackageName, app.version, versionCode)
+
     suspend fun updateSignatureWorkflow(packageName: String, enabled: Boolean): InstalledApp? {
         val app = dao.get(packageName) ?: return null
         val payload = app.selectionPayload ?: return null

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.clickable
@@ -885,7 +886,20 @@ fun PatchBundleDiscoveryScreen(
             if (!errorMessage.isNullOrBlank()) {
                 item(key = "catalog_error") {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(errorMessage.orEmpty(), color = MaterialTheme.colorScheme.error)
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                            shape = MaterialTheme.shapes.extraLarge
+                        ) {
+                            Row(Modifier.fillMaxWidth().padding(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.Top) {
+                                Icon(androidx.compose.material.icons.Icons.Outlined.WarningAmber,
+                                    contentDescription = null, modifier = Modifier.size(20.dp))
+                                Text(errorMessage.orEmpty(), Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
                         TextButton(onClick = { viewModel.refresh(force = true) }) {
                             Text(stringResource(R.string.catalog_refresh))
                         }

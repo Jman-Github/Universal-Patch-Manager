@@ -1996,6 +1996,8 @@ class InstalledAppInfoViewModel(
         }
         displayedVersionCode = withContext(Dispatchers.IO) {
             app.versionCode
+                ?: installedAppRepository.get(app.currentPackageName)
+                    ?.takeIf { it.version == app.version }?.versionCode
                 ?: savedInfo?.versionCodeFor(app.version)
                 ?: installedInfo?.versionCodeFor(app.version)
                 ?: app.repatchSourcePath?.let(::File)?.takeIf(File::isFile)
@@ -2004,6 +2006,9 @@ class InstalledAppInfoViewModel(
                         info.packageName == app.originalPackageName ||
                             info.packageName == devicePackageName
                     }?.versionCodeFor(app.version)
+        }
+        displayedVersionCode?.let { code ->
+            installedAppRepository.rememberVersionCode(app, code)
         }
         customInstallerLabel = if (
             app.installType == InstallType.CUSTOM && installedInfo != null

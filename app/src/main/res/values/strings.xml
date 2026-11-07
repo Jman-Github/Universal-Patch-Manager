@@ -2651,4 +2651,20 @@ Details: %2$s</string>
     <string name="runtime_catalog_refresh_failed">Could not refresh the runtime catalog</string>
     <string name="runtime_catalog_no_compatible_release">No compatible release of %1$s is available. Retry after its runtime release is published.</string>
     <string name="runtime_signer_unreadable">Failed to read signer for %1$s</string>
+    <string name="catalog_request_timeout">Catalog request timed out</string>
+    <string name="catalog_unavailable">Catalog unavailable. Try again later.</string>
+    <string name="catalog_search_budget_exceeded">Catalog search exceeded its request budget</string>
+    <string name="catalog_response_missing_data">GraphQL response missing data</string>
+    <string name="catalog_request_failed">Catalog request failed</string>
+    <string name="catalog_search_failed">Catalog search failed</string>
+    <string name="catalog_request_http_error">Catalog request failed: HTTP %1$d%2$s</string>
+    <string name="catalog_release_metadata_unavailable">Release metadata is unavailable</string>
+    <string name="catalog_release_document_unavailable">Release document is unavailable</string>
+    <string name="catalog_bundle_metadata_unavailable">Bundle metadata is unavailable</string>
+    <string name="catalog_patch_metadata_unavailable">Verified patch metadata is not yet available</string>
+    <string name="catalog_bundle_changed_discovery">This bundle changed. Refresh discovery before viewing its patches.</string>
+    <string name="catalog_bundle_changed_history">This bundle changed. Refresh release history before viewing its patches.</string>
+    <string name="catalog_changed_refresh">Catalog changed; refresh the catalog</string>
+    <string name="catalog_changed_history">Catalog changed; refresh release history</string>
+    <string name="catalog_export_stream_error">Could not open output stream for bundle export</string>
 </resources>

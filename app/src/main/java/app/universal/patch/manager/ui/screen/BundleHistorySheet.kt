@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import app.universal.patch.manager.util.catalogErrorMessage
 import app.universal.patch.manager.R
 import app.universal.patch.manager.network.dto.ExternalBundleSnapshot
 import app.universal.patch.manager.network.dto.HistoricalRelease
@@ -90,7 +91,7 @@ internal fun BundleHistorySheet(
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (failure: Exception) {
-            error = failure.message ?: context.getString(R.string.patch_bundle_discovery_error)
+            error = context.catalogErrorMessage(failure.message)
         } finally {
             loading = false
         }
@@ -209,7 +210,7 @@ private fun HistoricalReleaseCard(
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (failure: Exception) {
-            bundlesError = failure.message ?: context.getString(R.string.patch_bundle_discovery_error)
+            bundlesError = context.catalogErrorMessage(failure.message)
         } finally {
             bundlesLoading = false
         }

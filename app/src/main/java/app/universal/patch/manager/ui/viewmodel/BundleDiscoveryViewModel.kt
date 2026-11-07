@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.universal.patch.manager.util.catalogErrorMessage
 import app.universal.patch.manager.R
 import app.universal.patch.manager.domain.bundles.BundleDiscoveryStateStore
 import app.universal.patch.manager.domain.bundles.DiscoveryScrollPosition
@@ -277,7 +278,7 @@ class BundleDiscoveryViewModel(
             } catch (error: Exception) {
                 if (token == refreshToken) {
                     errorMessage = app.getString(R.string.patch_bundle_discovery_error) +
-                        error.message?.let { "\n$it" }.orEmpty()
+                        error.message?.let { "\n" + app.catalogErrorMessage(it) }.orEmpty()
                     canLoadMore = cached?.canLoadMore ?: false
                 }
             } finally {
@@ -385,7 +386,7 @@ class BundleDiscoveryViewModel(
                     )
                     app.contentResolver.openOutputStream(target)?.use { output ->
                         tempFile.inputStream().use { input -> input.copyTo(output) }
-                    } ?: error("Could not open output stream for bundle export")
+                    } ?: error(app.getString(R.string.catalog_export_stream_error))
                 }
                 progressNotification.complete()
                 app.toast(app.getString(R.string.patch_bundle_export_success, successName))
@@ -550,7 +551,7 @@ class BundleDiscoveryViewModel(
                 throw cancel
             } catch (error: Throwable) {
                 if (generation == bundleDatasetGeneration) {
-                    patchesError[key] = error.message ?: app.getString(R.string.patch_bundle_discovery_error)
+                    patchesError[key] = app.catalogErrorMessage(error.message)
                 }
             } finally {
                 if (generation == bundleDatasetGeneration) {
