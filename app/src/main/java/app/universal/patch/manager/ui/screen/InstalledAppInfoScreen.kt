@@ -394,6 +394,7 @@ fun InstalledAppInfoScreen(
                     version = savedVersion ?: currentVersion,
                     patchInfos = patchInfos,
                     fallbackNames = missingNames,
+                    fallbackDetails = savedBundle?.patchDisplayInfo.orEmpty(),
                     bundleAvailable = info != null,
                     hasUpdate = savedVersion != null &&
                         currentVersion != null &&

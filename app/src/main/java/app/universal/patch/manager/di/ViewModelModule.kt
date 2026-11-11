@@ -22,6 +22,7 @@ val viewModelModule = module {
     viewModelOf(::BatchPatcherViewModel)
     viewModelOf(::UpdateViewModel)
     viewModelOf(::ImportExportViewModel)
+    viewModelOf(::AppEntryArchiveViewModel)
     viewModelOf(::AboutViewModel)
     viewModelOf(::DeveloperOptionsViewModel)
     viewModelOf(::ContributorViewModel)

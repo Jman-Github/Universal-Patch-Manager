@@ -589,7 +589,7 @@
     <string name="import_manager_settings_success">Imported manager settings</string>
     <string name="import_settings_in_progress">Importing settings…</string>
     <string name="import_everything">Import everything</string>
-    <string name="import_everything_description">Import patch selections and options, patch bundles, patch profiles, and manager settings from a single JSON file. The app restarts when the import is complete</string>
+    <string name="import_everything_description">Import patch selections and options, patch bundles, patch profiles, and manager settings from a single JSON file (keystore and app entries are not included). The app restarts when the import is complete</string>
     <string name="import_everything_fail">Could not import backup file: %s</string>
     <string name="export_patch_selection">Export patch selections and options</string>
     <string name="export_patch_selection_description">Export patch selections and options to a JSON file</string>
@@ -641,7 +641,7 @@
     <string name="export_manager_settings_fail">Could not export manager settings: %s</string>
     <string name="export_manager_settings_success">Exported manager settings</string>
     <string name="export_everything">Export everything</string>
-    <string name="export_everything_description">Export patch selections and options, patch bundles, patch profiles, and manager settings to one JSON file (keystore is not included)</string>
+    <string name="export_everything_description">Export patch selections and options, patch bundles, patch profiles, and manager settings to a single JSON file (keystore and app entries are not included)</string>
     <string name="export_everything_fail">Could not export backup file: %s</string>
     <string name="export_everything_success">Exported backup file</string>
     <string name="reset_patch_selection">Reset patch selections</string>
@@ -2684,5 +2684,52 @@ Details: %2$s</string>
     <plurals name="runtime_updates_installed_count">
         <item quantity="one">%1$d runtime plugin was updated:</item>
         <item quantity="other">%1$d runtime plugins were updated:</item>
+    </plurals>
+    <string name="export_app_entries">Export app entries</string>
+    <string name="export_app_entries_description">Back up selected patched APKs and their app details to a ZIP archive</string>
+    <string name="import_app_entries">Import app entries</string>
+    <string name="import_app_entries_description">Restore patched APKs and their details as saved entries in Apps</string>
+    <string name="app_entries_all">All</string>
+    <string name="app_entries_missing">(Missing)</string>
+    <string name="app_entries_no_apk">No retained patched APK to export</string>
+    <string name="app_entries_empty">No app entries to export</string>
+    <string name="app_entries_select_zip">Select an app entries ZIP archive</string>
+    <string name="app_entries_export_action">Export</string>
+    <string name="app_entries_preparing">Loading app entries…</string>
+    <string name="app_entries_reading">Reading ZIP archive…</string>
+    <string name="app_entries_checking">Checking archive…</string>
+    <string name="app_entries_exporting">Backing up APKs and app details…</string>
+    <string name="app_entries_saving">Saving ZIP archive…</string>
+    <string name="app_entries_importing">Restoring APKs and app details…</string>
+    <string name="app_entries_progress_count">%1$d of %2$d processed</string>
+    <string name="app_entries_export_failed">Could not export app entries</string>
+    <string name="app_entries_import_failed">Could not read or import app entries</string>
+    <plurals name="app_entries_selected">
+        <item quantity="one">%d app entry selected</item>
+        <item quantity="other">%d app entries selected</item>
+    </plurals>
+    <plurals name="app_entries_exported">
+        <item quantity="one">Exported %d app entry</item>
+        <item quantity="other">Exported %d app entries</item>
+    </plurals>
+    <plurals name="app_entries_imported">
+        <item quantity="one">Imported %d app entry</item>
+        <item quantity="other">Imported %d app entries</item>
+    </plurals>
+    <plurals name="app_entries_imported_skipped">
+        <item quantity="one">Imported %1$d app entry with %2$d skipped</item>
+        <item quantity="other">Imported %1$d app entries with %2$d skipped</item>
+    </plurals>
+    <plurals name="app_entries_updated">
+        <item quantity="one">Updated %d app entry</item>
+        <item quantity="other">Updated %d app entries</item>
+    </plurals>
+    <plurals name="app_entries_updated_skipped">
+        <item quantity="one">Updated %1$d app entry with %2$d skipped</item>
+        <item quantity="other">Updated %1$d app entries with %2$d skipped</item>
+    </plurals>
+    <plurals name="app_entries_skipped">
+        <item quantity="one">Skipped %d app entry</item>
+        <item quantity="other">Skipped %d app entries</item>
     </plurals>
 </resources>

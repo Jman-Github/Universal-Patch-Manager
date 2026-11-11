@@ -14,7 +14,10 @@ import app.universal.patch.manager.util.PM
 import app.universal.patch.manager.util.PatchSelection
 import app.universal.patch.manager.util.savedAppBasePackage
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
@@ -209,10 +212,79 @@ class InstalledAppRepository(
     private val pm: PM
 ) {
     private val dao = db.installedAppDao()
+    private val archiveRestoreMutex = kotlinx.coroutines.sync.Mutex()
 
     fun getAll() = dao.getAll().distinctUntilChanged()
 
     suspend fun get(packageName: String) = dao.get(packageName)
+
+    /** Commit one already validated archive entry, preserving the old APK on a failed write. */
+    internal suspend fun restoreArchivedApp(
+        record: InstalledApp,
+        apk: File,
+        repatchInput: File?,
+        selection: PatchSelection
+    ): Boolean = archiveRestoreMutex.withLock {
+        val key = record.currentPackageName
+        val existing = dao.get(key)
+        require(existing == null || existing.installType == InstallType.SAVED)
+        val target = fs.getPatchedAppFile(key, record.version)
+        val parent = requireNotNull(target.parentFile)
+        val staging = File.createTempFile(".app-entry-", ".tmp", parent)
+        val backup = parent.resolve(".app-entry-" + UUID.randomUUID() + ".bak")
+        var retainBackup = false
+        try {
+            apk.copyTo(staging, overwrite = true)
+            currentCoroutineContext().ensureActive()
+            withContext(NonCancellable) {
+                val existed = target.isFile
+                if (existed) target.copyTo(backup, overwrite = true)
+                java.nio.file.Files.move(
+                    staging.toPath(), target.toPath(),
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                )
+                try {
+                    addOrUpdate(
+                        currentPackageName = key,
+                        originalPackageName = record.originalPackageName,
+                        version = record.version,
+                        installType = InstallType.SAVED,
+                        patchSelection = selection,
+                        selectionPayload = record.selectionPayload,
+                        useMount = record.useMount,
+                        updateUseMount = true,
+                        createdAtOverride = record.createdAt,
+                        repatchSourcePath = repatchInput?.absolutePath,
+                        updateRepatchSource = true,
+                        requireRepatchSource = repatchInput != null,
+                        versionCode = record.versionCode,
+                        updateVersionCode = true
+                    )
+                } catch (failure: Throwable) {
+                    runCatching {
+                        if (existed) {
+                            java.nio.file.Files.move(
+                                backup.toPath(), target.toPath(),
+                                java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                                java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                            )
+                        } else {
+                            java.nio.file.Files.deleteIfExists(target.toPath())
+                        }
+                    }.onFailure {
+                        retainBackup = existed
+                        failure.addSuppressed(it)
+                    }
+                    throw failure
+                }
+            }
+            existing != null
+        } finally {
+            staging.delete()
+            if (!retainBackup) backup.delete()
+        }
+    }
 
     suspend fun rememberVersionCode(app: InstalledApp, versionCode: Long) =
         dao.rememberVersionCode(app.currentPackageName, app.version, versionCode)
@@ -285,7 +357,8 @@ class InstalledAppRepository(
         repatchSourcePath: String? = null,
         updateRepatchSource: Boolean = false,
         versionCode: Long? = null,
-        updateVersionCode: Boolean = versionCode != null
+        updateVersionCode: Boolean = versionCode != null,
+        requireRepatchSource: Boolean = false
     ) {
         var createdRepatchSourcePath: String? = null
         try {
@@ -332,9 +405,9 @@ class InstalledAppRepository(
                     existingApp?.repatchSourcePath
                 }
                 check(
-                    selectionPayload?.signatureWorkflow?.remembered != true ||
+                    (!requireRepatchSource && selectionPayload?.signatureWorkflow?.remembered != true) ||
                         persistedRepatchSourcePath?.let { File(it).isFile } == true
-                ) { "Unable to retain the original signed input for future signature injection." }
+                ) { "Unable to retain the Repatch input." }
                 dao.upsertApp(
                     InstalledApp(
                         currentPackageName = currentPackageName,

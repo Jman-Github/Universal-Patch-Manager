@@ -475,6 +475,10 @@ class PreferencesManager(
         stringPreference("file_picker_patch_profiles_import_directory", "")
     val managerSettingsImportLastDirectory =
         stringPreference("file_picker_manager_settings_import_directory", "")
+    val appEntriesImportLastDirectory =
+        stringPreference("file_picker_app_entries_import_directory", "")
+    val appEntriesExportLastDirectory =
+        stringPreference("file_picker_app_entries_export_directory", "")
     val everythingImportLastDirectory =
         stringPreference("file_picker_everything_import_directory", "")
     val patchSelectionImportLastDirectory =
@@ -545,6 +549,8 @@ class PreferencesManager(
             "patchBundlesImportLastDirectory" to patchBundlesImportLastDirectory,
             "patchProfilesImportLastDirectory" to patchProfilesImportLastDirectory,
             "managerSettingsImportLastDirectory" to managerSettingsImportLastDirectory,
+            "appEntriesImportLastDirectory" to appEntriesImportLastDirectory,
+            "appEntriesExportLastDirectory" to appEntriesExportLastDirectory,
             "everythingImportLastDirectory" to everythingImportLastDirectory,
             "patchSelectionImportLastDirectory" to patchSelectionImportLastDirectory,
             "patchBundlesExportLastDirectory" to patchBundlesExportLastDirectory,

@@ -924,7 +924,7 @@ class Filesystem(private val app: Application) {
         true
     }
 
-    private fun isManagedPatchOptionInputPath(path: String): Boolean {
+    internal fun isManagedPatchOptionInputPath(path: String): Boolean {
         val managedRoot = patchOptionInputsDir.safeCanonicalPath()
         return path != managedRoot && path.startsWith("$managedRoot${File.separator}")
     }
