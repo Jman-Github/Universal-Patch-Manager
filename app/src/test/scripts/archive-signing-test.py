@@ -74,7 +74,8 @@ class PackageManager {
         // https://android.googlesource.com/platform/frameworks/base/+/android-10.0.0_r47/core/java/android/content/pm/PackageManager.java
         val legacy = flags and GET_SIGNATURES.toLong() != 0L
         val modern = flags and GET_SIGNING_CERTIFICATES.toLong() != 0L
-        val collect = legacy || (Build.VERSION.SDK_INT >= 30 && modern)
+        // Android 9/10 and some Android 11-13 OEM frameworks gate collectCertificates on GET_SIGNATURES alone.
+        val collect = legacy
         if (collect && !validSignature) return null
         return PackageInfo().apply {
             if (collect && legacy) signatures = history?.take(1)?.toTypedArray() ?: current
@@ -130,7 +131,7 @@ fun main() {
         val flags = manager.lastFlags
         check(flags and PackageManager.GET_META_DATA.toLong() != 0L)
         check(flags and PackageManager.GET_ACTIVITIES.toLong() != 0L)
-        check((flags and PackageManager.GET_SIGNATURES.toLong() != 0L) == (sdk < 30))
+        check(flags and PackageManager.GET_SIGNATURES.toLong() != 0L)
         check((flags and PackageManager.GET_SIGNING_CERTIFICATES.toLong() != 0L) == (sdk >= 28))
 
         // Multi-signer identities must still require every signer.
