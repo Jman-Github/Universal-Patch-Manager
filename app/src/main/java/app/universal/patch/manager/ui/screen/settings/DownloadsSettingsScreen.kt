@@ -195,6 +195,7 @@ fun DownloadsSettingsScreen(
     var pendingExportConfirmation by remember { mutableStateOf<PendingDownloadedAppsExportConfirmation?>(null) }
     var exportInProgress by rememberSaveable { mutableStateOf(false) }
     var showDeleteAppsConfirmation by rememberSaveable { mutableStateOf(false) }
+    var showDownloaderCatalog by rememberSaveable { mutableStateOf(false) }
     var showImportUrlDialog by rememberSaveable { mutableStateOf(false) }
     var sourceIdPendingDeletion by rememberSaveable { mutableStateOf<String?>(null) }
     var sourceIdPendingTrustRevoke by rememberSaveable { mutableStateOf<String?>(null) }
@@ -320,6 +321,10 @@ fun DownloadsSettingsScreen(
                 }
             }
         )
+    }
+    if (showDownloaderCatalog) {
+        DownloaderCatalogDialog(onDismiss = { showDownloaderCatalog = false },
+            onImportUrl = { showDownloaderCatalog = false; showImportUrlDialog = true })
     }
     if (showImportUrlDialog) {
         ImportDownloaderSourceDialog(
@@ -674,8 +679,8 @@ fun DownloadsSettingsScreen(
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
                     ) {
                         ExpressiveSettingsItem(
-                            headlineContent = stringResource(R.string.downloader_import_url),
-                            supportingContent = stringResource(R.string.downloader_import_url_description)
+                            headlineContent = stringResource(R.string.downloader_catalog_title),
+                            supportingContent = stringResource(R.string.downloader_catalog_description)
                         )
                         Row(
                             modifier = Modifier
@@ -684,7 +689,7 @@ fun DownloadsSettingsScreen(
                             horizontalArrangement = Arrangement.End
                         ) {
                             FilledTonalButton(
-                                onClick = { showImportUrlDialog = true },
+                                onClick = { showDownloaderCatalog = true },
                                 enabled = remoteSourceBusyState == null
                             ) {
                                 Text(stringResource(R.string.import_))
@@ -764,6 +769,7 @@ fun DownloadsSettingsScreen(
 
                         DownloaderPluginCard(
                             title = source.name.toDownloaderMainName(),
+                            icon = { DownloaderSourceIcon(source, viewModel) },
                             version = source.version,
                             status = stringResource(
                                 when (source.state) {
@@ -792,14 +798,19 @@ fun DownloadsSettingsScreen(
                                         R.string.downloader_source_state_failed
                                 }
                             ),
-                            type = if (sourceIsHelper) DownloaderPluginType.Helper else DownloaderPluginType.Remote,
-                            detail = source.repoUrl.toGitHubRepoDisplayName(),
+                            type = when {
+                                sourceIsHelper -> DownloaderPluginType.Helper
+                                source.repoUrl.isBlank() -> DownloaderPluginType.Local
+                                else -> DownloaderPluginType.Remote
+                            },
+                            detail = source.repoUrl.takeIf { it.isNotBlank() }?.toGitHubRepoDisplayName()
+                                ?: source.entry.assetSelector,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                             secondaryActionLabel = stringResource(
-                                if (sourceIsHelper) R.string.settings else R.string.delete
+                                if (sourceIsHelper && source.repoUrl.isNotBlank()) R.string.settings else R.string.delete
                             ),
                             onSecondaryAction = {
-                                if (sourceIsHelper) {
+                                if (sourceIsHelper && source.repoUrl.isNotBlank()) {
                                     sourceIdInSettings = sourceId
                                 } else {
                                     sourceIdPendingDeletion = sourceId
@@ -839,8 +850,10 @@ fun DownloadsSettingsScreen(
                                     else -> viewModel.updatePluginSource(sourceId)
                                 }
                             },
-                            primaryActionEnabled = remoteSourceBusyState == null,
-                            middleActionEnabled = remoteSourceBusyState == null,
+                            primaryActionEnabled = remoteSourceBusyState == null &&
+                                (sourceIsHelper || untrustedSource != null || source.repoUrl.isNotBlank()),
+                            middleActionEnabled = remoteSourceBusyState == null &&
+                                (!sourceIsHelper || source.repoUrl.isNotBlank()),
                             secondaryActionEnabled = remoteSourceBusyState == null,
                             footerActionLabel = when {
                                 sourceIsHelper && helperInstalled -> stringResource(R.string.uninstall)
@@ -949,6 +962,20 @@ fun DownloadsSettingsScreen(
 
                             DownloaderPluginCard(
                                 title = helper.label.toDownloaderMainName(),
+                                icon = {
+                                    val apk by androidx.compose.runtime.produceState<java.io.File?>(
+                                        null, helper.packageName, helper.version
+                                    ) {
+                                        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            viewModel.pm.getPackageInfo(helper.packageName)
+                                                ?.applicationInfo?.sourceDir?.let { java.io.File(it) }
+                                        }
+                                    }
+                                    app.universal.patch.manager.ui.component.RuntimePluginIcon(
+                                        apk, viewModel.pm, null, Modifier.size(44.dp),
+                                        cacheKey = helper.packageName + ":" + helper.version
+                                    )
+                                },
                                 version = helper.version,
                                 status = stringResource(
                                     if (trusted) R.string.installed
@@ -1087,6 +1114,11 @@ fun DownloadsSettingsScreen(
 
                         DownloaderPluginCard(
                             title = pluginTitle,
+                            icon = {
+                                app.universal.patch.manager.ui.component.AppIcon(
+                                    packageInfo, null, Modifier.size(44.dp)
+                                )
+                            },
                             version = packageInfo.versionName,
                             status = stringResource(
                                 when (state) {
@@ -1497,7 +1529,8 @@ private fun DownloaderPluginCard(
     primaryActionEnabled: Boolean = true,
     secondaryActionEnabled: Boolean = true,
     middleActionEnabled: Boolean = true,
-    footerActionEnabled: Boolean = true
+    footerActionEnabled: Boolean = true,
+    icon: (@Composable () -> Unit)? = null
 ) {
     val context = LocalContext.current
     val clipboard = remember(context) { context.getSystemService(ClipboardManager::class.java) }
@@ -1528,7 +1561,7 @@ private fun DownloaderPluginCard(
             headlineContent = title,
             supportingContentSlot = supportingSlot,
             leadingContent = {
-                DownloaderPluginLeadingIcon(type = type)
+                if (icon != null) icon() else DownloaderPluginLeadingIcon(type = type)
             },
             trailingContent = version.toPluginVersionLabel()?.let { pluginVersion ->
                 {
@@ -1716,126 +1749,130 @@ private fun DownloaderSourceSettingsDialog(
         onDismissRequest = onDismiss,
         title = { CenteredDialogTitle(stringResource(R.string.downloader_source_settings_title, sourceLabel)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text(
-                    text = source.repoUrl.toGitHubRepoDisplayName(),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            if (source.repoUrl.isBlank()) {
+                Text(stringResource(R.string.downloader_local_source_description))
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text(
+                        text = source.repoUrl.toGitHubRepoDisplayName(),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.weight(1f)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(
-                                    text = stringResource(R.string.downloader_source_auto_update),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    text = stringResource(R.string.auto_update_description),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.downloader_source_auto_update),
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.auto_update_description),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                ExpressiveSettingsSwitch(
+                                    checked = source.entry.autoUpdate,
+                                    onCheckedChange = onAutoUpdateChanged
                                 )
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            ExpressiveSettingsSwitch(
-                                checked = source.entry.autoUpdate,
-                                onCheckedChange = onAutoUpdateChanged
-                            )
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f).alpha(if (source.entry.latest) 0.38f else 1f)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(
-                                    text = stringResource(R.string.downloader_source_prerelease),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    text = stringResource(R.string.downloader_source_prerelease_description),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                Column(
+                                    modifier = Modifier.weight(1f).alpha(if (source.entry.latest) 0.38f else 1f)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.downloader_source_prerelease),
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.downloader_source_prerelease_description),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                ExpressiveSettingsSwitch(
+                                    checked = source.entry.prerelease && !source.entry.latest,
+                                    onCheckedChange = onPrereleaseChanged,
+                                    enabled = !source.entry.latest
                                 )
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            ExpressiveSettingsSwitch(
-                                checked = source.entry.prerelease && !source.entry.latest,
-                                onCheckedChange = onPrereleaseChanged,
-                                enabled = !source.entry.latest
-                            )
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(
-                                    text = stringResource(R.string.downloader_source_latest),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    text = stringResource(R.string.downloader_source_latest_description),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.downloader_source_latest),
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.downloader_source_latest_description),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                ExpressiveSettingsSwitch(
+                                    checked = source.entry.latest,
+                                    onCheckedChange = onLatestChanged
                                 )
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            ExpressiveSettingsSwitch(
-                                checked = source.entry.latest,
-                                onCheckedChange = onLatestChanged
-                            )
                         }
                     }
-                }
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.downloader_source_repo_url),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
-                                text = source.repoUrl,
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodySmall,
+                                text = stringResource(R.string.downloader_source_repo_url),
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            IconButton(onClick = onCopyRepoUrl) {
-                                Icon(
-                                    imageVector = Icons.Outlined.ContentCopy,
-                                    contentDescription = stringResource(R.string.copy_to_clipboard)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = source.repoUrl,
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                IconButton(onClick = onCopyRepoUrl) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.ContentCopy,
+                                        contentDescription = stringResource(R.string.copy_to_clipboard)
+                                    )
+                                }
                             }
                         }
                     }
@@ -2120,5 +2157,19 @@ private fun PluginFailedDialog(
                 }
             }
         }
+    )
+}
+
+@Composable
+private fun DownloaderSourceIcon(source: DownloaderPluginSourceState, viewModel: DownloadsViewModel) {
+    val apk by androidx.compose.runtime.produceState<java.io.File?>(null, source.entry, source.version) {
+        value = viewModel.pluginSourceApk(source.entry.id)
+    }
+    app.universal.patch.manager.ui.component.RuntimePluginIcon(
+        apk = apk, pm = viewModel.pm, previewUrl = null, modifier = Modifier.size(44.dp),
+        cacheKey = source.entry.id + ":" + source.entry.versionKey + ":" + source.version,
+        previewResource = app.universal.patch.manager.ui.component.downloaderCatalogPreviewIcon(
+            source.repoUrl, source.entry.assetSelector
+        )
     )
 }

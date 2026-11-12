@@ -1193,11 +1193,7 @@ fun InstalledAppInfoScreen(
                 placeholderLabel = displayPackageName,
                 isLoading = !viewModel.hasLoadedAppInfo
             ) {
-                val versionLabel = appVersionLabel(
-                    versionName = installedApp.version,
-                    appInfo = viewModel.appInfo,
-                    versionCodeOverride = viewModel.displayedVersionCode
-                ).toPrefixedVersionLabel()
+                val versionLabel = installedApp.version.toPrefixedVersionLabel()
                 val copyAppVersion = {
                     clipboard?.setPrimaryClip(
                         ClipData.newPlainText(

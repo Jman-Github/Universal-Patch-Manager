@@ -788,8 +788,6 @@ class SelectedAppInfoViewModel(
                     ?.let { bundleUid to it }
             }.toMap()
         )
-        selectionRepository.updateSelection(packageName, cleanedSelection)
-        optionsRepository.removeOptionsForPatches(packageName, removedPatchesByBundle)
         val pendingNames = removedPatchesNotice?.patchNames.orEmpty()
         removedPatchesNotice = RemovedPatchesNotice((pendingNames + removedPatches).sorted())
     }
@@ -807,7 +805,11 @@ class SelectedAppInfoViewModel(
             }
             val filteredSelection = buildMap<Int, Set<String>> {
                 currentState.patchSelection.forEach { (bundleUid, patches) ->
-                    val allowed = available[bundleUid] ?: return@forEach
+                    val allowed = available[bundleUid]
+                    if (allowed == null) {
+                        put(bundleUid, patches)
+                        return@forEach
+                    }
                     val kept = patches.filter { it in allowed }.toSet()
                     if (kept.isNotEmpty()) put(bundleUid, kept)
                 }
@@ -837,7 +839,9 @@ class SelectedAppInfoViewModel(
                 )
                 .values
                 .any { it.isNotEmpty() }
-            if (!hasAnySelectablePatch) {
+            if (!hasAnySelectablePatch && currentSelectionState.patchSelection.keys.all { uid ->
+                    bundles.any { it.uid == uid }
+                }) {
                 selectionState = SelectionState.Default
             }
         }

@@ -206,7 +206,13 @@ class MainViewModel(
         handleIntent(intent)
     }
 
+    private val downloaderUpdateDeepLinkChannel = Channel<Unit>(Channel.BUFFERED)
+    val downloaderUpdateDeepLinkFlow = downloaderUpdateDeepLinkChannel.receiveAsFlow()
     fun handleIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra("open_downloaders", false) == true) {
+            downloaderUpdateDeepLinkChannel.trySend(Unit)
+            return
+        }
         if (handleBatchIntent(intent)) return
         if (intent?.getBooleanExtra("open_patcher_runtimes", false) == true) {
             runtimeUpdateDeepLinkChannel.trySend(Unit)

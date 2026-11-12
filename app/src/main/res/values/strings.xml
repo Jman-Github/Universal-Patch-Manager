@@ -2732,4 +2732,38 @@ Details: %2$s</string>
         <item quantity="one">Skipped %d app entry</item>
         <item quantity="other">Skipped %d app entries</item>
     </plurals>
+    <plurals name="downloader_updates_found">
+        <item quantity="one">Downloader plugin update found</item>
+        <item quantity="other">Downloader plugin updates found</item>
+    </plurals>
+    <plurals name="downloader_updates_available_count">
+        <item quantity="one">%1$d new downloader plugin update is available:</item>
+        <item quantity="other">%1$d new downloader plugin updates are available:</item>
+    </plurals>
+    <plurals name="downloader_updates_installed">
+        <item quantity="one">Downloader plugin updated</item>
+        <item quantity="other">Downloader plugins updated</item>
+    </plurals>
+    <plurals name="downloader_updates_installed_count">
+        <item quantity="one">%1$d downloader plugin was updated:</item>
+        <item quantity="other">%1$d downloader plugins were updated:</item>
+    </plurals>
+    <string name="downloader_updates_channel">Downloader updates</string>
+    <string name="downloader_catalog_title">Import downloaders</string>
+    <string name="downloader_catalog_description">Choose downloaders to import. You can also import a URL or APK file from the menu. Newly imported downloaders must be trusted in downloader settings before use.</string>
+    <string name="downloader_catalog_pending">Import required</string>
+    <string name="downloader_catalog_imported_version">Imported · %1$s</string>
+    <string name="downloader_catalog_version_size">%1$s · %2$s</string>
+    <string name="downloader_catalog_imported">Imported</string>
+    <string name="downloader_catalog_verifying">Verifying downloader</string>
+    <string name="downloader_catalog_choose">Choose downloaders</string>
+    <string name="downloader_catalog_import_url">Import from URL</string>
+    <string name="downloader_catalog_import_failed">Some downloaders could not be imported. Try the remaining selections again.</string>
+    <string name="downloader_catalog_importing_file">Importing APK file…</string>
+    <string name="downloader_catalog_load_failed">Could not load the downloader list. Check your connection and try again.</string>
+    <string name="downloader_catalog_available">Available downloaders</string>
+    <string name="downloader_catalog_empty">No downloaders are available right now.</string>
+    <string name="downloader_catalog_partial">Some downloader sources could not be refreshed. Previously loaded entries are shown where available.</string>
+    <string name="downloader_file_import_failed">Could not import downloader APK</string>
+    <string name="downloader_local_source_description">Imported from an APK file. Import a newer APK to update this downloader.</string>
 </resources>

@@ -388,6 +388,9 @@ private fun ReVancedManager(
         }
     }
 
+    EventEffect(vm.downloaderUpdateDeepLinkFlow) {
+        navController.navigate(Settings.Downloads) { launchSingleTop = true }
+    }
     EventEffect(vm.runtimeUpdateDeepLinkFlow) {
         navController.navigate(Settings.PatcherRuntimes) { launchSingleTop = true }
     }

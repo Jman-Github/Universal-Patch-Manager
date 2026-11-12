@@ -1,0 +1,20 @@
+Downloader catalog preview icons
+
+Source: https://github.com/rushiranpise/helper-for-morphe
+Revision: fee1355ffbc9c0ea94b1bcdd85e092171aee014f
+License: GNU General Public License v3 (see the repository LICENSE file)
+Upstream license: https://github.com/rushiranpise/helper-for-morphe/blob/fee1355ffbc9c0ea94b1bcdd85e092171aee014f/LICENSE
+
+The following images were copied without modification:
+app/src/main/res/drawable-nodpi/ic_src_apkcombo.png
+  -> app/src/main/res/drawable-nodpi/ic_downloader_catalog_apkcombo.png
+app/src/main/res/drawable-nodpi/ic_src_apkmirror.png
+  -> app/src/main/res/drawable-nodpi/ic_downloader_catalog_apkmirror.png
+app/src/main/res/drawable-nodpi/ic_src_apkpure.png
+  -> app/src/main/res/drawable-nodpi/ic_downloader_catalog_apkpure.png
+app/src/main/res/drawable-nodpi/ic_src_play.png
+  -> app/src/main/res/drawable-nodpi/ic_downloader_catalog_play_store.png
+app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+  -> app/src/main/res/drawable-nodpi/ic_downloader_catalog_helper.png
+
+The provider names and logos identify their respective services.

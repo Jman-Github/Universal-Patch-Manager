@@ -2965,21 +2965,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 "Failed to update patch configuration after persistence"
             ) {
                 if (finalPackageName != packageName) {
-                    patchSelectionRepository.updateSelectionWithSeenPatches(
-                        finalPackageName,
-                        sanitizedSelectionFinal,
-                        seenPatchesByBundle
-                    )
-                    patchOptionsRepository.saveOptions(
-                        finalPackageName,
-                        sanitizedOptionsFinal
-                    )
+                    patchOptionsRepository.saveOptions(finalPackageName, sanitizedOptionsFinal)
                 }
-                patchSelectionRepository.updateSelectionWithSeenPatches(
-                    packageName,
-                    sanitizedSelectionOriginal,
-                    seenPatchesByBundle
-                )
                 patchOptionsRepository.saveOptions(packageName, sanitizedOptionsOriginal)
                 appliedSelection = sanitizedSelectionOriginal
                 appliedOptions = sanitizedOptionsOriginal

@@ -13,19 +13,26 @@ import org.koin.core.component.inject
 
 class RuntimeUpdateWorker(context: Context, parameters: WorkerParameters) :
     CoroutineWorker(context, parameters), KoinComponent {
+    private val downloaders: app.universal.patch.manager.domain.repository.DownloaderPluginRepository by inject()
     private val prefs: PreferencesManager by inject()
     private val repository: PatcherRuntimePluginRepository by inject()
 
     override suspend fun doWork(): Result {
         if (prefs.backgroundRuntimeUpdateInterval.get() != SearchForUpdatesBackgroundInterval.NEVER) {
-            try {
-                repository.updateCheck()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                Log.w("RuntimeUpdates", "Runtime update check failed", error)
-                return Result.retry()
+            var failed = false
+            for (check in listOf<suspend () -> Unit>(
+                { downloaders.updateCheck() }, { repository.updateCheck() }
+            )) {
+                try {
+                    check()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Log.w("RuntimeUpdates", "Plugin update check failed", error)
+                    failed = true
+                }
             }
+            if (failed) return Result.retry()
         }
         return Result.success()
     }

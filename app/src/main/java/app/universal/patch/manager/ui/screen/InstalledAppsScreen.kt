@@ -456,13 +456,6 @@ private fun InstalledAppCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f)
                         )
-                        if (isMissingInstall) {
-                            StatusChip(
-                                text = stringResource(R.string.patches_missing),
-                                containerColor = MaterialTheme.colorScheme.errorContainer,
-                                contentColor = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
                         if (showBundleUpdateBadges && bundleSummaries.any { it.hasUpdate }) {
                             AppMetaPill(
                                 text = pluralStringResource(
@@ -471,6 +464,13 @@ private fun InstalledAppCard(
                                 ),
                                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        if (isMissingInstall) {
+                            StatusChip(
+                                text = stringResource(R.string.patches_missing),
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer
                             )
                         }
                     }
