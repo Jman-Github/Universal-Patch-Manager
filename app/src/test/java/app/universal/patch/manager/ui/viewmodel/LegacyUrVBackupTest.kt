@@ -68,11 +68,28 @@ class LegacyUrVBackupTest {
 
     @Test fun standaloneBundleAndProfileFilesRoundTripWithoutNamespaceRewrites() {
         val bundles = raw("urv_patch_bundles.json")
-        assertEquals(Json.parseToJsonElement(bundles),
+        assertLegacyValues(Json.parseToJsonElement(bundles),
             json.encodeToJsonElement(json.decodeFromString<PatchBundleExportFile>(bundles)))
         val profiles = raw("urv_patch_profiles.json")
-        assertEquals(Json.parseToJsonElement(profiles),
+        assertLegacyValues(Json.parseToJsonElement(profiles),
             json.encodeToJsonElement(json.decodeFromString<PatchProfileExportFile>(profiles)))
+    }
+
+    @Test fun legacyComparisonAllowsOnlyNewNullDefaults() {
+        val expected = Json.parseToJsonElement("""{"payload":{"package":"app.urv.manager.keep.this"}}""")
+        val withDefault = Json.parseToJsonElement(
+            """{"payload":{"package":"app.urv.manager.keep.this","patchDisplayInfo":null}}""")
+        assertLegacyValues(expected, withDefault)
+
+        for (invalid in listOf(
+            """{"payload":{"package":"app.universal.patch.manager.keep.this"}}""",
+            """{"payload":{}}""",
+            """{"payload":{"package":"app.urv.manager.keep.this","patchDisplayInfo":{}}}"""
+        )) {
+            assertThrows(AssertionError::class.java) {
+                assertLegacyValues(expected, Json.parseToJsonElement(invalid))
+            }
+        }
     }
 
     @Test fun bothSelectionBackupVersionsRemainReadable() {
