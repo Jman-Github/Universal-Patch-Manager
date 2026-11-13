@@ -4,6 +4,28 @@ Release notes are generated automatically from Conventional Commits.
 
 Historical manually maintained release notes remain in `api/CHANGELOG.md` and `api/DEV-CHANGELOG.md`.
 
+# [2.1.0-dev.5](https://github.com/Jman-Github/Universal-Patch-Manager/compare/v2.1.0-dev.4...v2.1.0-dev.5) (2026-11-13)
+
+
+### Bug Fixes
+
+* **ci:** allow new null defaults in legacy backup tests ([96c5a22](https://github.com/Jman-Github/Universal-Patch-Manager/commit/96c5a220c4b55772075516a7c73180544b42530a))
+* **manager:** refine runtime UI and preserve bundle selections ([7552875](https://github.com/Jman-Github/Universal-Patch-Manager/commit/755287551a41e7f581ad2540f1964998c1183328)), closes [#830](https://github.com/Jman-Github/Universal-Patch-Manager/issues/830) [#831](https://github.com/Jman-Github/Universal-Patch-Manager/issues/831) [#832](https://github.com/Jman-Github/Universal-Patch-Manager/issues/832) [#834](https://github.com/Jman-Github/Universal-Patch-Manager/issues/834) [#835](https://github.com/Jman-Github/Universal-Patch-Manager/issues/835) [#836](https://github.com/Jman-Github/Universal-Patch-Manager/issues/836) [#837](https://github.com/Jman-Github/Universal-Patch-Manager/issues/837) [#838](https://github.com/Jman-Github/Universal-Patch-Manager/issues/838) [#840](https://github.com/Jman-Github/Universal-Patch-Manager/issues/840)
+* **notifications:** correct runtime update text and progress ([3cb9e2b](https://github.com/Jman-Github/Universal-Patch-Manager/commit/3cb9e2b41db2daf0694e4114113669d426f62703)), closes [#859](https://github.com/Jman-Github/Universal-Patch-Manager/issues/859)
+* **patcher:** fix failure indicators and notification clipping ([d198a98](https://github.com/Jman-Github/Universal-Patch-Manager/commit/d198a986d76cbcbd235e79b0a152456a24676e30)), closes [#856](https://github.com/Jman-Github/Universal-Patch-Manager/issues/856) [#860](https://github.com/Jman-Github/Universal-Patch-Manager/issues/860)
+* **runtime:** clean up obsolete runtime archives ([cc8d94e](https://github.com/Jman-Github/Universal-Patch-Manager/commit/cc8d94ec64d279d488d1a02e3db2574dbb6d4bd3))
+* **runtime:** include GET_SIGNATURES on all API 28+ archive reads ([ac7e83e](https://github.com/Jman-Github/Universal-Patch-Manager/commit/ac7e83e6c11d7894dd88bb4af184b15e5bb95994)), closes [#851](https://github.com/Jman-Github/Universal-Patch-Manager/issues/851)
+* **ui:** restore dialog sizing and button alignment ([71c3f21](https://github.com/Jman-Github/Universal-Patch-Manager/commit/71c3f2111119216067f29ab8f6dfe847c5f50ec4)), closes [#846](https://github.com/Jman-Github/Universal-Patch-Manager/issues/846) [#847](https://github.com/Jman-Github/Universal-Patch-Manager/issues/847)
+* **ui:** retain version codes and clarify bundle dialogs ([36442e5](https://github.com/Jman-Github/Universal-Patch-Manager/commit/36442e54d9fb4bcac7ebc301f9d3d12f18c6efb2)), closes [#849](https://github.com/Jman-Github/Universal-Patch-Manager/issues/849) [#848](https://github.com/Jman-Github/Universal-Patch-Manager/issues/848) [#845](https://github.com/Jman-Github/Universal-Patch-Manager/issues/845)
+* **ui:** sharpen the splash screen icon ([e9d2b82](https://github.com/Jman-Github/Universal-Patch-Manager/commit/e9d2b822e30818d083e6249ab41e15fa8225589d)), closes [#844](https://github.com/Jman-Github/Universal-Patch-Manager/issues/844)
+
+
+### Features
+
+* **downloaders:** add import catalog and update notifications ([1d66252](https://github.com/Jman-Github/Universal-Patch-Manager/commit/1d662527dec27287a6b89162ced157c4e1fbe819)), closes [#852](https://github.com/Jman-Github/Universal-Patch-Manager/issues/852) [#855](https://github.com/Jman-Github/Universal-Patch-Manager/issues/855) [#854](https://github.com/Jman-Github/Universal-Patch-Manager/issues/854) [#853](https://github.com/Jman-Github/Universal-Patch-Manager/issues/853)
+* **manager:** add app-entry ZIP backups and fix Morphe runtime updates ([1e20b56](https://github.com/Jman-Github/Universal-Patch-Manager/commit/1e20b56b767bbbe6fe0ba87f88fc95303b011471)), closes [#636](https://github.com/Jman-Github/Universal-Patch-Manager/issues/636) [#857](https://github.com/Jman-Github/Universal-Patch-Manager/issues/857)
+* **runtime:** improve plugin update notifications ([7ed3bd7](https://github.com/Jman-Github/Universal-Patch-Manager/commit/7ed3bd7fab5784670463ae071f0155709332ebdd)), closes [#850](https://github.com/Jman-Github/Universal-Patch-Manager/issues/850)
+
 # [2.1.0-dev.4](https://github.com/Jman-Github/Universal-Patch-Manager/compare/v2.1.0-dev.3...v2.1.0-dev.4) (2026-11-06)
 
 
