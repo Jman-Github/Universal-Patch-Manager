@@ -46,9 +46,37 @@ with tempfile.TemporaryDirectory(prefix="patcher-progress-", dir=ROOT / "build")
     sources += [ROOT / "app/src/main/java/app/universal/patch/manager/ui/model" / name
                 for name in ("PatcherProgressTracker.kt", "ExpandableStepProgress.kt")]
     sources += [ROOT / "app/src/test/java/app/universal/patch/manager/ui/model/PatcherProgressTrackerTest.kt"]
+    # Check the merger's production failure/cancellation row mapping too.
+    merger = (ROOT / "app/src/main/java/app/universal/patch/manager/ui/screen/MergeSplitApkScreen.kt").read_text()
+    resolver = merger.split("private fun resolveSubStepState(", 1)[1].split(
+        "private fun calculateSplitMergeProgress(", 1)[0]
+    dashboard = (ROOT / "app/src/main/java/app/universal/patch/manager/ui/viewmodel/DashboardViewModel.kt").read_text()
+    statuses = dashboard.split("enum class SplitMergeStepStatus {", 1)[1].split("}", 1)[0]
+    merger_test = work / "MergerFailureTest.kt"
+    merger_test.write_text(
+        "package app.universal.patch.manager.ui.model\n"
+        + "enum class SplitMergeStepStatus {" + statuses + "}\n"
+        + "private fun resolveSubStepState(" + resolver + """
+class MergerFailureTest {
+    @org.junit.Test fun stoppedMergeNeverShowsRunningSubSteps() {
+        for (status in listOf(SplitMergeStepStatus.FAILED, SplitMergeStepStatus.COMPLETED)) {
+            for (current in -1..3) for (index in 0..3) for (skipped in listOf(false, true)) {
+                org.junit.Assert.assertNotEquals(State.RUNNING,
+                    resolveSubStepState(index, skipped, current, status))
+            }
+        }
+        org.junit.Assert.assertEquals(State.RUNNING,
+            resolveSubStepState(1, false, 1, SplitMergeStepStatus.RUNNING))
+        org.junit.Assert.assertEquals(State.FAILED,
+            resolveSubStepState(1, false, 1, SplitMergeStepStatus.FAILED))
+    }
+}
+""")
+    sources.append(merger_test)
     classes = work / "classes"
     subprocess.run([str(JAVA), "-cp", cp(compiler), "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
         "-no-stdlib", "-no-reflect", "-jvm-target", "17", "-classpath", cp(dependencies),
         "-d", str(classes), *map(str, sources)], check=True, timeout=120)
     subprocess.run([str(JAVA), "-cp", cp([classes] + dependencies), "org.junit.runner.JUnitCore",
-        "app.universal.patch.manager.ui.model.PatcherProgressTrackerTest"], check=True, timeout=90)
+        "app.universal.patch.manager.ui.model.PatcherProgressTrackerTest",
+        "app.universal.patch.manager.ui.model.MergerFailureTest"], check=True, timeout=90)

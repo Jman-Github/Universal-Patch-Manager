@@ -52,7 +52,7 @@ fun Notification.Builder.applyProgressNotification(
     ).apply {
         setTextViewText(R.id.notification_title, contentTitle)
         setTextViewText(R.id.notification_detail, detail)
-        // Keep the compact weighted spacer so percentage stays right-aligned.
+        // Keep the compact detail slot so percentage stays end-aligned.
         setViewVisibility(R.id.notification_detail, when {
             detail != null -> View.VISIBLE
             expanded -> View.GONE

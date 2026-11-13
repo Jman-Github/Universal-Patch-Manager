@@ -41,13 +41,14 @@ with tempfile.TemporaryDirectory(prefix="notification-ui-", dir=ROOT / "build") 
     resources = work / "res"
     for rel in ("layout/notification_progress.xml", "layout/notification_progress_expanded.xml",
                 "drawable/notification_progress_track.xml", "values/notification_colors.xml",
-                "values-night/notification_colors.xml", "drawable/ic_notification_status.png"):
+                "values-night/notification_colors.xml", "drawable/ic_notification_status.png",
+                "drawable/ic_notification_artwork.xml"):
         dst = resources / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(BASE / "res" / rel, dst)
     (resources / "values/probe_strings.xml").write_text("<resources><string name='download_progress_notification_channel'>Downloads</string><string name='download_progress_indeterminate'>Downloading</string></resources>")
     manifest = work / "AndroidManifest.xml"
-    manifest.write_text(f'<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="{PACKAGE}"><uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36"/><uses-permission android:name="android.permission.POST_NOTIFICATIONS"/><application android:label="UPM notification probe" /><instrumentation android:name="probe.Probe" android:targetPackage="{PACKAGE}"/></manifest>')
+    manifest.write_text(f'<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="{PACKAGE}"><uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36"/><uses-permission android:name="android.permission.POST_NOTIFICATIONS"/><application android:label="UPM notification probe" android:supportsRtl="true" /><instrumentation android:name="probe.Probe" android:targetPackage="{PACKAGE}"/></manifest>')
     run(TOOLS / "aapt2.exe", "compile", "--dir", resources, "-o", work / "resources.zip")
     run(TOOLS / "aapt2.exe", "link", "-I", ANDROID, "--manifest", manifest,
         "--custom-package", "app.universal.patch.manager", "--java", work / "java",
@@ -102,8 +103,9 @@ private fun verifyDownloads() {
         Thread.sleep(1100)
         session.update(250, 1000)
         awaitNotification {
-            it.singleOrNull()?.notification?.extras?.getInt(Notification.EXTRA_PROGRESS) == 250 ||
-                it.singleOrNull()?.notification?.extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString() == "25%"
+            val content = it.singleOrNull()?.notification?.contentView?.apply(app, null)
+            content?.findViewById<ProgressBar>(R.id.notification_progress)?.progress == 250 &&
+                content.findViewById<TextView>(R.id.notification_percentage).text.toString() == "25%"
         }
         // Complete immediately after an update: removal must work even if replacement
         // notifications are rate-limited by Android.
@@ -166,6 +168,34 @@ private fun verify() {
                 root.measure(View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(2000, View.MeasureSpec.AT_MOST))
                 check(root.measuredHeight > 0)
+                // OEM templates may measure their custom content with AT_MOST.
+                // A weighted 0dp detail used to shrink the entire compact column.
+                for (widthDp in listOf(320, 360, 480)) {
+                    for (direction in listOf(View.LAYOUT_DIRECTION_LTR, View.LAYOUT_DIRECTION_RTL)) {
+                        root.layoutDirection = direction
+                        val width = (widthDp * context.resources.displayMetrics.density).toInt()
+                        fun measure(mode: Int): Int {
+                            root.measure(View.MeasureSpec.makeMeasureSpec(width, mode),
+                                View.MeasureSpec.makeMeasureSpec(2000, View.MeasureSpec.AT_MOST))
+                            root.layout(0, 0, root.measuredWidth, root.measuredHeight)
+                            return bar.measuredWidth
+                        }
+                        val available = measure(View.MeasureSpec.EXACTLY)
+                        check(available > 0)
+                        check(measure(View.MeasureSpec.AT_MOST) == available) {
+                            "Custom notification shrank at " + widthDp + "dp"
+                        }
+                        if (percent.parent is android.widget.RelativeLayout &&
+                            percent.visibility == View.VISIBLE && detail.visibility == View.VISIBLE) {
+                            check(if (direction == View.LAYOUT_DIRECTION_RTL)
+                                percent.right <= detail.left else detail.right <= percent.left) {
+                                "Percentage overlaps notification detail: direction=" + direction +
+                                    " actual=" + detail.layoutDirection + " detail=" + detail.left +
+                                    ".." + detail.right + " percent=" + percent.left + ".." + percent.right
+                            }
+                        }
+                    }
+                }
             }
         }
     }
