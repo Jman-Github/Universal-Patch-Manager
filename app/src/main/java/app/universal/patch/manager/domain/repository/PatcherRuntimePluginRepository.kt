@@ -937,7 +937,10 @@ class PatcherRuntimePluginRepository(
                     val version = resolved?.manifest?.version ?: release!!.tagName
                     val candidate = PendingRuntimeUpdate(
                         entry.id, entry.versionKey, entry.releasePrereleaseFilter, name,
-                        if (version.firstOrNull()?.isDigit() == true) "v$version" else version
+                        if (version.firstOrNull()?.isDigit() == true) "v$version" else version,
+                        sharedSupport = entry.expectedKind == PatcherRuntimeKind.SHARED_SUPPORT.id ||
+                            (state?.state as? PatcherRuntimePluginSourceState.State.Loaded)
+                                ?.plugin?.kind == PatcherRuntimeKind.SHARED_SUPPORT
                     )
                     checked[entry.id] = candidate.takeIf { changed }
                     if (!background || !entry.autoUpdate) return@forEach
@@ -1398,8 +1401,13 @@ class PatcherRuntimePluginRepository(
         if (!resumable && tempFile.exists()) tempFile.delete()
         if (resumable && tempFile.length() > requireNotNull(entry.expectedSize)) tempFile.delete()
         var transferred = false
-        fun runtimeTitle(name: String) = if (name.contains("runtime support", ignoreCase = true)) name
-            else app.getString(R.string.runtime_download_title, name.toRuntimeMainName())
+        fun runtimeTitle(name: String) = if (
+            entry.expectedKind == PatcherRuntimeKind.SHARED_SUPPORT.id ||
+            entry.catalogId == PatcherRuntimeKind.SHARED_SUPPORT.id ||
+            asset.name.contains("shared-support", ignoreCase = true) ||
+            name.contains("runtime support", ignoreCase = true)
+        ) app.getString(R.string.runtime_shared_support_name)
+        else app.getString(R.string.runtime_download_title, name.toRuntimeMainName())
         val progressNotification = downloadProgressNotifier.begin(
             runtimeTitle(
                 catalog.cached().plugins.firstOrNull { it.id == entry.catalogId }?.name

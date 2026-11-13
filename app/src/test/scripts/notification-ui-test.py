@@ -171,7 +171,7 @@ private fun verify() {
     }
 }
 }
-""")
+""", encoding="utf-8")
     run(JAVA_BIN / "java.exe", "-cp", cp(compiler), "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
         "-no-stdlib", "-no-reflect", "-jvm-target", "17", "-classpath", cp([ANDROID, classes, stdlib]),
         "-d", classes, source, activity, permission,

@@ -17,7 +17,8 @@ internal data class PendingRuntimeUpdate(
     val installedVersionKey: String?,
     val prerelease: Boolean?,
     val name: String,
-    val version: String
+    val version: String,
+    val sharedSupport: Boolean = false
 ) {
     val displayLine: String get() = "$name $version"
 }
@@ -44,8 +45,12 @@ internal object RuntimeUpdateNotifications {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         val count = updates.size
         val title = context.resources.getQuantityString(R.plurals.runtime_updates_installed, count)
-        val header = context.resources.getQuantityString(R.plurals.runtime_updates_installed_count, count, count)
-        publish(context, manager, UPDATED_ID, title, header, updates)
+        val sharedSupportOnly = updates.all { it.sharedSupport }
+        val header = if (sharedSupportOnly) {
+            context.getString(R.string.runtime_shared_support_updated)
+        } else context.resources.getQuantityString(R.plurals.runtime_updates_installed_count, count, count)
+        publish(context, manager, UPDATED_ID, title, header, updates,
+            bodyOverride = header.takeIf { sharedSupportOnly })
     }
 
     private fun publish(
@@ -54,7 +59,8 @@ internal object RuntimeUpdateNotifications {
         id: Int,
         title: String,
         header: String,
-        updates: List<PendingRuntimeUpdate>
+        updates: List<PendingRuntimeUpdate>,
+        bodyOverride: String? = null
     ) {
         if (!context.hasNotificationPermission()) return
         val channel = "runtime-updates"
@@ -67,7 +73,7 @@ internal object RuntimeUpdateNotifications {
         }
         val pendingIntent = PendingIntent.getActivity(context, id, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val body = updates.joinToString(separator = "\n", prefix = "$header\n") { "\u2022 ${it.displayLine}" }
+        val body = bodyOverride ?: updates.joinToString(separator = "\n", prefix = "$header\n") { "\u2022 ${it.displayLine}" }
         manager.notify(id, Notification.Builder(context, channel)
             .setContentTitle(title)
             .setContentText(header)

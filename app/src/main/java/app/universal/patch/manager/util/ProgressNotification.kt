@@ -31,7 +31,9 @@ fun Notification.Builder.applyProgressNotification(
 
     // The right-hand label already displays percentage. Retain useful stage descriptions.
     val detail = contentText?.takeUnless {
-        it.toString().trim().matches(Regex("[\\p{N}.,\\s]+[%٪]"))
+        it.isBlank() || it.toString().matches(
+            Regex("""[\p{N}.,\s\p{Z}\p{Cf}]+[%\u066A\uFF05][\s\p{Z}\p{Cf}]*""")
+        )
     }
     setContentTitle(contentTitle)
     setContentText(detail)
@@ -50,6 +52,12 @@ fun Notification.Builder.applyProgressNotification(
     ).apply {
         setTextViewText(R.id.notification_title, contentTitle)
         setTextViewText(R.id.notification_detail, detail)
+        // Keep the compact weighted spacer so percentage stays right-aligned.
+        setViewVisibility(R.id.notification_detail, when {
+            detail != null -> View.VISIBLE
+            expanded -> View.GONE
+            else -> View.INVISIBLE
+        })
         setTextViewText(R.id.notification_percentage, percentage)
         setViewVisibility(R.id.notification_percentage, if (percentage == null) View.GONE else View.VISIBLE)
         setProgressBar(R.id.notification_progress, safeMax, safeCurrent, unknown)

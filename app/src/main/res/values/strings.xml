@@ -2642,7 +2642,7 @@ Details: %2$s</string>
     <string name="resource_graph_pinning_search_keywords">pin pinning pinned fixed sticky graphs resource usage monitoring</string>
     <string name="runtime_updates_channel">Patcher runtime updates</string>
     <string name="runtime_updates_available">Patcher runtime updates available</string>
-    <string name="runtime_updates_completed">Patcher runtimes updated</string>
+    <string name="runtime_updates_completed">Runtime updated</string>
     <string name="runtime_description_revanced_v21">Supports ReVanced v21 and legacy class-based patch bundles.</string>
     <string name="runtime_description_revanced_v22">Supports ReVanced v22 patch bundles.</string>
     <string name="runtime_description_morphe">Supports Morphe patch bundles (.mpp).</string>
@@ -2678,8 +2678,8 @@ Details: %2$s</string>
         <item quantity="other">%1$d new runtime plugin updates are available:</item>
     </plurals>
     <plurals name="runtime_updates_installed">
-        <item quantity="one">Runtime plugin updated</item>
-        <item quantity="other">Runtime plugins updated</item>
+        <item quantity="one">Runtime updated</item>
+        <item quantity="other">Runtimes updated</item>
     </plurals>
     <plurals name="runtime_updates_installed_count">
         <item quantity="one">%1$d runtime plugin was updated:</item>
@@ -2766,4 +2766,6 @@ Details: %2$s</string>
     <string name="downloader_catalog_partial">Some downloader sources could not be refreshed. Previously loaded entries are shown where available.</string>
     <string name="downloader_file_import_failed">Could not import downloader APK</string>
     <string name="downloader_local_source_description">Imported from an APK file. Import a newer APK to update this downloader.</string>
+    <string name="runtime_shared_support_name">Shared support runtime</string>
+    <string name="runtime_shared_support_updated">The shared support runtime has been updated</string>
 </resources>
