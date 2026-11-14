@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.CollectionDialog
+import app.universal.patch.manager.ui.component.minimalActionButtons
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.EaseInOut
@@ -116,6 +118,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -1168,7 +1171,7 @@ fun PatchesSelectorScreen(
             if (newHeaderShown) return null
             newHeaderShown = true
             return {
-                ListHeader(title = stringResource(R.string.patch_selector_sheet_filter_new_patches))
+                ListHeader(title = pluralStringResource(R.plurals.new_patches_quantity, newCompatiblePatches.size + newIncompatiblePatches.size))
             }
         }
 
@@ -1208,7 +1211,7 @@ fun PatchesSelectorScreen(
         if (nonUniversalSelected) {
             if (regularVisible.isNotEmpty()) {
                 item(contentType = 0) {
-                    ListHeader(title = stringResource(R.string.regular_patches))
+                    ListHeader(title = pluralStringResource(R.plurals.regular_patches_quantity, regularVisible.size))
                 }
             }
             patchList(
@@ -1237,7 +1240,7 @@ fun PatchesSelectorScreen(
                 compatible = true,
                 suggestedVersion = suggestedVersion
             ) {
-                ListHeader(title = stringResource(R.string.universal_patches))
+                ListHeader(title = pluralStringResource(R.plurals.universal_patches_quantity, universalVisible.size))
             }
         } else {
             patchList(
@@ -1247,11 +1250,11 @@ fun PatchesSelectorScreen(
                 compatible = true,
                 suggestedVersion = suggestedVersion
             ) {
-                ListHeader(title = stringResource(R.string.universal_patches))
+                ListHeader(title = pluralStringResource(R.plurals.universal_patches_quantity, universalVisible.size))
             }
             if (regularVisible.isNotEmpty()) {
                 item(contentType = 0) {
-                    ListHeader(title = stringResource(R.string.regular_patches))
+                    ListHeader(title = pluralStringResource(R.plurals.regular_patches_quantity, regularVisible.size))
                 }
             }
             patchList(
@@ -2627,7 +2630,7 @@ private fun PatchProfileBundleDialog(
 ) {
     val confirmEnabled = bundles.isNotEmpty() && selectedBundleUids.isNotEmpty()
 
-    AlertDialogExtended(
+    CollectionDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = onConfirm, enabled = confirmEnabled) {
@@ -2641,23 +2644,22 @@ private fun PatchProfileBundleDialog(
         },
         title = { CenteredDialogTitle(stringResource(R.string.patch_profile_select_bundles_title)) },
         text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(stringResource(R.string.patch_profile_select_bundles_description))
-                if (bundles.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.patch_profile_select_bundles_empty),
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 320.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                LazyColumnWithScrollbar(
+                    modifier = Modifier.weight(1f, fill = false),
+                    thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+                    reserveScrollbarSpace = true,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (bundles.isEmpty()) {
+                        item {
+                            Text(
+                                text = stringResource(R.string.patch_profile_select_bundles_empty),
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    } else {
                         items(bundles, key = { it.uid }) { bundle ->
                             val selected = bundle.uid in selectedBundleUids
                             val toggle: () -> Unit = {
@@ -2737,7 +2739,7 @@ private fun PatchProfileNameDialog(
         keyboardController?.show()
     }
 
-    AlertDialogExtended(
+    CollectionDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(
@@ -2754,10 +2756,7 @@ private fun PatchProfileNameDialog(
         },
         title = { CenteredDialogTitle(stringResource(R.string.patch_profile_name_title)) },
         text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(stringResource(R.string.patch_profile_name_description))
                 TextField(
                     value = nameFieldValue,
@@ -2780,19 +2779,20 @@ private fun PatchProfileNameDialog(
                 )
 
                 if (profiles.isNotEmpty()) {
-                    Text(stringResource(R.string.patch_profile_update_existing_title))
-                    Text(
-                        text = stringResource(R.string.patch_profile_update_existing_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
                     LazyColumnWithScrollbar(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 240.dp),
-                        reserveScrollbarSpace = true
+                        thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+                        modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+                        reserveScrollbarSpace = true,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        item { Text(stringResource(R.string.patch_profile_update_existing_title)) }
+                        item {
+                            Text(
+                                text = stringResource(R.string.patch_profile_update_existing_description),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         items(
                             items = profiles,
                             key = { it.uid }
@@ -2877,7 +2877,7 @@ private fun PatchSelectionActionChip(
                 contentDescription = stringResource(spec.contentDescription),
                 modifier = Modifier.size(16.dp)
             )
-            Text(
+            if (!minimalActionButtons("selection")) Text(
                 text = stringResource(spec.label),
                 style = MaterialTheme.typography.labelMedium,
                 maxLines = 1

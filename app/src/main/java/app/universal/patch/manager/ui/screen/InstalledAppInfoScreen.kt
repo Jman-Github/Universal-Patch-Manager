@@ -104,6 +104,7 @@ import app.universal.patch.manager.ui.component.SegmentedButton
 import app.universal.patch.manager.ui.component.TransparentLoadingDialog
 import app.universal.patch.manager.ui.component.ConfirmDialog
 import app.universal.patch.manager.ui.component.ExportSavedApkFileNameDialog
+import app.universal.patch.manager.ui.component.appVersionLabel
 import app.universal.patch.manager.ui.component.patches.PathSelectorDialog
 import app.universal.patch.manager.ui.component.RememberedCreateDocument
 import app.universal.patch.manager.ui.component.toPickerDirectoryUri
@@ -393,6 +394,7 @@ fun InstalledAppInfoScreen(
                     version = savedVersion ?: currentVersion,
                     patchInfos = patchInfos,
                     fallbackNames = missingNames,
+                    fallbackDetails = savedBundle?.patchDisplayInfo.orEmpty(),
                     bundleAvailable = info != null,
                     hasUpdate = savedVersion != null &&
                         currentVersion != null &&
@@ -1191,11 +1193,12 @@ fun InstalledAppInfoScreen(
                 placeholderLabel = displayPackageName,
                 isLoading = !viewModel.hasLoadedAppInfo
             ) {
+                val versionLabel = installedApp.version.toPrefixedVersionLabel()
                 val copyAppVersion = {
                     clipboard?.setPrimaryClip(
                         ClipData.newPlainText(
                             "App version",
-                            installedApp.version.toPrefixedVersionLabel()
+                            versionLabel
                         )
                     )
                     if (clipboard != null) {
@@ -1205,6 +1208,7 @@ fun InstalledAppInfoScreen(
                 AppVersion(
                     appInfo = viewModel.appInfo,
                     versionName = installedApp.version,
+                    versionCodeOverride = viewModel.displayedVersionCode,
                     prefixVersion = true,
                     modifier = Modifier.longPressOnly(
                         label = stringResource(R.string.copy_to_clipboard),

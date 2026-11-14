@@ -21,6 +21,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
 import app.universal.patch.manager.downloader.DownloaderHostApi
+import app.universal.patch.manager.downloader.toDownloaderDisplayName
 import app.universal.patch.manager.plugin.downloader.R
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -51,7 +52,7 @@ class WebViewActivity : ComponentActivity() {
 
         val params = intent.getParcelableExtra<Parameters>(KEY)!!
         actionBar?.apply {
-            title = params.title
+            title = params.title.toDownloaderDisplayName()
             setHomeAsUpIndicator(android.R.drawable.ic_menu_close_clear_cancel)
             setDisplayHomeAsUpEnabled(true)
         }

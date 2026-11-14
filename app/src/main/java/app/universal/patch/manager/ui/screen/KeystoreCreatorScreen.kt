@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
+import app.universal.patch.manager.ui.component.LazyColumnWithScrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Save
@@ -41,6 +41,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.universal.patch.manager.data.platform.Filesystem
+import app.universal.patch.manager.domain.manager.SigningKeyAlgorithm
 import app.universal.patch.manager.domain.manager.KeystoreManager
 import app.universal.patch.manager.domain.manager.PreferencesManager
 import app.universal.patch.manager.ui.component.AppScaffold
@@ -77,6 +78,7 @@ fun KeystoreCreatorScreen(onBackClick: () -> Unit) {
     var alias by rememberSaveable { mutableStateOf("") }
     var storePassword by rememberSaveable { mutableStateOf("") }
     var keyPassword by rememberSaveable { mutableStateOf("") }
+    var algorithm by rememberSaveable { mutableStateOf(SigningKeyAlgorithm.RSA) }
     var format by rememberSaveable { mutableStateOf(KeystoreManager.KeystoreFormat.BKS) }
 
     var creating by rememberSaveable { mutableStateOf(false) }
@@ -196,7 +198,7 @@ fun KeystoreCreatorScreen(onBackClick: () -> Unit) {
             }
         }
     ) { paddingValues ->
-        LazyColumn(
+        LazyColumnWithScrollbar(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
@@ -240,7 +242,7 @@ fun KeystoreCreatorScreen(onBackClick: () -> Unit) {
             item {
                 OutlinedTextField(
                     value = alias,
-                    onValueChange = { alias = it },
+                    onValueChange = { if (!creating) { alias = it; createdKeystore = null } },
                     label = { Text(stringResource(R.string.import_keystore_dialog_alias_field)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
@@ -250,7 +252,7 @@ fun KeystoreCreatorScreen(onBackClick: () -> Unit) {
                 PasswordField(
                     modifier = Modifier.fillMaxWidth(),
                     value = storePassword,
-                    onValueChange = { storePassword = it },
+                    onValueChange = { if (!creating) { storePassword = it; createdKeystore = null } },
                     label = { Text(stringResource(R.string.import_keystore_dialog_password_field)) }
                 )
             }
@@ -258,9 +260,22 @@ fun KeystoreCreatorScreen(onBackClick: () -> Unit) {
                 PasswordField(
                     modifier = Modifier.fillMaxWidth(),
                     value = keyPassword,
-                    onValueChange = { keyPassword = it },
+                    onValueChange = { if (!creating) { keyPassword = it; createdKeystore = null } },
                     label = { Text(stringResource(R.string.import_keystore_dialog_key_password_field)) }
                 )
+            }
+            item {
+                Text(stringResource(R.string.tools_keystore_creator_algorithm), style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SigningKeyAlgorithm.entries.forEach { candidate ->
+                        FilterChip(
+                            onClick = { if (!creating) { algorithm = candidate; createdKeystore = null } },
+                            selected = algorithm == candidate,
+                            label = { Text(candidate.label) },
+                            enabled = !creating
+                        )
+                    }
+                }
             }
             item {
                 Text(
@@ -275,7 +290,8 @@ fun KeystoreCreatorScreen(onBackClick: () -> Unit) {
                 ) {
                     KeystoreManager.KeystoreFormat.entries.forEach { candidate ->
                         FilterChip(
-                            onClick = { format = candidate },
+                            onClick = { if (!creating) { format = candidate; createdKeystore = null } },
+                            enabled = !creating,
                             selected = format == candidate,
                             label = { Text(candidate.label) }
                         )
@@ -294,7 +310,8 @@ fun KeystoreCreatorScreen(onBackClick: () -> Unit) {
                                     alias = alias,
                                     storePass = storePassword,
                                     keyPass = keyPassword,
-                                    format = format
+                                    format = format,
+                                    algorithm = algorithm
                                 )
                             }.onSuccess {
                                 createdKeystore = it

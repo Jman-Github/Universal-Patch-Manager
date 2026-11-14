@@ -39,6 +39,8 @@ internal class PatcherProgressTracker(
     var dexSubStepsReady = false
     val pendingDexCompileLines = mutableListOf<String>()
     var writeApkStepStarted = false
+    private var acceptsLogProgress = true
+    private var logProgressGeneration = 0L
     var progress by mutableFloatStateOf(0f)
     private val dexCompilePattern =
         Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
@@ -398,6 +400,7 @@ internal class PatcherProgressTracker(
     }
 
     fun reconcileProgressStateAfterSuccess() {
+        stopLogProgress()
         clearFailure()
         resetDexCompileState()
         steps.forEachIndexed { index, step ->
@@ -422,7 +425,22 @@ internal class PatcherProgressTracker(
     }
 
     fun resetVisualProgress() {
+        logProgressGeneration++
+        acceptsLogProgress = true
         progress = 0f
+    }
+
+    private fun stopLogProgress() {
+        logProgressGeneration++
+        acceptsLogProgress = false
+    }
+
+    private fun dispatchLogProgress(action: () -> Unit) {
+        val generation = logProgressGeneration
+        dispatch {
+            // A callback queued by the previous attempt must not update a retry.
+            if (acceptsLogProgress && generation == logProgressGeneration) action()
+        }
     }
 
     private fun refreshVisualProgress() {
@@ -879,6 +897,7 @@ internal class PatcherProgressTracker(
     }
 
     fun handleDexCompileLine(rawLine: String) {
+        if (!acceptsLogProgress) return
         val line = rawLine.trim()
         if (line.isEmpty()) return
         if (line.startsWith("[STDIO]:", ignoreCase = true)) return
@@ -887,10 +906,10 @@ internal class PatcherProgressTracker(
         }
         if (!writeApkStepStarted) return
         if (line.contains("Writing patched files", ignoreCase = true)) {
-            dispatch {
+            dispatchLogProgress {
                 if (shouldBufferWriteApkLogProgress()) {
                     pendingDexCompileLines += "Writing patched files..."
-                    return@dispatch
+                    return@dispatchLogProgress
                 }
                 updateSubStep(StepId.WriteAPK, "Writing patched files...", null)
             }
@@ -899,59 +918,59 @@ internal class PatcherProgressTracker(
         if (line.contains("Compiling modified resources", ignoreCase = true) ||
             line.contains("Compiling patched resources", ignoreCase = true)
         ) {
-            dispatch {
+            dispatchLogProgress {
                 if (shouldBufferWriteApkLogProgress()) {
                     pendingDexCompileLines += "Compiling modified resources"
-                    return@dispatch
+                    return@dispatchLogProgress
                 }
-                if (!hasWriteApkApplyPhaseStarted()) return@dispatch
+                if (!hasWriteApkApplyPhaseStarted()) return@dispatchLogProgress
                 updateSubStep(StepId.WriteAPK, line, null)
             }
             return
         }
         if (isDexCompilePhaseTitle(line)) {
-            dispatch {
+            dispatchLogProgress {
                 if (shouldBufferWriteApkLogProgress()) {
                     pendingDexCompileLines += line
-                    return@dispatch
+                    return@dispatchLogProgress
                 }
-                if (!hasWriteApkApplyPhaseStarted()) return@dispatch
+                if (!hasWriteApkApplyPhaseStarted()) return@dispatchLogProgress
                 updateSubStep(StepId.WriteAPK, line, null)
             }
             return
         }
         morpheProcessingClassesPattern.find(line)?.let { match ->
             val title = "Processing ${match.groupValues[1]} classes"
-            dispatch {
+            dispatchLogProgress {
                 if (shouldBufferWriteApkLogProgress()) {
                     pendingDexCompileLines += title
-                    return@dispatch
+                    return@dispatchLogProgress
                 }
-                if (!hasWriteApkApplyPhaseStarted()) return@dispatch
+                if (!hasWriteApkApplyPhaseStarted()) return@dispatchLogProgress
                 updateSubStep(StepId.WriteAPK, title, null)
             }
             return
         }
         morpheWroteDexFilesPattern.find(line)?.let { match ->
             val title = "Wrote ${match.groupValues[1]} dex files"
-            dispatch {
+            dispatchLogProgress {
                 if (shouldBufferWriteApkLogProgress()) {
                     pendingDexCompileLines += title
-                    return@dispatch
+                    return@dispatchLogProgress
                 }
-                if (!hasWriteApkApplyPhaseStarted()) return@dispatch
+                if (!hasWriteApkApplyPhaseStarted()) return@dispatchLogProgress
                 updateSubStep(StepId.WriteAPK, title, null)
             }
             return
         }
         morpheStrippedDexPattern.find(line)?.let { match ->
             val title = "Modified ${match.groupValues[1]}"
-            dispatch {
+            dispatchLogProgress {
                 if (shouldBufferWriteApkLogProgress()) {
                     pendingDexCompileLines += title
-                    return@dispatch
+                    return@dispatchLogProgress
                 }
-                if (!hasWriteApkApplyPhaseStarted()) return@dispatch
+                if (!hasWriteApkApplyPhaseStarted()) return@dispatchLogProgress
                 updateSubStep(StepId.WriteAPK, title, null)
             }
             return
@@ -960,14 +979,14 @@ internal class PatcherProgressTracker(
         val match = dexCompilePattern.find(line) ?: dexWritePattern.find(line) ?: return
         val completionKeyword = match.groupValues.getOrNull(1)
         val dexName = match.groupValues.lastOrNull()?.takeIf { it.endsWith(".dex") } ?: return
-        dispatch {
+        dispatchLogProgress {
             val isCompletion = completionKeyword.equals("Compiled", ignoreCase = true)
             val title = if (isCompletion) "Compiled $dexName" else "Compiling $dexName"
             if (shouldBufferWriteApkLogProgress()) {
                 pendingDexCompileLines += title
-                return@dispatch
+                return@dispatchLogProgress
             }
-            if (!hasWriteApkApplyPhaseStarted()) return@dispatch
+            if (!hasWriteApkApplyPhaseStarted()) return@dispatchLogProgress
             updateSubStep(StepId.WriteAPK, title, null)
         }
     }
@@ -1111,25 +1130,31 @@ internal class PatcherProgressTracker(
         val failedIndex = when {
             runningIndex != -1 -> runningIndex
             else -> list.indexOfFirst { !it.skipped && it.state != State.COMPLETED }.takeIf { it != -1 }
-        } ?: list.lastIndex
+        } ?: return
 
         list.forEachIndexed { index, detail ->
             if (detail.skipped) {
-                list[index] = detail.copy(progress = null)
+                list[index] = detail.stopRunning(State.WAITING)
                 return@forEachIndexed
             }
             val updated = when {
-                index == failedIndex -> detail.withRecursiveState(
+                index == failedIndex -> detail.stopRunning(State.FAILED, errorMessage).copy(
                     state = State.FAILED,
                     message = errorMessage,
                     progress = null
                 )
-                detail.state == State.RUNNING -> detail.withRecursiveState(state = State.WAITING, progress = null)
-                else -> detail.withRecursiveState(progress = null)
+                else -> detail.stopRunning(State.WAITING)
             }
             list[index] = updated
         }
     }
+
+    private fun StepDetail.stopRunning(state: State, message: String? = null): StepDetail = copy(
+        state = if (this.state == State.RUNNING) state else this.state,
+        message = if (this.state == State.RUNNING) message ?: this.message else this.message,
+        progress = null,
+        children = children.map { it.stopRunning(state, message) }
+    )
 
     private fun StepDetail.withRecursiveState(
         state: State = this.state,
@@ -1301,7 +1326,10 @@ internal class PatcherProgressTracker(
                 }
 
                 is ProgressEvent.Failed -> {
-                    if (isDuplicateFailureWrapper && steps.any { it.state == State.FAILED }) return
+                    if (isDuplicateFailureWrapper && steps.any { it.state == State.FAILED }) {
+                        reconcileFailureState(event.error.message)
+                        return
+                    }
                     step.withState(
                         State.FAILED,
                         message = formatFailure(event.error),
@@ -1506,20 +1534,33 @@ internal class PatcherProgressTracker(
         } else error.stackTrace
 
     fun reconcileFailureState(failureMessage: String?) {
+        stopLogProgress()
         val message = failureMessage?.takeIf { it.isNotBlank() }
-        if (steps.any { it.state == State.FAILED }) return
+        clearDeferredLoadPatchesEvents()
+        resetDexCompileState()
 
-        val failedIndex = steps.indexOfFirst { it.state == State.RUNNING }
-            .takeIf { it != -1 }
-            ?: steps.indexOfFirst { it.state == State.WAITING }.takeIf { it != -1 }
-            ?: return
-
-        finalizeSubSteps(steps[failedIndex].id, failed = true, errorMessage = message)
-        steps[failedIndex] = steps[failedIndex].withState(
-            state = State.FAILED,
-            message = message,
-            progress = null
-        )
+        // A patch failure may already be visible while its parent or another active
+        // row is still running. Always settle those rows when the worker stops.
+        val hasFailure = steps.any { it.state == State.FAILED }
+        val fallbackIndex = if (hasFailure) -1 else {
+            steps.indexOfFirst { it.state == State.RUNNING }.takeIf { it != -1 }
+                ?: steps.indexOfFirst { it.state == State.WAITING }
+        }
+        steps.forEachIndexed { index, step ->
+            if (step.state == State.RUNNING || index == fallbackIndex) {
+                steps[index] = step.withState(State.FAILED, message = message, progress = null)
+            }
+        }
+        stepSubSteps.forEach { (id, details) ->
+            if (steps.any { it.id == id && it.state == State.FAILED } &&
+                details.none { it.state == State.FAILED }
+            ) {
+                finalizeSubSteps(id, failed = true, errorMessage = message)
+            }
+            details.forEachIndexed { index, detail ->
+                details[index] = detail.stopRunning(State.FAILED, message)
+            }
+        }
     }
 
     fun snapshot() = PatcherProgressSnapshot(

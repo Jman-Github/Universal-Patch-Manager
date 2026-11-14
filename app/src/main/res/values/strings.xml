@@ -589,7 +589,7 @@
     <string name="import_manager_settings_success">Imported manager settings</string>
     <string name="import_settings_in_progress">Importing settings…</string>
     <string name="import_everything">Import everything</string>
-    <string name="import_everything_description">Import patch selections and options, patch bundles, patch profiles, and manager settings from a single JSON file. The app restarts when the import is complete</string>
+    <string name="import_everything_description">Import patch selections and options, patch bundles, patch profiles, and manager settings from a single JSON file (keystore and app entries are not included). The app restarts when the import is complete</string>
     <string name="import_everything_fail">Could not import backup file: %s</string>
     <string name="export_patch_selection">Export patch selections and options</string>
     <string name="export_patch_selection_description">Export patch selections and options to a JSON file</string>
@@ -641,7 +641,7 @@
     <string name="export_manager_settings_fail">Could not export manager settings: %s</string>
     <string name="export_manager_settings_success">Exported manager settings</string>
     <string name="export_everything">Export everything</string>
-    <string name="export_everything_description">Export patch selections and options, patch bundles, patch profiles, and manager settings to one JSON file (keystore is not included)</string>
+    <string name="export_everything_description">Export patch selections and options, patch bundles, patch profiles, and manager settings to a single JSON file (keystore and app entries are not included)</string>
     <string name="export_everything_fail">Could not export backup file: %s</string>
     <string name="export_everything_success">Exported backup file</string>
     <string name="reset_patch_selection">Reset patch selections</string>
@@ -778,9 +778,9 @@ Patch profiles are not affected.</string>
     <string name="downloader_import_url_hint">https://github.com/...</string>
     <string name="downloader_no_url_sources">No URL sources added.</string>
     <string name="downloader_source_auto_update">Auto update</string>
-    <string name="downloader_source_latest">Latest</string>
+    <string name="downloader_source_latest">Use latest</string>
     <string name="downloader_source_latest_description">Use the newest release from this repository, whether it is stable or pre-release</string>
-    <string name="downloader_source_prerelease">Pre-release</string>
+    <string name="downloader_source_prerelease">Use pre-releases</string>
     <string name="downloader_source_prerelease_description">Use pre-release versions from this repository when checking for updates</string>
     <string name="downloader_source_repo_url">Repository URL</string>
     <string name="downloader_source_settings_title">%1$s settings</string>
@@ -881,7 +881,7 @@ Patch profiles are not affected.</string>
     <string name="storage_retained_originals_description">Original APKs retained for future batch patching</string>
     <string name="storage_clear_retained_originals_warning_description">This removes original APKs retained for future batch patching. You may need to select those APKs again</string>
     <string name="storage_repatch_inputs">Repatch APK sources</string>
-    <string name="storage_repatch_inputs_description">Private APK copies retained for Repatch and pending patch results</string>
+    <string name="storage_repatch_inputs_description">References to original APKs kept for Repatch and pending results. APK bytes are listed under Shared APK files. Unused sources are removed automatically.</string>
     <string name="storage_clear_repatch_inputs_warning_description">This removes all APK sources retained for Repatch. Existing patched apps are not removed. Temporary source copies still needed by pending patch results are kept, and you may need to select an APK source again the next time you Repatch an existing app.</string>
     <string name="storage_patch_profile_inputs">Patch profile inputs</string>
     <string name="storage_patch_profile_inputs_description">APK inputs saved for patch profiles</string>
@@ -892,7 +892,7 @@ Patch profiles are not affected.</string>
     <string name="storage_ui_temporary_workspace">UI temporary workspace</string>
     <string name="storage_ui_temporary_workspace_description">Temporary files kept for active UI flows</string>
     <string name="storage_other_internal_data">Other internal data</string>
-    <string name="storage_other_internal_data_description">Private app data not listed in another storage row</string>
+    <string name="storage_other_internal_data_description">Private app data not listed elsewhere. Clearing cache does not remove it. Android app settings applies to the whole app.</string>
     <string name="storage_external_cache">External cache</string>
     <string name="storage_external_cache_description">Cache files stored in external app folders</string>
     <string name="storage_external_files">External files</string>
@@ -923,7 +923,9 @@ Patch profiles are not affected.</string>
     <string name="storage_clear_external_files_warning_description">This deletes files UP Manager stored in its external app folders, except the signing backup. These files may be visible outside the app and UP Manager cannot restore them automatically. This cannot be undone</string>
     <string name="storage_cache_in_use">Storage is currently in use. Try again after the active operation finishes</string>
     <string name="storage_area_cleared">Cleared %1$s: %2$s</string>
-    <string name="storage_manage_area">Manage</string>
+    <string name="storage_shared_apks">Shared APK files</string>
+    <string name="storage_shared_apks_description">Original APKs shared by downloads and Repatch. Files are removed automatically when no saved download, repatch source or pending result needs them.</string>
+    <string name="storage_manage_area">Open Android app settings</string>
     <string name="storage_cache_cleared">Cleared %1$s from cache</string>
     <string name="storage_cache_clear_failed">Could not clear cache</string>
     <string name="storage_open_app_storage_settings">Open Android app storage settings</string>
@@ -931,7 +933,7 @@ Patch profiles are not affected.</string>
     <string name="storage_open_app_storage_settings_failed">Could not open app storage settings</string>
     <string name="storage_calculating">Calculating...</string>
     <string name="storage_empty">Empty</string>
-    <string name="storage_item_count">%1$d files, %2$d folders</string>
+    <string name="storage_item_count">%1$s, %2$s</string>
     <string name="storage_not_available">Not available</string>
     <string name="system">System</string>
     <string name="light">Light</string>
@@ -983,7 +985,7 @@ Patch profiles are not affected.</string>
     <string name="patcher_memory_usage_graph_description">Show live memory, CPU and storage I/O usage above the patcher progress steps</string>
     <string name="patcher_auto_collapse_steps">Auto-collapse completed patcher steps</string>
     <string name="patcher_auto_collapse_steps_description">Automatically collapse each patcher progress widget after all of its steps finish</string>
-    <string name="patcher_auto_expand_steps">Auto-expand running steps</string>
+    <string name="patcher_auto_expand_steps">Auto-expand running patcher steps</string>
     <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
     <string name="patcher_auto_expand_running_steps_exclusive">Only auto-expand active main category</string>
     <string name="patcher_auto_expand_running_steps_exclusive_description">When auto-expand is enabled, keep only the currently running main patcher category expanded and do not auto-expand sub-steps</string>
@@ -1309,7 +1311,7 @@ Patch profiles are not affected.</string>
     <string name="split_installer_log_jump_latest">Jump to latest log entry</string>
     <string name="tools_keystore_creator_title">Keystore creator</string>
     <string name="tools_keystore_creator_description">Create a new keystore with your own alias, passwords, and output format.</string>
-    <string name="tools_keystore_creator_info">Generate a new signing keystore, then save it using your selected file picker mode.</string>
+    <string name="tools_keystore_creator_info">Generate an RSA or ECDSA P-256 signing keystore, then save it using your selected file picker mode.</string>
     <string name="tools_keystore_creator_format_title">Keystore format</string>
     <string name="tools_keystore_creator_action">Create keystore</string>
     <string name="tools_keystore_creator_created">Keystore created.</string>
@@ -1547,11 +1549,11 @@ Patch profiles are not affected.</string>
     <!-- Code adapted from Morphe, see third-party/NOTICE for more information -->
     <!-- https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/res/values/strings.xml -->
     <string name="separate_processes_section">Separate processes</string>
-    <string name="process_memory_limit">Separate process memory limit</string>
-    <string name="process_memory_limit_subtitle">Memory available to separate-process tools and runtimes</string>
-    <string name="process_memory_limit_description">Applies to patching runtimes, split merging, and other separate-process tools</string>
-    <string name="process_memory_limit_warning">A low memory limit may cause memory-intensive tools and runtimes to fail</string>
-    <string name="process_memory_limit_high_warning">A memory limit above 1280 MB may be too high for this device and can cause separate processes to fail</string>
+    <string name="process_memory_limit">ART memory limit</string>
+    <string name="process_memory_limit_subtitle">Memory available for ART patching</string>
+    <string name="process_memory_limit_description">Increase this if ART patching runs out of memory. Higher limits use more RAM. Requires Android 11 or newer; some devices may use a lower limit. JVM memory is separate</string>
+    <string name="process_memory_limit_warning">Too little memory can cause patching to fail</string>
+    <string name="process_memory_limit_high_warning">Higher limits may fail if your device does not have enough available memory</string>
     <string name="process_memory_limit_value">%1$d MB</string>
     <string name="process_memory_limit_oom_title">Separate process ran out of memory</string>
     <string name="process_memory_limit_adjusted_message">The separate process memory limit was reduced from %1$d MB to %2$d MB for future attempts. Try again.</string>
@@ -2090,7 +2092,7 @@ Details: %2$s</string>
     <string name="manual_update_check_description">Manually check for updates</string>
     <string name="patches_and_manager">Patch Bundles &amp; Manager</string>
     <string name="update_on_metered_connections">Update on metered connections</string>
-    <string name="update_on_metered_connections_description">Allow patch and manager updates over metered networks</string>
+    <string name="update_on_metered_connections_description">Allow manager, bundle, and runtime updates over metered networks</string>
     <string name="update_checking_manager">Check for updates on launch</string>
     <string name="update_checking_manager_description">Check for new versions of UP Manager when the application starts</string>
     <string name="manager_prereleases">Use pre-releases</string>
@@ -2277,9 +2279,9 @@ Details: %2$s</string>
     <string name="export">Export</string>
     <string name="confirm">Confirm</string>
     <string name="patcher_runtime_plugins">Patcher Runtimes</string>
-    <string name="patcher_runtime_plugins_description">Morphe and Reseam are included. Manage optional ReVanced v21 and v22 plugins</string>
-    <string name="patcher_runtime_import_url">Import runtime source</string>
-    <string name="patcher_runtime_import_url_description">Add runtime plugins from a GitHub repository or release APK URL</string>
+    <string name="patcher_runtime_plugins_description">Download and manage the patcher runtimes you need</string>
+    <string name="patcher_runtime_import_url">Import runtime plugins</string>
+    <string name="patcher_runtime_import_url_description">Browse available runtimes and select the ones you want to download.</string>
     <string name="patcher_runtime_import_url_hint">https://github.com/...</string>
     <string name="patcher_runtime_import_failed">Failed to import runtime source: %1$s</string>
     <string name="patcher_runtime_update_failed">Failed to update runtime source: %1$s</string>
@@ -2303,7 +2305,7 @@ Details: %2$s</string>
     <string name="patcher_runtime_uninstall_description">Are you sure you want to uninstall %1$s?</string>
     <string name="patcher_runtime_uninstall_success">Uninstalled %1$s</string>
     <string name="patcher_runtime_uninstall_failed">Failed to uninstall %1$s</string>
-    <string name="patcher_runtime_type_label">Type:</string>
+    <string name="patcher_runtime_type_label">Plugin type:</string>
     <string name="patcher_runtime_trust_dialog_title">Trust</string>
     <string name="patcher_runtime_trust_dialog_body">Continuing will allow this runtime plugin to run patcher code inside UP Manager.\n\nOnly enable this runtime plugin if you trust it. Runtime plugins can execute arbitrary code and may compromise your device.</string>
     <string name="import_button">Import</string>
@@ -2349,9 +2351,9 @@ Details: %2$s</string>
     <string name="batch_patch_state_succeeded">Finished</string>
     <string name="batch_patch_state_failed">Failed</string>
     <string name="batch_patch_state_cancelled">Cancelled</string>
-    <string name="batch_patch_cancel_title">Cancel batch patching?</string>
-    <string name="batch_patch_cancel_description">The current patch will stop and the remaining apps will not be patched.</string>
-    <string name="batch_patch_cancel_confirm">Stop patching</string>
+    <string name="batch_patch_cancel_title">Stop</string>
+    <string name="batch_patch_cancel_description">Are you sure you want to stop the batch patching process?</string>
+    <string name="batch_patch_cancel_confirm">Confirm</string>
     <string name="batch_patch_cancelling">Cancelling batch patching…</string>
     <string name="batch_patch_patching_app">Patching %1$s</string>
     <string name="batch_patch_installing_app">Installing %1$s</string>
@@ -2540,7 +2542,7 @@ Details: %2$s</string>
     <string name="catalog_history_no_bundle">No indexed patch bundle is available for this release.</string>
     <string name="catalog_history_open_release">Open release</string>
     <string name="catalog_requires_v21">Requires the ReVanced v21 runtime plugin to be used in UPM.</string>
-    <string name="catalog_requires_reseam">Reseam is included in UPM.</string>
+    <string name="catalog_requires_reseam">Requires the ReSeam runtime plugin. Add it in Patcher runtimes.</string>
     <string name="catalog_requires_v22">Requires the ReVanced v22 runtime plugin to be used in UPM.</string>
     <string name="scroll_position">Scroll position</string>
     <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
@@ -2559,4 +2561,214 @@ Details: %2$s</string>
     <string name="manager_rebrand_notice_description">URV has been rebranded in this update to UPM (Universal Patch Manager).\n\nUPM installs as a second app because its package name is different. It will not replace URV, and your data will not move automatically.\n\nIn URV, open %1$s &gt; %2$s &gt; %3$s and save the backup. In UPM, open %1$s &gt; %2$s &gt; %4$s and select that backup.\n\nExport everything does not include your signing keystore. Use %5$s in URV and %6$s in UPM on the same settings page if you want to keep signing APKs with the same key.\n\nKeep URV installed until you have checked that your data and signing key were imported successfully.</string>
     <string name="manager_rebrand_continue_countdown">Continue (%1$d)</string>
     <string name="manager_update_unexpected_package">The downloaded APK is not a supported manager update.</string>
+    <string name="art_memory_description">Choose how much memory Reseam and other ART patching runs can use</string>
+    <string name="art_memory_search_keywords">ART memory RAM heap Reseam fallback 2 GB</string>
+    <string name="patcher_heap_memory_usage">Heap memory</string>
+    <string name="patcher_heap_process_detail">Total process memory, including native: %1$d MB</string>
+    <string name="about_donate">Support UP Manager</string>
+    <string name="about_donate_description">Donate to Jman-Github through GitHub Sponsors</string>
+    <string name="bundle_update_offline">No internet connection. Connect and try again.</string>
+    <string name="bundle_update_metered">Updates on metered connections are disabled in settings.</string>
+    <string name="minimal_action_buttons_title">Use minimal action buttons</string>
+    <string name="minimal_action_buttons_description">Show only icons on these action buttons</string>
+    <string name="source_search_browser">Search in browser</string>
+    <string name="source_search_browser_description">Find an APK using your browser</string>
+    <string name="dashboard_apps_actions">Apps tab buttons</string>
+    <string name="dashboard_bundles_actions">Patch Bundles tab buttons</string>
+    <string name="dashboard_actions_description">Touch and hold a button in the preview to reorder it</string>
+    <string name="move_action_up">Move up</string>
+    <string name="move_action_down">Move down</string>
+    <string name="dashboard_apps_visibility">Hide Apps tab action buttons</string>
+    <string name="dashboard_bundles_visibility">Hide Patch Bundles tab action buttons</string>
+    <string name="dashboard_visibility_description">Choose which action buttons are shown</string>
+    <string name="runtime_setup_title">Patcher runtimes</string>
+    <string name="runtime_setup_description">Choose at least one runtime to get started. You can add more later in Settings. After verifying each download, UPM removes the old plugin before adding its replacement.</string>
+    <string name="runtime_setup_continue">Continue</string>
+    <string name="runtime_catalog_title">Import runtime plugins</string>
+    <string name="runtime_catalog_description">Choose the patcher runtimes you want to add.</string>
+    <string name="runtime_catalog_download_size">Download: %1$s</string>
+    <string name="runtime_catalog_download">Download selected</string>
+    <string name="runtime_catalog_refresh">Refresh</string>
+    <string name="runtime_catalog_import_file">Import APK file</string>
+    <string name="runtime_catalog_cached">Showing the saved catalog. %1$s</string>
+    <string name="runtime_catalog_installed">Installed · v%1$s</string>
+    <string name="runtime_catalog_version">v%1$s · Engine %2$s · %3$s</string>
+    <string name="runtime_catalog_unavailable">No compatible release available</string>
+    <string name="catalog_requires_morphe">Requires the Morphe runtime plugin. Add it in Patcher runtimes.</string>
+    <string name="runtime_catalog_choose">Choose your runtimes</string>
+    <string name="runtime_catalog_more">More options</string>
+    <string name="runtime_catalog_selected_count">Selected: %1$d</string>
+    <string name="runtime_catalog_ready">Ready to continue</string>
+    <string name="runtime_catalog_select_hint">Select at least one</string>
+    <string name="runtime_catalog_checking">Checking availability</string>
+    <string name="runtime_catalog_replaces_old">Replaces your existing plugin</string>
+    <string name="runtime_catalog_remove_old_failed">To finish setup, allow UPM to uninstall the old %1$s plugin. Your verified replacement is saved; try again to continue.</string>
+    <string name="runtime_catalog_pending">Setup required</string>
+    <string name="runtime_catalog_finish_replacing">Finish replacing plugins</string>
+    <string name="runtime_catalog_available">Ready to download</string>
+    <string name="runtime_catalog_in_progress">Setting up runtimes…</string>
+    <string name="runtime_progress_preparing">Preparing download</string>
+    <string name="runtime_progress_importing">Importing runtime APK</string>
+    <string name="runtime_progress_downloading">Downloading</string>
+    <string name="runtime_progress_verifying">Verifying runtime</string>
+    <string name="runtime_progress_finishing">Finishing setup</string>
+    <string name="runtime_progress_step">Step %1$d of %2$d</string>
+    <string name="runtime_progress_bytes">%1$s / %2$s</string>
+    <string name="runtime_progress_percent">%1$s downloaded</string>
+    <plurals name="storage_file_count">
+        <item quantity="one">%1$d file</item>
+        <item quantity="other">%1$d files</item>
+    </plurals>
+    <plurals name="storage_folder_count">
+        <item quantity="one">%1$d folder</item>
+        <item quantity="other">%1$d folders</item>
+    </plurals>
+    <plurals name="new_patches_quantity">
+        <item quantity="one">New patch</item>
+        <item quantity="other">New patches</item>
+    </plurals>
+    <plurals name="regular_patches_quantity">
+        <item quantity="one">Regular patch</item>
+        <item quantity="other">Regular patches</item>
+    </plurals>
+    <plurals name="universal_patches_quantity">
+        <item quantity="one">Universal patch</item>
+        <item quantity="other">Universal patches</item>
+    </plurals>
+    <string name="patcher_resource_graphs_pinned_title">Pin patcher resource graphs</string>
+    <string name="patcher_resource_graphs_pinned_description">Keep CPU, memory, and storage graphs above the patching steps while scrolling.</string>
+    <string name="merger_resource_graphs_pinned_title">Pin merger resource graphs</string>
+    <string name="merger_resource_graphs_pinned_description">Keep CPU, memory, and storage graphs above the merging steps while scrolling.</string>
+    <string name="resource_graph_pinning_search_keywords">pin pinning pinned fixed sticky graphs resource usage monitoring</string>
+    <string name="runtime_updates_channel">Patcher runtime updates</string>
+    <string name="runtime_updates_available">Patcher runtime updates available</string>
+    <string name="runtime_updates_completed">Runtime updated</string>
+    <string name="runtime_description_revanced_v21">Supports ReVanced v21 and legacy class-based patch bundles.</string>
+    <string name="runtime_description_revanced_v22">Supports ReVanced v22 patch bundles.</string>
+    <string name="runtime_description_morphe">Supports Morphe patch bundles (.mpp).</string>
+    <string name="runtime_description_reseam">Supports Reseam patch bundles (.reseam).</string>
+    <string name="runtime_description_support">Shared support for patcher runtimes.</string>
+    <string name="runtime_catalog_refresh_failed">Could not refresh the runtime catalog</string>
+    <string name="runtime_catalog_no_compatible_release">No compatible release of %1$s is available. Retry after its runtime release is published.</string>
+    <string name="runtime_signer_unreadable">Failed to read signer for %1$s</string>
+    <string name="catalog_request_timeout">Catalog request timed out</string>
+    <string name="catalog_unavailable">Catalog unavailable. Try again later.</string>
+    <string name="catalog_search_budget_exceeded">Catalog search exceeded its request budget</string>
+    <string name="catalog_response_missing_data">GraphQL response missing data</string>
+    <string name="catalog_request_failed">Catalog request failed</string>
+    <string name="catalog_search_failed">Catalog search failed</string>
+    <string name="catalog_request_http_error">Catalog request failed: HTTP %1$d%2$s</string>
+    <string name="catalog_release_metadata_unavailable">Release metadata is unavailable</string>
+    <string name="catalog_release_document_unavailable">Release document is unavailable</string>
+    <string name="catalog_bundle_metadata_unavailable">Bundle metadata is unavailable</string>
+    <string name="catalog_patch_metadata_unavailable">Verified patch metadata is not yet available</string>
+    <string name="catalog_bundle_changed_discovery">This bundle changed. Refresh discovery before viewing its patches.</string>
+    <string name="catalog_bundle_changed_history">This bundle changed. Refresh release history before viewing its patches.</string>
+    <string name="catalog_changed_refresh">Catalog changed; refresh the catalog</string>
+    <string name="catalog_changed_history">Catalog changed; refresh release history</string>
+    <string name="catalog_export_stream_error">Could not open output stream for bundle export</string>
+    <string name="background_runtime_update">Background runtime updates</string>
+    <string name="background_runtime_update_description">Checks for runtime plugin updates in the background and notifies you about available or installed updates</string>
+    <plurals name="runtime_updates_found">
+        <item quantity="one">Runtime plugin update found</item>
+        <item quantity="other">Runtime plugin updates found</item>
+    </plurals>
+    <plurals name="runtime_updates_available_count">
+        <item quantity="one">%1$d new runtime plugin update is available:</item>
+        <item quantity="other">%1$d new runtime plugin updates are available:</item>
+    </plurals>
+    <plurals name="runtime_updates_installed">
+        <item quantity="one">Runtime updated</item>
+        <item quantity="other">Runtimes updated</item>
+    </plurals>
+    <plurals name="runtime_updates_installed_count">
+        <item quantity="one">%1$d runtime plugin was updated:</item>
+        <item quantity="other">%1$d runtime plugins were updated:</item>
+    </plurals>
+    <string name="export_app_entries">Export app entries</string>
+    <string name="export_app_entries_description">Back up selected patched APKs and their app details to a ZIP archive</string>
+    <string name="import_app_entries">Import app entries</string>
+    <string name="import_app_entries_description">Restore patched APKs and their details as saved entries in Apps</string>
+    <string name="app_entries_all">All</string>
+    <string name="app_entries_missing">(Missing)</string>
+    <string name="app_entries_no_apk">No retained patched APK to export</string>
+    <string name="app_entries_empty">No app entries to export</string>
+    <string name="app_entries_select_zip">Select an app entries ZIP archive</string>
+    <string name="app_entries_export_action">Export</string>
+    <string name="app_entries_preparing">Loading app entries…</string>
+    <string name="app_entries_reading">Reading ZIP archive…</string>
+    <string name="app_entries_checking">Checking archive…</string>
+    <string name="app_entries_exporting">Backing up APKs and app details…</string>
+    <string name="app_entries_saving">Saving ZIP archive…</string>
+    <string name="app_entries_importing">Restoring APKs and app details…</string>
+    <string name="app_entries_progress_count">%1$d of %2$d processed</string>
+    <string name="app_entries_export_failed">Could not export app entries</string>
+    <string name="app_entries_import_failed">Could not read or import app entries</string>
+    <plurals name="app_entries_selected">
+        <item quantity="one">%d app entry selected</item>
+        <item quantity="other">%d app entries selected</item>
+    </plurals>
+    <plurals name="app_entries_exported">
+        <item quantity="one">Exported %d app entry</item>
+        <item quantity="other">Exported %d app entries</item>
+    </plurals>
+    <plurals name="app_entries_imported">
+        <item quantity="one">Imported %d app entry</item>
+        <item quantity="other">Imported %d app entries</item>
+    </plurals>
+    <plurals name="app_entries_imported_skipped">
+        <item quantity="one">Imported %1$d app entry with %2$d skipped</item>
+        <item quantity="other">Imported %1$d app entries with %2$d skipped</item>
+    </plurals>
+    <plurals name="app_entries_updated">
+        <item quantity="one">Updated %d app entry</item>
+        <item quantity="other">Updated %d app entries</item>
+    </plurals>
+    <plurals name="app_entries_updated_skipped">
+        <item quantity="one">Updated %1$d app entry with %2$d skipped</item>
+        <item quantity="other">Updated %1$d app entries with %2$d skipped</item>
+    </plurals>
+    <plurals name="app_entries_skipped">
+        <item quantity="one">Skipped %d app entry</item>
+        <item quantity="other">Skipped %d app entries</item>
+    </plurals>
+    <plurals name="downloader_updates_found">
+        <item quantity="one">Downloader plugin update found</item>
+        <item quantity="other">Downloader plugin updates found</item>
+    </plurals>
+    <plurals name="downloader_updates_available_count">
+        <item quantity="one">%1$d new downloader plugin update is available:</item>
+        <item quantity="other">%1$d new downloader plugin updates are available:</item>
+    </plurals>
+    <plurals name="downloader_updates_installed">
+        <item quantity="one">Downloader plugin updated</item>
+        <item quantity="other">Downloader plugins updated</item>
+    </plurals>
+    <plurals name="downloader_updates_installed_count">
+        <item quantity="one">%1$d downloader plugin was updated:</item>
+        <item quantity="other">%1$d downloader plugins were updated:</item>
+    </plurals>
+    <string name="downloader_updates_channel">Downloader updates</string>
+    <string name="downloader_catalog_title">Import downloaders</string>
+    <string name="downloader_catalog_description">Choose downloaders to import. You can also import a URL or APK file from the menu. Newly imported downloaders must be trusted in downloader settings before use.</string>
+    <string name="downloader_catalog_pending">Import required</string>
+    <string name="downloader_catalog_imported_version">Imported · %1$s</string>
+    <string name="downloader_catalog_version_size">%1$s · %2$s</string>
+    <string name="downloader_catalog_imported">Imported</string>
+    <string name="downloader_catalog_verifying">Verifying downloader</string>
+    <string name="downloader_catalog_choose">Choose downloaders</string>
+    <string name="downloader_catalog_import_url">Import from URL</string>
+    <string name="downloader_catalog_import_failed">Some downloaders could not be imported. Try the remaining selections again.</string>
+    <string name="downloader_catalog_importing_file">Importing APK file…</string>
+    <string name="downloader_catalog_load_failed">Could not load the downloader list. Check your connection and try again.</string>
+    <string name="downloader_catalog_available">Available downloaders</string>
+    <string name="downloader_catalog_empty">No downloaders are available right now.</string>
+    <string name="downloader_catalog_partial">Some downloader sources could not be refreshed. Previously loaded entries are shown where available.</string>
+    <string name="downloader_file_import_failed">Could not import downloader APK</string>
+    <string name="downloader_local_source_description">Imported from an APK file. Import a newer APK to update this downloader.</string>
+    <string name="runtime_shared_support_name">Shared support runtime</string>
+    <string name="runtime_shared_support_updated">The shared support runtime has been updated</string>
+    <string name="tools_keystore_creator_algorithm">Key algorithm</string>
+    <string name="tools_keystore_converter_keep_algorithm">Keep existing key</string>
+    <string name="tools_keystore_converter_new_identity_warning">Selecting RSA or ECDSA generates a new key and certificate. It cannot update apps signed with the original key. Choose Keep existing key to change only the file format.</string>
 </resources>

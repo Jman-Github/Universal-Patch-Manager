@@ -17,7 +17,9 @@ compiler = [artifact("org.jetbrains.kotlin", name, "2.4.10") for name in (
     "kotlin-compiler-embeddable", "kotlin-stdlib", "kotlin-reflect", "kotlin-script-runtime")]
 compiler += [artifact("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm", "1.10.2"),
              artifact("org.jetbrains", "annotations", "13.0")]
-core = ROOT / "upm-patcher-core/build/libs/upm-patcher-core.jar"
+runtime_classpath = os.pathsep.join(map(str, [
+    artifact("org.jetbrains.kotlin", "kotlin-stdlib", "2.4.10"),
+    artifact("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm", "1.10.2")]))
 fixtures = {
     "Binder.kt": """
 package android.os
@@ -188,7 +190,7 @@ with tempfile.TemporaryDirectory(prefix="runtime-worker-test-", dir=ROOT / "buil
     classes = work / "classes"
     subprocess.run([str(JAVA), "-cp", os.pathsep.join(map(str, compiler)),
         "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler", "-no-stdlib", "-no-reflect",
-        "-jvm-target", "17", "-classpath", str(core), "-d", str(classes),
+        "-jvm-target", "17", "-classpath", runtime_classpath, "-d", str(classes),
         *map(str, sources)], check=True, timeout=90)
-    subprocess.run([str(JAVA), "-cp", os.pathsep.join(map(str, [classes, core])), "MainKt"],
+    subprocess.run([str(JAVA), "-cp", os.pathsep.join([str(classes), runtime_classpath]), "MainKt"],
                    check=True, timeout=10)

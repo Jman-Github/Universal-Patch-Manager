@@ -26,6 +26,7 @@ data class GitHubAsset(
     @SerialName("content_type")
     val contentType: String? = null,
     val digest: String? = null,
+    val size: Long? = null,
 )
 
 @Serializable

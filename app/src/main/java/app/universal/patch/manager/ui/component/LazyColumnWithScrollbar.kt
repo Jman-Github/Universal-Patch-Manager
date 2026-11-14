@@ -31,7 +31,7 @@ fun LazyColumnWithScrollbar(
     horizontalAlignment: Alignment.Horizontal = Alignment.Start,
     flingBehavior: FlingBehavior = ScrollableDefaults.flingBehavior(),
     userScrollEnabled: Boolean = true,
-    thumbLength: Dp? = null,
+    thumbLength: Dp? = DASHBOARD_SCROLLBAR_THUMB_LENGTH,
     reserveScrollbarSpace: Boolean = false,
     content: LazyListScope.() -> Unit
 ) {
@@ -48,10 +48,14 @@ fun LazyColumnWithScrollbar(
             userScrollEnabled = userScrollEnabled,
             content = content
         )
-        Scrollbar(
-            state,
-            Modifier.align(Alignment.CenterEnd),
-            thumbLength = thumbLength
-        )
+        // The overlay must follow the measured list, rather than force it to
+        // fill all available height when this list is inside a wrapping dialog.
+        Box(Modifier.matchParentSize()) {
+            Scrollbar(
+                state,
+                Modifier.align(Alignment.CenterEnd),
+                thumbLength = thumbLength
+            )
+        }
     }
 }

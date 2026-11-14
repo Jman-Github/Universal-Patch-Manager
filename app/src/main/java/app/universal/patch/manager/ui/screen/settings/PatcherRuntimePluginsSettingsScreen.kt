@@ -44,6 +44,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,6 +53,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import app.universal.patch.manager.ui.component.bundle.BundleMetaPill
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,6 +76,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.universal.patch.manager.ui.component.settings.SettingsSearchHighlight
+import kotlinx.coroutines.flow.first
 import app.universal.patch.manager.R
 import app.universal.patch.manager.network.runtime.PatcherRuntimeKind
 import app.universal.patch.manager.network.runtime.PatcherRuntimePluginSourceState
@@ -107,8 +111,21 @@ fun PatcherRuntimePluginsSettingsScreen(
 ) {
     val topAppBarScrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     val pluginStates by viewModel.runtimePluginStates.collectAsStateWithLifecycle(emptyMap())
+    val availableVersions by viewModel.availableRuntimeVersions.collectAsStateWithLifecycle(emptyMap())
     val sourceStates by viewModel.runtimePluginSourceStates.collectAsStateWithLifecycle(emptyMap())
     val loadedRuntimes by viewModel.loadedRuntimes.collectAsStateWithLifecycle(emptyMap())
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
+    var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
+    LaunchedEffect(searchTarget) {
+        val target = searchTarget
+        if (target?.destination == app.universal.patch.manager.ui.model.navigation.Settings.PatcherRuntimes) {
+            val itemCount = androidx.compose.runtime.snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > 0 }
+            listState.scrollToItem((if (target.targetId == R.string.patcher_runtime_available) 0 else 2).coerceAtMost(itemCount - 1))
+            highlightTarget = target.targetId
+            SettingsSearchState.clear()
+        }
+    }
     val remoteSourceBusyState = viewModel.remoteSourceBusyState
     var showImportUrlDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -118,13 +135,18 @@ fun PatcherRuntimePluginsSettingsScreen(
     }
 
     if (showImportUrlDialog) {
-        ImportRuntimeSourceDialog(
-            onDismiss = { showImportUrlDialog = false },
-            onImport = { url ->
-                viewModel.importPluginSource(url)
-                showImportUrlDialog = false
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showImportUrlDialog = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface {
+                RuntimeCatalogScreen(
+                    onboarding = false,
+                    onBackClick = { showImportUrlDialog = false },
+                    viewModel = viewModel
+                )
             }
-        )
+        }
     }
     if (remoteSourceBusyState != null) {
         TransparentLoadingDialog()
@@ -146,13 +168,22 @@ fun PatcherRuntimePluginsSettingsScreen(
             modifier = Modifier.padding(padding)
         ) {
             LazyColumnWithScrollbar(
+                thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+                state = listState,
                 modifier = Modifier.fillMaxSize()
             ) {
                 item {
-                    GroupHeader(
-                        title = stringResource(R.string.patcher_runtime_available),
-                        icon = SettingsSectionIcons.PatchingEngine
-                    )
+                    SettingsSearchHighlight(
+                        targetKey = R.string.patcher_runtime_available,
+                        activeKey = highlightTarget,
+                        onHighlightComplete = { highlightTarget = null }
+                    ) { highlightModifier ->
+                        GroupHeader(
+                            stringResource(R.string.patcher_runtime_available),
+                            icon = SettingsSectionIcons.PatchingEngine,
+                            modifier = highlightModifier
+                        )
+                    }
                 }
                 item {
                     RuntimeSummaryCard(
@@ -161,10 +192,19 @@ fun PatcherRuntimePluginsSettingsScreen(
                     )
                 }
                 item {
-                    GroupHeader(
-                        title = stringResource(R.string.patcher_runtime_plugins_section),
-                        icon = SettingsSectionIcons.DownloaderPlugins
-                    )
+                    SettingsSearchHighlight(
+                        targetKey = R.string.patcher_runtime_plugins_section,
+                        extraKeys = setOf(R.string.patcher_runtime_plugins, R.string.patcher_runtime_import_url,
+                            R.string.patcher_runtime_managed_sources, R.string.patcher_runtime_installed_plugins),
+                        activeKey = highlightTarget,
+                        onHighlightComplete = { highlightTarget = null }
+                    ) { highlightModifier ->
+                        GroupHeader(
+                            stringResource(R.string.patcher_runtime_plugins_section),
+                            icon = SettingsSectionIcons.DownloaderPlugins,
+                            modifier = highlightModifier
+                        )
+                    }
                 }
                 item {
                     RuntimeImportCard(
@@ -177,6 +217,7 @@ fun PatcherRuntimePluginsSettingsScreen(
                     item(key = "source:$sourceId") {
                         ManagedRuntimeCard(
                             source = source,
+                            updateVersion = availableVersions[sourceId],
                             viewModel = viewModel,
                             remoteSourceBusyState = remoteSourceBusyState,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
@@ -225,9 +266,7 @@ private fun RuntimeSummaryCard(
             }
         )
         ExpressiveSettingsDivider()
-        RuntimeAvailabilityRow(name = "Reseam", available = true, builtIn = true)
-        RuntimeAvailabilityRow(name = "Morphe", available = true, builtIn = true)
-        PatcherRuntimeKind.entries.forEach { kind ->
+        PatcherRuntimeKind.entries.filterNot { it == PatcherRuntimeKind.SHARED_SUPPORT }.forEach { kind ->
             RuntimeAvailabilityRow(
                 name = kind.displayName,
                 available = kind in loadedRuntimes
@@ -239,8 +278,7 @@ private fun RuntimeSummaryCard(
 @Composable
 private fun RuntimeAvailabilityRow(
     name: String,
-    available: Boolean,
-    builtIn: Boolean = false
+    available: Boolean
 ) {
     Row(
         modifier = Modifier
@@ -256,20 +294,12 @@ private fun RuntimeAvailabilityRow(
         )
         Spacer(modifier = Modifier.width(12.dp))
         RuntimeStatusPill(
-            text = if (builtIn) {
-                stringResource(R.string.patcher_runtime_built_in)
-            } else {
-                stringResource(
-                    if (available) R.string.patcher_runtime_available_yes
-                    else R.string.patcher_runtime_available_no
-                )
-            },
-            icon = when {
-                builtIn -> Icons.Outlined.Build
-                available -> Icons.Filled.Check
-                else -> Icons.Filled.Close
-            },
-            emphasized = available || builtIn
+            text = stringResource(
+                if (available) R.string.patcher_runtime_available_yes
+                else R.string.patcher_runtime_available_no
+            ),
+            icon = if (available) Icons.Filled.Check else Icons.Filled.Close,
+            emphasized = available
         )
     }
 }
@@ -324,8 +354,8 @@ private fun RuntimeImportCard(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
     ) {
         ExpressiveSettingsItem(
-            headlineContent = stringResource(R.string.patcher_runtime_import_url),
-            supportingContent = stringResource(R.string.patcher_runtime_import_url_description)
+            headlineContent = stringResource(R.string.runtime_catalog_title),
+            supportingContent = stringResource(R.string.runtime_catalog_description)
         )
         Row(
             modifier = Modifier
@@ -346,6 +376,7 @@ private fun RuntimeImportCard(
 @Composable
 private fun ManagedRuntimeCard(
     source: PatcherRuntimePluginSourceState,
+    updateVersion: String?,
     viewModel: PatcherRuntimePluginsViewModel,
     remoteSourceBusyState: PatcherRuntimePluginsViewModel.RemoteSourceBusyState?,
     modifier: Modifier = Modifier
@@ -366,6 +397,7 @@ private fun ManagedRuntimeCard(
     RuntimePluginCard(
         title = sourceName,
         version = source.version,
+        updateVersion = updateVersion,
         status = when (source.state) {
             is PatcherRuntimePluginSourceState.State.Loaded ->
                 stringResource(R.string.downloader_source_state_loaded)
@@ -379,6 +411,12 @@ private fun ManagedRuntimeCard(
         type = RuntimePluginType.Remote,
         detail = source.repoUrl.toGitHubRepoDisplayName(),
         modifier = modifier,
+        leadingContent = {
+            app.universal.patch.manager.ui.component.RuntimePluginIcon(
+                apk = viewModel.sourceIconFile(source.entry),
+                pm = viewModel.pm, previewUrl = null, modifier = Modifier.size(44.dp)
+            )
+        },
         secondaryActionLabel = stringResource(R.string.delete),
         onSecondaryAction = { showDeleteDialog = true },
         middleActionLabel = stringResource(R.string.settings),
@@ -652,6 +690,7 @@ private fun RuntimePluginCard(
     onPrimaryAction: () -> Unit,
     onSecondaryAction: () -> Unit,
     modifier: Modifier = Modifier,
+    updateVersion: String? = null,
     middleActionLabel: String? = null,
     onMiddleAction: (() -> Unit)? = null,
     footerActionLabel: String? = null,
@@ -732,6 +771,15 @@ private fun RuntimePluginCard(
                 }
             }
         )
+        updateVersion?.let { version ->
+            Box(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp)) {
+                BundleMetaPill(
+                    text = stringResource(R.string.bundle_update_manual_available_with_version, version),
+                    enabled = true,
+                    isAccent = true
+                )
+            }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1156,63 +1204,6 @@ private fun TrustDialogSectionLabel(text: String) {
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center
-    )
-}
-
-@Composable
-private fun ImportRuntimeSourceDialog(
-    onDismiss: () -> Unit,
-    onImport: (String) -> Unit
-) {
-    var url by rememberSaveable { mutableStateOf("") }
-    val trimmedUrl = url.trim()
-    val focusRequester = remember { FocusRequester() }
-    val keyboardController = LocalSoftwareKeyboardController.current
-
-    LaunchedEffect(Unit) {
-        withFrameNanos { }
-        focusRequester.requestFocus()
-        keyboardController?.show()
-    }
-
-    AlertDialog(
-        modifier = Modifier.imePadding(),
-        onDismissRequest = onDismiss,
-        title = { CenteredDialogTitle(stringResource(R.string.patcher_runtime_import_url)) },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.patcher_runtime_import_url_description),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                OutlinedTextField(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focusRequester),
-                    value = url,
-                    onValueChange = { url = it },
-                    placeholder = { Text(stringResource(R.string.patcher_runtime_import_url_hint)) },
-                    singleLine = true
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onImport(trimmedUrl) },
-                enabled = trimmedUrl.isNotEmpty()
-            ) {
-                Text(stringResource(R.string.import_button))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
-            }
-        }
     )
 }
 

@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "plugins": [
+    {
+      "id": "revanced-v21",
+      "kind": "revanced-v21",
+      "name": "ReVanced v21",
+      "description": "Supports ReVanced v21 and legacy class-based patch bundles.",
+      "packageName": "app.universal.patch.manager.revanced.v21.runtime",
+      "assetName": "revanced.v21-plugin.apk",
+      "dependencies": [
+        "shared-support"
+      ],
+      "repoUrl": "https://github.com/Jman-Github/Universal-Patch-Manager-Runtimes"
+    },
+    {
+      "id": "revanced-v22",
+      "kind": "revanced-v22",
+      "name": "ReVanced v22",
+      "description": "Supports ReVanced v22 patch bundles.",
+      "packageName": "app.universal.patch.manager.revanced.v22.runtime",
+      "assetName": "revanced.v22-plugin.apk",
+      "dependencies": [
+        "shared-support"
+      ],
+      "repoUrl": "https://github.com/Jman-Github/Universal-Patch-Manager-Runtimes"
+    },
+    {
+      "id": "morphe",
+      "kind": "morphe",
+      "name": "Morphe",
+      "description": "Supports Morphe patch bundles (.mpp).",
+      "packageName": "app.universal.patch.manager.morphe.runtime",
+      "assetName": "morphe-plugin.apk",
+      "dependencies": [
+        "shared-support"
+      ],
+      "repoUrl": "https://github.com/Jman-Github/Universal-Patch-Manager-Runtimes"
+    },
+    {
+      "id": "reseam",
+      "kind": "reseam",
+      "name": "Reseam",
+      "description": "Supports Reseam patch bundles (.reseam).",
+      "packageName": "app.universal.patch.manager.reseam.runtime",
+      "assetName": "reseam-runtime.apk",
+      "dependencies": [
+        "shared-support"
+      ],
+      "repoUrl": "https://github.com/Jman-Github/Universal-Patch-Manager-Runtimes"
+    },
+    {
+      "id": "shared-support",
+      "kind": "shared-support",
+      "name": "UPM runtime support",
+      "description": "Provides shared components required by runtime plugins.",
+      "packageName": "app.universal.patch.manager.support.runtime",
+      "assetName": "shared-support-plugin.apk",
+      "dependencies": [],
+      "repoUrl": "https://github.com/Jman-Github/Universal-Patch-Manager-Runtimes"
+    }
+  ]
+}

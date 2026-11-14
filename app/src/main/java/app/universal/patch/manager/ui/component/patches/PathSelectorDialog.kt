@@ -262,8 +262,8 @@ fun PathSelectorDialog(
     val files = remember(visibleEntries, fileFilter, sortComparator) {
         visibleEntries.filterNot(Path::isDirectory).filter(fileFilter).sortedWith(sortComparator)
     }
-    val persistedSearchQuery by prefs.pathSelectorSearchQuery.getAsState()
-    var searchQuery by rememberSaveable(persistedSearchQuery) { mutableStateOf(persistedSearchQuery) }
+    // Search belongs to this picker session, never the next picker that is opened.
+    var searchQuery by rememberSaveable { mutableStateOf("") }
     val normalizedQuery = searchQuery.trim()
     val filteredDirectories = remember(directories, normalizedQuery) {
         if (normalizedQuery.isBlank()) {
@@ -337,11 +337,6 @@ fun PathSelectorDialog(
         }
     }
 
-    LaunchedEffect(searchQuery, persistedSearchQuery) {
-        if (searchQuery != persistedSearchQuery) {
-            prefs.pathSelectorSearchQuery.update(searchQuery)
-        }
-    }
 
     FullscreenDialog(
         onDismissRequest = { onSelect(null) },

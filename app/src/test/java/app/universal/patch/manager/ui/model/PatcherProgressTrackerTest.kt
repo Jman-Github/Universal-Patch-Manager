@@ -8,6 +8,134 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PatcherProgressTrackerTest {
+    @Test fun terminalFailureSettlesRunningParentsEvenWhenAPatchAlreadyFailed() {
+        val tracker = patchTracker()
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.ReadAPK))
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.ExecutePatches))
+        val error = RemoteError("PatchError", "Failed A", "original stack")
+        tracker.processProgressEventLocked(ProgressEvent.Failed(StepId.ExecutePatch(0), error))
+        tracker.reconcileFailureState("Worker stopped")
+        assertTrue(tracker.steps.none { it.state == State.RUNNING })
+        assertEquals(State.FAILED, tracker.steps.first { it.id == StepId.ExecutePatches }.state)
+        assertEquals("original stack", tracker.steps.first { it.id == StepId.ExecutePatch(0) }.message)
+        assertEquals(State.WAITING, tracker.steps.first { it.id == StepId.WriteAPK }.state)
+    }
+
+    @Test fun duplicateFailureWrapperStopsTheParentWithoutOverwritingThePatchError() {
+        val tracker = patchTracker()
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.ReadAPK))
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.ExecutePatches))
+        val error = RemoteError("PatchError", "Failed A", "original stack")
+        tracker.processProgressEventLocked(ProgressEvent.Failed(StepId.ExecutePatch(0), error))
+        tracker.processProgressEventLocked(ProgressEvent.Failed(StepId.ExecutePatches, error))
+        assertTrue(tracker.steps.none { it.state == State.RUNNING })
+        assertEquals("original stack", tracker.steps.first { it.id == StepId.ExecutePatch(0) }.message)
+    }
+
+    @Test fun individualPatchFailureStillAllowsTheNextPatchToRun() {
+        val tracker = patchTracker()
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.ExecutePatches))
+        tracker.processProgressEventLocked(ProgressEvent.Failed(StepId.ExecutePatch(0),
+            RemoteError("PatchError", "Failed A", "original stack")))
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.ExecutePatch(1)))
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.ExecutePatch(1)))
+        assertEquals(State.RUNNING, tracker.steps.first { it.id == StepId.ExecutePatches }.state)
+        assertEquals(State.COMPLETED, tracker.steps.first { it.id == StepId.ExecutePatch(1) }.state)
+    }
+
+    @Test fun terminalFailureSettlesNestedWorkWithoutChangingFinishedOrUnstartedChildren() {
+        val tracker = tracker(StepId.WriteAPK)
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.WriteAPK))
+        tracker.stepSubSteps[StepId.WriteAPK] = mutableStateListOf(
+            StepDetail("DEX", State.RUNNING, children = listOf(
+                StepDetail("classes.dex", State.COMPLETED),
+                StepDetail("classes2.dex", State.RUNNING, progress = 1L to 2L),
+                StepDetail("classes3.dex", State.WAITING)
+            )))
+        tracker.reconcileFailureState("Out of memory")
+        val group = tracker.stepSubSteps.getValue(StepId.WriteAPK).single()
+        assertEquals(State.FAILED, group.state)
+        assertEquals(listOf(State.COMPLETED, State.FAILED, State.WAITING), group.children.map { it.state })
+        assertTrue(group.children.all { it.progress == null })
+        tracker.reconcileFailureState("Out of memory")
+        assertEquals(group, tracker.stepSubSteps.getValue(StepId.WriteAPK).single())
+    }
+
+    @Test fun failureAfterCompletedSubStepsDoesNotRelabelThemAsFailed() {
+        val tracker = tracker(StepId.WriteAPK)
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.WriteAPK))
+        tracker.stepSubSteps[StepId.WriteAPK] = mutableStateListOf(
+            StepDetail("Output written", State.COMPLETED))
+        tracker.processProgressEventLocked(ProgressEvent.Failed(StepId.WriteAPK,
+            RemoteError("IOException", "Cleanup failed", "cleanup stack")))
+        tracker.reconcileFailureState("Cleanup failed")
+        assertEquals(State.FAILED, tracker.steps.first { it.id == StepId.WriteAPK }.state)
+        assertEquals(State.COMPLETED, tracker.stepSubSteps.getValue(StepId.WriteAPK).single().state)
+    }
+
+    @Test fun automaticRetryCanRestartAfterAnAggregateFailure() {
+        val tracker = patchTracker()
+        tracker.steps.add(0, Step(StepId.LoadPatches, "Load", StepCategory.PREPARING))
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.LoadPatches))
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.ReadAPK))
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.ExecutePatches))
+        val error = RemoteError("PatchError", "Failed A", "original stack")
+        tracker.processProgressEventLocked(ProgressEvent.Failed(StepId.ExecutePatch(0), error))
+        tracker.processProgressEventLocked(ProgressEvent.Failed(StepId.ExecutePatches, error))
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.LoadPatches))
+        assertTrue(tracker.steps.none { it.state == State.FAILED })
+        assertEquals(State.RUNNING, tracker.steps.first { it.id == StepId.LoadPatches }.state)
+        assertEquals(State.WAITING, tracker.steps.first { it.id == StepId.ExecutePatch(0) }.state)
+    }
+
+    @Test fun terminalFailureIgnoresLateSavingLogs() {
+        val tracker = patchTracker()
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.ExecutePatches))
+        tracker.processProgressEventLocked(ProgressEvent.Failed(StepId.ExecutePatch(0),
+            RemoteError("PatchError", "Failed A", "original stack")))
+        tracker.reconcileFailureState("Worker stopped")
+        val stopped = tracker.snapshot()
+        tracker.handleDexCompileLine("Writing output APK")
+        assertEquals(stopped, tracker.snapshot())
+        assertFalse(tracker.writeApkStepStarted)
+    }
+
+    @Test fun terminalFailureDiscardsAlreadyQueuedLogUpdates() {
+        val pending = mutableListOf<() -> Unit>()
+        val tracker = tracker(StepId.WriteAPK, dispatch = { pending += it })
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.WriteAPK, v21WriteStages()))
+        tracker.report(StepId.WriteAPK, "Applying patched changes")
+        tracker.handleDexCompileLine("Compiling modified resources")
+        assertEquals(1, pending.size)
+        tracker.reconcileFailureState("Worker stopped")
+        val stopped = tracker.snapshot()
+        pending.forEach { it() }
+        assertEquals(stopped, tracker.snapshot())
+    }
+
+    @Test fun retryDropsOldLogCallbacksAndAcceptsItsOwnLogUpdates() {
+        val pending = mutableListOf<() -> Unit>()
+        val tracker = tracker(StepId.WriteAPK, dispatch = { pending += it })
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.LoadPatches))
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.WriteAPK, v21WriteStages()))
+        tracker.report(StepId.WriteAPK, "Applying patched changes")
+        tracker.handleDexCompileLine("Compiling modified resources")
+        assertEquals(1, pending.size)
+        tracker.reconcileFailureState("Worker stopped")
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.LoadPatches))
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.LoadPatches))
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.WriteAPK, v21WriteStages()))
+        tracker.report(StepId.WriteAPK, "Applying patched changes")
+        val retry = tracker.snapshot()
+        pending.single().invoke()
+        assertEquals(retry, tracker.snapshot())
+        tracker.handleDexCompileLine("Compiling modified resources")
+        assertEquals(2, pending.size)
+        pending.last().invoke()
+        assertEquals(State.RUNNING, tracker.stepSubSteps.getValue(StepId.WriteAPK)
+            .first { it.title == "Compiling modified resources" }.state)
+    }
+
     private fun patchTracker() = PatcherProgressTracker(
         steps = mutableStateListOf(
             Step(StepId.ReadAPK, "Read", StepCategory.PREPARING),
@@ -71,7 +199,10 @@ class PatcherProgressTrackerTest {
         }
     }
 
-    private fun tracker(id: StepId) = PatcherProgressTracker(
+    private fun tracker(
+        id: StepId,
+        dispatch: (() -> Unit) -> Unit = { it() }
+    ) = PatcherProgressTracker(
         steps = mutableStateListOf(
             Step(StepId.DownloadAPK, "Download", StepCategory.PREPARING, State.COMPLETED),
             Step(StepId.LoadPatches, "Load", StepCategory.PREPARING),
@@ -79,7 +210,8 @@ class PatcherProgressTrackerTest {
         ),
         stepSubSteps = mutableMapOf(),
         isMorpheSelection = { false },
-        morpheBytecodeMode = { null }
+        morpheBytecodeMode = { null },
+        dispatch = dispatch
     )
 
     private fun PatcherProgressTracker.report(id: StepId, title: String, current: Long? = null, total: Long? = null) =

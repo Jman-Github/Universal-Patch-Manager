@@ -8,17 +8,19 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
+import app.universal.patch.manager.ui.component.LazyColumnWithScrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -45,12 +47,14 @@ import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.universal.patch.manager.data.platform.Filesystem
+import app.universal.patch.manager.domain.manager.SigningKeyAlgorithm
 import app.universal.patch.manager.domain.manager.KeystoreManager
 import app.universal.patch.manager.domain.manager.PreferencesManager
 import app.universal.patch.manager.ui.component.AppScaffold
 import app.universal.patch.manager.ui.component.AppTopBar
 import app.universal.patch.manager.ui.component.ExportSavedApkFileNameDialog
 import app.universal.patch.manager.ui.component.PasswordField
+import app.universal.patch.manager.ui.component.NotificationCard
 import app.universal.patch.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.universal.patch.manager.ui.component.patches.PathSelectorDialog
 import app.universal.patch.manager.ui.component.RememberedCreateDocument
@@ -87,6 +91,7 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
     var alias by rememberSaveable { mutableStateOf("") }
     var storePassword by rememberSaveable { mutableStateOf("") }
     var keyPassword by rememberSaveable { mutableStateOf("") }
+    var algorithm by rememberSaveable { mutableStateOf<SigningKeyAlgorithm?>(null) }
     var format by rememberSaveable { mutableStateOf(KeystoreManager.KeystoreFormat.PKCS12) }
 
     var converting by rememberSaveable { mutableStateOf(false) }
@@ -104,10 +109,12 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
             ?.ifBlank { "converted-keystore" }
             ?: "converted-keystore"
         val sanitized = sourceName.trim().replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "converted-keystore" }
-        return "$sanitized.${format.extension}"
+        val suffix = algorithm?.name?.lowercase()?.replace('_', '-')?.let { "-$it" }.orEmpty()
+        return "$sanitized$suffix.${format.extension}"
     }
 
     fun setInput(uri: Uri, fallbackName: String?) {
+        if (converting) return
         val displayName = runCatching {
             context.contentResolver.query(
                 uri,
@@ -302,7 +309,7 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
             }
         }
     ) { paddingValues ->
-        LazyColumn(
+        LazyColumnWithScrollbar(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
@@ -346,6 +353,7 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
             item {
                 Button(
                     onClick = ::requestInputPicker,
+                    enabled = !converting,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Outlined.FolderOpen, null)
@@ -366,7 +374,7 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
             item {
                 OutlinedTextField(
                     value = alias,
-                    onValueChange = { alias = it },
+                    onValueChange = { if (!converting) { alias = it; convertedKeystore = null } },
                     label = { Text(stringResource(R.string.import_keystore_dialog_alias_field)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
@@ -376,7 +384,7 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
                 PasswordField(
                     modifier = Modifier.fillMaxWidth(),
                     value = storePassword,
-                    onValueChange = { storePassword = it },
+                    onValueChange = { if (!converting) { storePassword = it; convertedKeystore = null } },
                     label = { Text(stringResource(R.string.import_keystore_dialog_password_field)) }
                 )
             }
@@ -384,9 +392,39 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
                 PasswordField(
                     modifier = Modifier.fillMaxWidth(),
                     value = keyPassword,
-                    onValueChange = { keyPassword = it },
+                    onValueChange = { if (!converting) { keyPassword = it; convertedKeystore = null } },
                     label = { Text(stringResource(R.string.import_keystore_dialog_key_password_field)) }
                 )
+            }
+            item {
+                Text(stringResource(R.string.tools_keystore_creator_algorithm), style = MaterialTheme.typography.titleSmall)
+                Column {
+                    FilterChip(
+                        selected = algorithm == null,
+                        onClick = { algorithm = null; convertedKeystore = null },
+                        enabled = !converting,
+                        label = { Text(stringResource(R.string.tools_keystore_converter_keep_algorithm)) }
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SigningKeyAlgorithm.entries.forEach { candidate ->
+                            FilterChip(
+                                selected = algorithm == candidate,
+                                onClick = { algorithm = candidate; convertedKeystore = null },
+                                enabled = !converting,
+                                label = { Text(candidate.label) }
+                            )
+                        }
+                    }
+                }
+                if (algorithm != null) {
+                    NotificationCard(
+                        text = stringResource(R.string.tools_keystore_converter_new_identity_warning),
+                        icon = Icons.Outlined.WarningAmber,
+                        modifier = Modifier.padding(top = 8.dp),
+                        isWarning = true,
+                        onDismiss = null
+                    )
+                }
             }
             item {
                 Text(
@@ -401,7 +439,8 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
                 ) {
                     KeystoreManager.KeystoreFormat.entries.forEach { candidate ->
                         FilterChip(
-                            onClick = { format = candidate },
+                            onClick = { format = candidate; convertedKeystore = null },
+                            enabled = !converting,
                             selected = format == candidate,
                             label = { Text(candidate.label) }
                         )
@@ -424,7 +463,8 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
                                             alias = alias,
                                             storePass = storePassword,
                                             keyPass = keyPassword,
-                                            format = format
+                                            format = format,
+                                            algorithm = algorithm
                                         )
                                     }
                                 }

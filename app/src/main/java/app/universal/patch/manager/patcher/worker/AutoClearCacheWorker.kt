@@ -1,5 +1,6 @@
 package app.universal.patch.manager.patcher.worker
 
+import app.universal.patch.manager.util.applyManagerNotificationIcon
 import android.app.Notification
 import android.app.Notification.BigTextStyle
 import android.app.NotificationChannel
@@ -7,7 +8,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.drawable.Icon
 import android.os.PowerManager
 import android.text.format.Formatter
 import android.util.Log
@@ -99,7 +99,7 @@ class AutoClearCacheWorker(
             .setContentTitle(applicationContext.getString(R.string.cache_cleanup_notification_title))
             .setContentText(description)
             .setStyle(BigTextStyle().bigText(description))
-            .setSmallIcon(Icon.createWithResource(applicationContext, R.drawable.ic_notification_status))
+            .applyManagerNotificationIcon(applicationContext)
             .setContentIntent(pendingIntent)
             .setOnlyAlertOnce(false)
             .setAutoCancel(true)

@@ -1,5 +1,6 @@
 package app.universal.patch.manager.patcher.worker
 
+import app.universal.patch.manager.data.platform.SharedApkFiles
 import app.universal.patch.manager.patcher.runtime.usage.PatcherResourceMonitor
 
 import app.universal.patch.manager.patcher.runtime.RevancedJvmRuntime
@@ -12,7 +13,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Parcelable
 import android.os.PowerManager
@@ -69,6 +69,7 @@ import app.universal.patch.manager.plugin.downloader.PluginHostApi
 import app.universal.patch.manager.plugin.downloader.UserInteractionException
 import app.universal.patch.manager.ui.model.SelectedApp
 import app.universal.patch.manager.util.AppForeground
+import app.universal.patch.manager.util.applyManagerNotificationIcon
 import app.universal.patch.manager.util.applyProgressNotification
 import app.universal.patch.manager.util.Options
 import app.universal.patch.manager.util.PM
@@ -248,6 +249,9 @@ class PatcherWorker(
             .apply {
                 if (progress != null) {
                     applyProgressNotification(
+                        context = applicationContext,
+                        contentTitle = notificationTitle(),
+                        contentText = contentText,
                         max = progress.max,
                         current = progress.current,
                         indeterminate = progress.indeterminate
@@ -1636,9 +1640,10 @@ class PatcherWorker(
                 }
 
                 is SelectedApp.Local -> {
-                    val needsSplit = SplitApkPreparer.isSplitArchive(selectedApp.file)
-                    args.setInputFile(selectedApp.file, needsSplit, false)
-                    DownloadResult(selectedApp.file, needsSplit)
+                    val file = SharedApkFiles.resolve(selectedApp.file)
+                    val needsSplit = SplitApkPreparer.isSplitArchive(file)
+                    args.setInputFile(file, needsSplit, false)
+                    DownloadResult(file, needsSplit)
                 }
 
                 is SelectedApp.Installed -> {
@@ -1648,7 +1653,8 @@ class PatcherWorker(
                 }
             }
             downloadCleanup = downloadResult.cleanup
-            val inputFile = downloadResult.file
+            // A prepared selection can outlive the idle migration of its original path.
+            val inputFile = SharedApkFiles.resolve(downloadResult.file)
             val patchingContext = currentCoroutineContext()
             val checkCancelled: () -> Unit = { patchingContext.ensureActive() }
             val inputIsSplitArchive = SplitApkPreparer.isSplitArchive(
@@ -1870,7 +1876,7 @@ class PatcherWorker(
                 when (bundleType) {
                 PatchBundleType.MORPHE -> {
                     check(MorpheRuntimeAssets.isAvailable(applicationContext)) {
-                        "Morphe runtime is not included in this build."
+                        "Morphe runtime plugin is not installed or trusted."
                     }
                     // Code adapted from Morphe, see third-party/NOTICE for more information.
                     // https://github.com/MorpheApp/morphe-manager/pull/1202
@@ -2210,8 +2216,7 @@ class PatcherWorker(
             )
             return Notification.Builder(context, ensureNotificationChannel(context))
                 .setContentTitle(title)
-                .setLargeIcon(Icon.createWithResource(context, R.drawable.ic_notification))
-                .setSmallIcon(Icon.createWithResource(context, R.drawable.ic_notification_status))
+                .applyManagerNotificationIcon(context)
                 .setContentIntent(pendingIntent)
                 .setCategory(Notification.CATEGORY_SERVICE)
                 .setOngoing(true)
@@ -2245,6 +2250,9 @@ class PatcherWorker(
                 val notification = createNotificationBuilder(context, title)
                     .setContentText(contentText)
                     .applyProgressNotification(
+                        context = context,
+                        contentTitle = title,
+                        contentText = contentText,
                         max = 0,
                         current = 0,
                         indeterminate = true

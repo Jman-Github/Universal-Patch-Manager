@@ -1,5 +1,4 @@
 [versions]
-proguard = "7.8.1"
 ktx = "1.19.0"
 viewmodel-lifecycle = "2.11.0"
 splash-screen = "1.0.1"
@@ -14,19 +13,14 @@ accompanist = "0.37.0"
 placeholder = "1.1.2"
 reorderable = "2.4.3"
 serialization = "1.11.0"
-coroutines = "1.11.0"
 collection = "0.3.8"
 datetime = "0.6.1"
 room-version = "2.8.4"
 androidx-test-runner = "1.7.0"
 androidx-test-junit = "1.3.0"
-revanced-patcher = "21.1.0-dev.5"
-revanced-patcher-v22 = "22.0.2-dev.1"
 revanced-library = "3.1.0"
-morphe-patcher = "2.0.1"
-morphe-library = "1.4.0"
 # Commit hashes are not chronological versions; keep SDK transitives from overriding this pin.
-arsclib = { strictly = "4695b583ef" }
+arsclib = { strictly = "675bed2de3" }
 koin = "4.2.2"
 ktor = "3.5.1"
 markdown-renderer = "0.30.0"
@@ -48,14 +42,11 @@ hiddenapibypass = "6.1"
 binary-compatibility-validator = "0.17.0"
 semver-parser = "3.0.0"
 ackpine = "0.18.5"
-xmlpull = "1.1.3.1"
 xpp3 = "1.1.4c"
 apksig = "9.0.0-rc03"
 bouncycastle = "1.78.1"
 
 [libraries]
-proguard = { module = "com.guardsquare:proguard-base", version.ref = "proguard" }
-kotlin-metadata-jvm = { module = "org.jetbrains.kotlin:kotlin-metadata-jvm", version.ref = "kotlin" }
 # AndroidX Core
 androidx-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "ktx" }
 runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "viewmodel-lifecycle" }
@@ -91,9 +82,7 @@ accompanist-drawablepainter = { group = "com.google.accompanist", name = "accomp
 placeholder-material3 = { group = "io.github.fornewid", name = "placeholder-material3", version.ref = "placeholder"}
 
 # Kotlinx
-kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
-kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-collection-immutable = { group = "org.jetbrains.kotlinx", name = "kotlinx-collections-immutable", version.ref = "collection" }
 kotlinx-datetime = { group = "org.jetbrains.kotlinx", name = "kotlinx-datetime", version.ref = "datetime" }
 
@@ -106,11 +95,7 @@ androidx-test-runner = { group = "androidx.test", name = "runner", version.ref =
 androidx-test-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-test-junit" }
 
 # Patcher
-revanced-patcher = { group = "app.revanced", name = "revanced-patcher", version.ref = "revanced-patcher" }
-revanced-patcher-v22 = { group = "app.revanced", name = "patcher", version.ref = "revanced-patcher-v22" }
 revanced-library = { group = "app.revanced", name = "revanced-library", version.ref = "revanced-library" }
-morphe-patcher = { group = "app.morphe", name = "morphe-patcher", version.ref = "morphe-patcher" }
-morphe-library = { group = "app.morphe", name = "morphe-library", version.ref = "morphe-library" }
 arsclib = { module = "com.github.MorpheApp:ARSCLib", version.ref = "arsclib" }
 
 # Koin
@@ -139,7 +124,6 @@ fading-edges = { group = "com.github.GIGAMOLE", name = "ComposeFadingEdges", ver
 kotlin-process = { group = "com.github.pgreze", name = "kotlin-process", version.ref = "kotlin-process" }
 
 # XMLPull
-xmlpull = { group = "xmlpull", name = "xmlpull", version.ref = "xmlpull" }
 xpp3 = { group = "xpp3", name = "xpp3", version.ref = "xpp3" }
 
 # HiddenAPI
@@ -163,7 +147,6 @@ enumutil-ksp = { group = "io.github.materiiapps", name = "enumutil-ksp", version
 # Reorderable lists
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 
-# Compose Icons
 # switch to br.com.devsrsouza.compose.icons after DevSrSouza/compose-icons#30 is merged
 compose-icons-fontawesome = { group = "com.github.BenjaminHalko.compose-icons", name = "font-awesome", version.ref = "compose-icons" }
 
@@ -175,9 +158,9 @@ ackpine-core = { module = "ru.solrudev.ackpine:ackpine-core", version.ref = "ack
 ackpine-ktx = { module = "ru.solrudev.ackpine:ackpine-ktx", version.ref = "ackpine" }
 apksig = { module = "com.android.tools.build:apksig", version.ref = "apksig" }
 bcprov = { group = "org.bouncycastle", name = "bcprov-jdk15to18", version.ref = "bouncycastle" }
+bcpkix = { group = "org.bouncycastle", name = "bcpkix-jdk15to18", version.ref = "bouncycastle" }
 
 [plugins]
-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 android-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
 android-library = { id = "com.android.library", version.ref = "android-gradle-plugin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

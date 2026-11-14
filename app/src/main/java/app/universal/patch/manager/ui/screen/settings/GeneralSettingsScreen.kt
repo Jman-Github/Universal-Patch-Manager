@@ -312,14 +312,22 @@ fun GeneralSettingsScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         ColumnWithScrollbar(
+            thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            GroupHeader(
-                stringResource(R.string.navigation_tabs_section),
-                icon = SettingsSectionIcons.NavigationTabs
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.navigation_tabs_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.navigation_tabs_section),
+                    icon = SettingsSectionIcons.NavigationTabs,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -467,10 +475,17 @@ fun GeneralSettingsScreen(
                 }
             }
 
-            GroupHeader(
-                stringResource(R.string.action_buttons_section),
-                icon = SettingsSectionIcons.ActionButtonsPatchList
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.action_buttons_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.action_buttons_section),
+                    icon = SettingsSectionIcons.ActionButtonsPatchList,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -482,10 +497,17 @@ fun GeneralSettingsScreen(
                 )
             }
 
-            GroupHeader(
-                stringResource(R.string.theme_section),
-                icon = SettingsSectionIcons.Theme
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.theme_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.theme_section),
+                    icon = SettingsSectionIcons.Theme,
+                    modifier = highlightModifier
+                )
+            }
 
             val baseThemeSwatches = remember(supportsDynamicColor) {
                 buildList {
@@ -823,10 +845,17 @@ fun GeneralSettingsScreen(
                 }
             }
 
-            GroupHeader(
-                stringResource(R.string.background_section),
-                icon = SettingsSectionIcons.Background
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.background_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.background_section),
+                    icon = SettingsSectionIcons.Background,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)

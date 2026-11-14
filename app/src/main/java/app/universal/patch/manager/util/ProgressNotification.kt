@@ -1,18 +1,22 @@
 package app.universal.patch.manager.util
 
-import android.annotation.SuppressLint
 import android.app.Notification
+import android.content.Context
 import android.os.Build
-import java.lang.reflect.Method
+import android.view.View
+import android.widget.RemoteViews
+import app.universal.patch.manager.R
+import java.text.NumberFormat
 
 /**
- * Applies the common metadata used by active progress notifications.
- *
- * Standard progress fields support existing Android and OEM presentations. Android 16 also
- * receives [Notification.ProgressStyle], while Android 16 QPR releases can request promoted
- * ongoing presentation when that public API is available at runtime.
+ * Uses the same decorated progress layout on every Android version.
+ * ProgressStyle owns its renderer and
+ * cannot hide its end marker or position the percentage above the bar.
  */
 fun Notification.Builder.applyProgressNotification(
+    context: Context,
+    contentTitle: CharSequence,
+    contentText: CharSequence?,
     max: Int,
     current: Int,
     indeterminate: Boolean,
@@ -20,53 +24,50 @@ fun Notification.Builder.applyProgressNotification(
 ): Notification.Builder {
     val safeMax = max.coerceAtLeast(0)
     val safeCurrent = current.coerceIn(0, safeMax)
+    val unknown = indeterminate || safeMax == 0
+    val percentage = if (unknown) null else NumberFormat.getPercentInstance().format(
+        (safeCurrent.toLong() * 100L / safeMax).toDouble() / 100.0
+    )
 
+    // The right-hand label already displays percentage. Retain useful stage descriptions.
+    val detail = contentText?.takeUnless {
+        it.isBlank() || it.toString().matches(
+            Regex("""[\p{N}.,\s\p{Z}\p{Cf}]+[%\u066A\uFF05][\s\p{Z}\p{Cf}]*""")
+        )
+    }
+    setContentTitle(contentTitle)
+    setContentText(detail)
     setCategory(Notification.CATEGORY_PROGRESS)
     setOnlyAlertOnce(true)
     setOngoing(ongoing)
     setShowWhen(false)
-    setProgress(safeMax, safeCurrent, indeterminate)
+    // DecoratedCustomViewStyle renders the framework progress bar in addition to
+    // the custom content when these fields are populated. Only the custom view
+    // should draw progress, including its indeterminate state.
+    setProgress(0, 0, false)
 
+    fun content(expanded: Boolean) = RemoteViews(
+        context.packageName,
+        if (expanded) R.layout.notification_progress_expanded else R.layout.notification_progress
+    ).apply {
+        setTextViewText(R.id.notification_title, contentTitle)
+        setTextViewText(R.id.notification_detail, detail)
+        // Keep the compact detail slot so percentage stays end-aligned.
+        setViewVisibility(R.id.notification_detail, when {
+            detail != null -> View.VISIBLE
+            expanded -> View.GONE
+            else -> View.INVISIBLE
+        })
+        setTextViewText(R.id.notification_percentage, percentage)
+        setViewVisibility(R.id.notification_percentage, if (percentage == null) View.GONE else View.VISIBLE)
+        setProgressBar(R.id.notification_progress, safeMax, safeCurrent, unknown)
+    }
+
+    setStyle(Notification.DecoratedCustomViewStyle())
+    setCustomContentView(content(expanded = false))
+    setCustomBigContentView(content(expanded = true))
     if (Build.VERSION.SDK_INT >= 36) {
-        applyAndroid16ProgressStyle(safeMax, safeCurrent, indeterminate, ongoing)
+        setShortCriticalText(percentage)
     }
-
     return this
-}
-
-@SuppressLint("NewApi")
-private fun Notification.Builder.applyAndroid16ProgressStyle(
-    max: Int,
-    current: Int,
-    indeterminate: Boolean,
-    ongoing: Boolean
-) {
-    val percent = if (!indeterminate && max > 0) {
-        ((current.toLong() * 100L) / max.toLong()).toInt().coerceIn(0, 100)
-    } else {
-        null
-    }
-
-    val style = Notification.ProgressStyle()
-        .setProgressIndeterminate(indeterminate)
-    percent?.let {
-        style.setProgress(it)
-        setShortCriticalText("$it%")
-    }
-    setStyle(style)
-
-    if (ongoing) {
-        runCatching {
-            requestPromotedOngoingMethod?.invoke(this, true)
-        }
-    }
-}
-
-private val requestPromotedOngoingMethod: Method? by lazy {
-    runCatching {
-        Notification.Builder::class.java.getMethod(
-            "setRequestPromotedOngoing",
-            Boolean::class.javaPrimitiveType
-        )
-    }.getOrNull()
 }

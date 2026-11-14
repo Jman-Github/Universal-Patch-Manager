@@ -1,5 +1,6 @@
 package app.universal.patch.manager.patcher.worker
 
+import app.universal.patch.manager.util.applyManagerNotificationIcon
 import android.app.Notification
 import android.app.Notification.InboxStyle
 import android.app.NotificationChannel
@@ -7,7 +8,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.drawable.Icon
 import android.os.Bundle
 import android.os.PowerManager
 import android.util.Log
@@ -344,8 +344,7 @@ class BundleUpdateNotificationWorker(
         val builder = Notification.Builder(applicationContext, channelId)
             .setContentTitle(title)
             .setContentText(description)
-            .setLargeIcon(Icon.createWithResource(applicationContext, R.drawable.ic_notification))
-            .setSmallIcon(Icon.createWithResource(applicationContext, R.drawable.ic_notification_status))
+            .applyManagerNotificationIcon(applicationContext)
             .setContentIntent(pendingIntent)
             .setOnlyAlertOnce(true)
             .setOngoing(ongoing)
@@ -365,6 +364,9 @@ class BundleUpdateNotificationWorker(
             val total = progress.bytesTotal?.takeIf { it > 0L }
             if (total == null) {
                 builder.applyProgressNotification(
+                    context = applicationContext,
+                    contentTitle = title,
+                    contentText = description,
                     max = 0,
                     current = 0,
                     indeterminate = true,
@@ -374,6 +376,9 @@ class BundleUpdateNotificationWorker(
                 val max = min(total, Int.MAX_VALUE.toLong()).toInt()
                 val current = min(progress.bytesRead, max.toLong()).toInt()
                 builder.applyProgressNotification(
+                    context = applicationContext,
+                    contentTitle = title,
+                    contentText = description,
                     max = max,
                     current = current,
                     indeterminate = false,
@@ -390,7 +395,7 @@ class BundleUpdateNotificationWorker(
             sections.forEach { section ->
                 style.addLine(section.header)
                 section.entries.forEach { entry ->
-                    style.addLine("- ${entry.displayLine}")
+                    style.addLine("• ${entry.displayLine}")
                 }
             }
             builder.setStyle(style)
@@ -462,7 +467,7 @@ class BundleUpdateNotificationWorker(
         flatMap { section ->
             buildList {
                 add(section.header)
-                section.entries.forEach { entry -> add("- ${entry.displayLine}") }
+                section.entries.forEach { entry -> add("• ${entry.displayLine}") }
             }
         }.joinToString("\n")
 

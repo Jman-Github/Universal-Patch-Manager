@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.viewmodel
 
+import app.universal.patch.manager.data.platform.SharedApkFiles
 import app.universal.patch.manager.patcher.runtime.PatcherJvm
 import android.app.Activity
 
@@ -86,6 +87,7 @@ import app.universal.patch.manager.domain.manager.SignatureMetadataInjectorManag
 import app.universal.patch.manager.domain.manager.SignatureMetadataWorkflowProgress
 import app.universal.patch.manager.domain.manager.SignatureMetadataSigningMode
 import app.universal.patch.manager.domain.storage.CacheCleanupGuard
+import app.universal.patch.manager.domain.storage.PatcherWorkspaceGate
 import app.universal.patch.manager.domain.repository.DownloadResult
 import app.universal.patch.manager.domain.repository.DownloadedAppRepository
 import app.universal.patch.manager.domain.repository.DownloaderPluginRepository
@@ -151,9 +153,11 @@ import app.universal.patch.manager.util.toast
 import app.universal.patch.manager.util.awaitUserConfirmation
 import app.universal.patch.manager.util.toastHandle
 import app.universal.patch.manager.util.uiSafe
+import app.universal.patch.manager.util.versionCodeFor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -207,6 +211,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import androidx.core.content.pm.PackageInfoCompat
 
 private class PendingPatchedAppReplacement private constructor(
     private val target: File,
@@ -513,8 +518,9 @@ class PatcherViewModel(
             version = sourceVersionName,
             versionCode = sourceVersionCode
         )
-        val repatchSource = patchedRepatchSourcePath?.let(::File)
+        val repatchSource = patchedRepatchSourcePath?.let { SharedApkFiles.resolve(File(it)) }
         return (sequenceOf(inputFile, repatchSource).filterNotNull() + retainedOriginals.asSequence())
+            .map(SharedApkFiles::resolve)
             .distinctBy { it.absolutePath }
             .toList()
     }
@@ -887,6 +893,7 @@ class PatcherViewModel(
 
     val fallbackInputSizeBytes: Long?
         get() = (inputFile ?: (selectedApp as? SelectedApp.Local)?.file)
+            ?.let(SharedApkFiles::resolve)
             ?.takeIf(File::isFile)
             ?.length()
 
@@ -959,8 +966,17 @@ class PatcherViewModel(
     var splitSelectionPreparationError by mutableStateOf<String?>(null)
         private set
 
-    private var prePatchPreparationJob: Job? = null
-    private var workerLaunchJob: Job? = null
+    private var prePatchPreparationJob: Job? by mutableStateOf(null)
+    private var workerLaunchJob: Job? by mutableStateOf(null)
+    val isPatchingStarting: Boolean
+        get() = prePatchPreparationJob != null || workerLaunchJob != null
+    // Read at the time Back is pressed: Compose's observed worker state may still
+    // describe the frame before startup handed ownership to WorkManager.
+    fun shouldConfirmPatchingCancellation(): Boolean =
+        isPatchingStarting || isPatchingActive.value == true ||
+            patcherWorkerId != null || signatureWorkflowRunning
+
+    private var leavingScreen = false
     private var preparedInput: DownloadResult? = null
     private var preparedInputIncludesDownload = false
     private var selectedSplitConfiguration: PatcherWorker.SplitSelection? = null
@@ -976,12 +992,11 @@ class PatcherViewModel(
     }
 
     fun cancelSplitSelectionPreparation() {
-        prePatchPreparationJob?.cancel()
-        prePatchPreparationJob = null
-        isPreparingSplitSelection = false
-        prePatchDownloadProgress = null
+        val preparation = prePatchPreparationJob
+        preparation?.cancel()
         pendingSplitSelectionDialog = null
-        cleanupPreparedInput()
+        // The preparation coroutine owns its files until cancellation has finished.
+        if (preparation == null) cleanupPreparedInput()
     }
 
     fun dismissSplitSelectionPreparationError() {
@@ -995,11 +1010,26 @@ class PatcherViewModel(
     private fun launchPrePatchPreparation(
         block: suspend (chooseSplitApks: Boolean) -> Unit
     ) {
-        prePatchPreparationJob?.cancel()
-        prePatchPreparationJob = viewModelScope.launch {
+        if (leavingScreen) return
+        val previousPreparation = prePatchPreparationJob
+        previousPreparation?.cancel()
+        // UNDISPATCHED enters the guarded region even if cancellation precedes dispatch.
+        val job = viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
             val preparationJob = currentCoroutineContext()[Job]
-            splitSelectionPreparationError = null
+            var ownsPreparedInput = false
+            var cacheUseToken: AutoCloseable? = null
             try {
+                // A retry must wait for its predecessor to release the shared input.
+                withContext(NonCancellable) { previousPreparation?.join() }
+                yield()
+                ownsPreparedInput = true
+                splitSelectionPreparationError = null
+                // Idle migration may replace an old APK path with a shared-file reference.
+                // Keep the file stable throughout inspection and split preparation.
+                withContext(Dispatchers.IO) {
+                    currentCoroutineContext().ensureActive()
+                    cacheUseToken = CacheCleanupGuard.begin()
+                }
                 val chooseSplitApks = prefs.chooseSplitApksBeforePatching.get()
                 if (chooseSplitApks) {
                     isPreparingSplitSelection = true
@@ -1014,15 +1044,16 @@ class PatcherViewModel(
                 yield()
                 block(chooseSplitApks)
             } catch (error: CancellationException) {
-                cleanupPreparedInput()
+                if (ownsPreparedInput) cleanupPreparedInput()
                 throw error
             } catch (error: Throwable) {
-                cleanupPreparedInput()
+                if (ownsPreparedInput) cleanupPreparedInput()
                 // Interrupted file IO can throw before coroutine cancellation is delivered.
                 currentCoroutineContext().ensureActive()
                 splitSelectionPreparationError =
                     error.simpleMessage() ?: error.javaClass.simpleName
             } finally {
+                cacheUseToken?.close()
                 if (prePatchPreparationJob === preparationJob) {
                     isPreparingSplitSelection = false
                     prePatchDownloadProgress = null
@@ -1030,6 +1061,7 @@ class PatcherViewModel(
                 }
             }
         }
+        prePatchPreparationJob = job.takeUnless { it.isCompleted }
     }
 
     private suspend fun prepareSplitSelectionOrStartWorker(chooseSplitApks: Boolean) {
@@ -1038,7 +1070,9 @@ class PatcherViewModel(
             return
         }
 
-        val localInput = input.selectedApp as? SelectedApp.Local
+        val localInput = (input.selectedApp as? SelectedApp.Local)?.let {
+            it.copy(file = SharedApkFiles.resolve(it.file))
+        }
         val localSplitEntryNames = localInput?.let { selected ->
             withContext(Dispatchers.IO) {
                 SplitApkPreparer.splitApkEntryNames(selected.file)
@@ -1183,8 +1217,9 @@ class PatcherViewModel(
             }
 
             is SelectedApp.Local -> {
-                val needsSplit = SplitApkPreparer.isSplitArchive(selected.file)
-                DownloadResult(selected.file, needsSplit = needsSplit)
+                val file = SharedApkFiles.resolve(selected.file)
+                val needsSplit = SplitApkPreparer.isSplitArchive(file)
+                DownloadResult(file, needsSplit = needsSplit)
             }
 
             is SelectedApp.Installed -> prepareInstalledInputBeforePatching(selected.packageName)
@@ -2356,14 +2391,18 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private fun startWorker() {
-        if (workerLaunchJob?.isActive == true || _isPatchingActive.value == true) return
-        workerLaunchJob = viewModelScope.launch {
+        if (leavingScreen || workerLaunchJob != null || _isPatchingActive.value == true) return
+        val job = viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            val launchJob = currentCoroutineContext()[Job]
             try {
+                // Assign the observable job before startup can resume on Main.
+                yield()
                 startWorkerNow()
             } finally {
-                workerLaunchJob = null
+                if (workerLaunchJob === launchJob) workerLaunchJob = null
             }
         }
+        workerLaunchJob = job.takeUnless { it.isCompleted }
     }
 
     private suspend fun startWorkerNow() {
@@ -2457,7 +2496,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         logBatteryOptimizationStatus(batteryOptimization)
         logEnvironmentStatus(environment)
         val workId = try {
-            launchWorker(runSelection, runOptions)
+            launchWorker(runSelection, runOptions).also {
+                currentCoroutineContext().ensureActive()
+            }
+        } catch (cancelled: CancellationException) {
+            stopPatchingTaskMonitor()
+            _isPatchingActive.value = false
+            throw cancelled
         } catch (_: UniqueWorkAlreadyRunningException) {
             stopPatchingTaskMonitor()
             _isPatchingActive.value = false
@@ -2473,7 +2518,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             _patcherSucceeded.value = false
             return
         }
-        patcherWorkerId = ParcelUuid(workId)
         PatcherWorker.showInitialNotification(app)
         observeWorker(workId)
     }
@@ -2542,23 +2586,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         continuation.invokeOnCancellation { source.removeObserver(observer) }
     }
 
-    private fun cleanupTemporaryLocalInputAfterWorkStops(workId: UUID?) {
-        if (!hasTemporaryLocalInput()) return
-        val preservedFileToDelete = inputFile
-        val originalFileToDelete = redundantTemporaryLocalInputSourceFile()
-        if (preservedFileToDelete == null && originalFileToDelete == null) return
-        clearTemporaryLocalInputState()
-        CoroutineScope(Dispatchers.IO).launch {
-            workId?.let { activeWorkId ->
-                withContext(Dispatchers.Main.immediate) {
-                    awaitWorkToFinish(activeWorkId)
-                }
-            }
-            deleteTemporaryLocalInput(preservedFileToDelete)
-            deleteTemporaryLocalInput(originalFileToDelete)
-        }
-    }
-
     private suspend fun persistPatchedApp(
         currentPackageName: String?,
         installType: InstallType,
@@ -2583,7 +2610,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
 
             val finalPackageName = packageInfo.packageName
-            val finalVersion = packageInfo.versionName?.takeUnless { it.isBlank() } ?: version ?: "unspecified"
+            val versionPackageInfo = patchedPackageInfo ?: packageInfo
+            val finalVersion = versionPackageInfo.versionName?.takeUnless { it.isBlank() } ?: version ?: "unspecified"
+            val finalVersionCode = versionPackageInfo.versionCodeFor(finalVersion)
 
             val metadata = buildExportMetadata(patchedPackageInfo ?: packageInfo)
             withContext(Dispatchers.Main) {
@@ -2757,7 +2786,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             resetCreatedAt = true,
                             customInstallerPackageName = customInstallerPackageName,
                             repatchSourcePath = patchedRepatchSourcePath,
-                            updateRepatchSource = true
+                            updateRepatchSource = true,
+                            versionCode = finalVersionCode,
+                            updateVersionCode = true
                         )
                     effectiveShouldSaveForLater &&
                         savedCopyWritten &&
@@ -2773,7 +2804,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             useMount = usingMountInstall,
                             customInstallerPackageName = existingInstalled.customInstallerPackageName,
                             repatchSourcePath = patchedRepatchSourcePath,
-                            updateRepatchSource = true
+                            updateRepatchSource = true,
+                            versionCode = finalVersionCode,
+                            updateVersionCode = true
                         )
                     }
                     effectiveShouldSaveForLater &&
@@ -2788,7 +2821,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             useMount = usingMountInstall,
                             resetCreatedAt = true,
                             repatchSourcePath = patchedRepatchSourcePath,
-                            updateRepatchSource = true
+                            updateRepatchSource = true,
+                            versionCode = finalVersionCode,
+                            updateVersionCode = true
                         )
                 }
             }
@@ -2930,21 +2965,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 "Failed to update patch configuration after persistence"
             ) {
                 if (finalPackageName != packageName) {
-                    patchSelectionRepository.updateSelectionWithSeenPatches(
-                        finalPackageName,
-                        sanitizedSelectionFinal,
-                        seenPatchesByBundle
-                    )
-                    patchOptionsRepository.saveOptions(
-                        finalPackageName,
-                        sanitizedOptionsFinal
-                    )
+                    patchOptionsRepository.saveOptions(finalPackageName, sanitizedOptionsFinal)
                 }
-                patchSelectionRepository.updateSelectionWithSeenPatches(
-                    packageName,
-                    sanitizedSelectionOriginal,
-                    seenPatchesByBundle
-                )
                 patchOptionsRepository.saveOptions(packageName, sanitizedOptionsOriginal)
                 appliedSelection = sanitizedSelectionOriginal
                 appliedOptions = sanitizedOptionsOriginal
@@ -3077,35 +3099,40 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     fun onBack(cleanupLocalInput: Boolean) {
-        cancelSplitSelectionPreparation()
-        val injectionJob = signatureWorkflowJob
-        injectionJob?.cancel(CancellationException("Patching stopped"))
-        // tempDir cannot be deleted inside onCleared because it gets called on system-initiated process death.
-        if (_isPatchingActive.value == true) {
+        if (leavingScreen) return
+        leavingScreen = true
+        val preparation = prePatchPreparationJob
+        val startup = workerLaunchJob
+        val injection = signatureWorkflowJob
+        listOfNotNull(preparation, startup, injection).forEach {
+            it.cancel(CancellationException("Patching stopped"))
+        }
+        clearPendingActivityInteractions()
+        // Outlive the screen: startup may be completing a WorkManager submission.
+        CoroutineScope(Dispatchers.Main.immediate).launch {
+            preparation?.join()
+            startup?.join()
+            injection?.join()
             val workId = patcherWorkerId?.uuid
-            workId?.let(workManager::cancelWorkById)
+            if (workId != null) {
+                workManager.cancelWorkById(workId)
+                awaitWorkToFinish(workId)
+            }
             clearPatchingNotification()
             stopPatchingTaskMonitor()
-            if (cleanupLocalInput) {
-                cleanupTemporaryLocalInputAfterWorkStops(workId)
+            // WorkInfo can be CANCELLED before the worker's finally block finishes.
+            // Wait for the actual workspace owner before removing any of its inputs.
+            PatcherWorkspaceGate.withWorkspace {
+                cleanupPreparedInput()
+                if (cleanupLocalInput) cleanupTemporaryLocalInput()
+                val repatchSourcePath = patchedRepatchSourcePath
+                patchedRepatchSourcePath = null
+                // Each screen owns its directory; cleanup cannot delete a retry's output.
+                withContext(Dispatchers.IO) {
+                    fs.deleteRepatchInputStagingFile(repatchSourcePath)
+                    tempDir.deleteRecursively()
+                }
             }
-        } else if (cleanupLocalInput && injectionJob == null) {
-            cleanupTemporaryLocalInput()
-        }
-        val repatchSourcePath = patchedRepatchSourcePath
-        patchedRepatchSourcePath = null
-        val workId = patcherWorkerId?.uuid
-        // Each screen owns its directory, so delayed cleanup cannot delete a retry's output.
-        CoroutineScope(Dispatchers.IO).launch {
-            injectionJob?.join()
-            if (cleanupLocalInput && injectionJob != null) {
-                withContext(Dispatchers.Main.immediate) { cleanupTemporaryLocalInput() }
-            }
-            workId?.let {
-                withContext(Dispatchers.Main.immediate) { awaitWorkToFinish(it) }
-            }
-            fs.deleteRepatchInputStagingFile(repatchSourcePath)
-            tempDir.deleteRecursively()
         }
     }
 
@@ -3821,7 +3848,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         check(packageInfo.packageName == packageName) {
             app.getString(R.string.root_mount_renamed_package_not_supported)
         }
-        val originalInput = inputFile
+        val originalInput = inputFile?.let(SharedApkFiles::resolve)
         val selectedApp = input.selectedApp
         val sourceVersionNameHint = patchedSourceVersionName
         val sourceVersionCodeHint = patchedSourceVersionCode
@@ -4669,10 +4696,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private fun originalSignatureSource(): File? = sequenceOf(
-        patchedRepatchSourcePath?.let(::File),
+        patchedRepatchSourcePath?.let { SharedApkFiles.resolve(File(it)) },
         inputFile,
         (input.selectedApp as? SelectedApp.Local)?.file
-    ).filterNotNull().firstOrNull { it.isFile && it.length() > 0L }
+    ).filterNotNull().map(SharedApkFiles::resolve).firstOrNull { it.isFile && it.length() > 0L }
 
     private suspend fun hasOriginalSignatureMetadata(): Boolean {
         val source = originalSignatureSource() ?: return false
@@ -5164,10 +5191,39 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private suspend fun launchWorker(
         selectedPatches: PatchSelection,
         options: Options
-    ): UUID = workerRepository.launchExpedited<PatcherWorker, PatcherWorker.Args>(
-        PatcherWorker.UNIQUE_WORK_NAME,
-        buildWorkerArgs(selectedPatches, options)
-    )
+    ): UUID {
+        val args = buildWorkerArgs(selectedPatches, options)
+        currentCoroutineContext().ensureActive()
+        // Cancellation must not lose a submitted worker's identity or input ownership.
+        // onBack joins this short submission before stopping the worker and deleting files.
+        return withContext(NonCancellable) {
+            var submittedWorkId: UUID? = null
+            try {
+                workerRepository.launchExpedited<PatcherWorker, PatcherWorker.Args>(
+                    PatcherWorker.UNIQUE_WORK_NAME,
+                    args,
+                    onEnqueueRequested = { workId ->
+                        submittedWorkId = workId
+                        patcherWorkerId = ParcelUuid(workId)
+                        preparedInput = null
+                        preparedInputIncludesDownload = false
+                        selectedSplitConfiguration = null
+                    }
+                )
+            } catch (error: Throwable) {
+                submittedWorkId?.let { workId ->
+                    // The repository releases this ID only after confirming cancellation.
+                    // Keep uncertain submissions so Back can still cancel and await them.
+                    if (patcherWorkerId?.uuid == workId &&
+                        !workerRepository.isActiveUniqueWork(PatcherWorker.UNIQUE_WORK_NAME, workId)
+                    ) {
+                        patcherWorkerId = null
+                    }
+                }
+                throw error
+            }
+        }
+    }
 
     private suspend fun handleDownloaderActivityRequest(
         plugin: LoadedDownloaderPlugin,
@@ -5228,10 +5284,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             selectedForRun is SelectedApp.Local && (selectedForRun.temporary || forceKeepLocalInput)
         val resolvedPreparedInput = preparedInput
         val resolvedSplitSelection = selectedSplitConfiguration
-        preparedInput = null
-        preparedInputIncludesDownload = false
-        selectedSplitConfiguration = null
-
         return PatcherWorker.Args(
             selectedForRun,
             outputFile.path,
@@ -5466,7 +5518,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 WorkInfo.State.RUNNING,
                 WorkInfo.State.ENQUEUED,
                 WorkInfo.State.BLOCKED -> true
-                else -> progressActive
+                // A null initial query is not evidence that submitted work stopped.
+                else -> progressActive || _isPatchingActive.value == true || patcherWorkerId?.uuid == id
             }
             when (workInfo?.state) {
                 WorkInfo.State.SUCCEEDED -> {
@@ -5723,7 +5776,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun initialSplitRequirement(selectedApp: SelectedApp): Boolean =
         when (selectedApp) {
-            is SelectedApp.Local -> SplitApkPreparer.isSplitArchive(selectedApp.file)
+            is SelectedApp.Local -> SplitApkPreparer.isSplitArchive(SharedApkFiles.resolve(selectedApp.file))
             else -> false
         }
 

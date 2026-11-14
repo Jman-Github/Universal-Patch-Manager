@@ -14,6 +14,7 @@ import app.universal.patch.manager.R
 import app.universal.patch.manager.domain.bundles.JsonPatchBundle
 import app.universal.patch.manager.network.dto.ReVancedAsset
 import app.universal.patch.manager.ui.component.LazyColumnWithScrollbar
+import app.universal.patch.manager.ui.component.CenteredDialogTitle
 import kotlinx.coroutines.CancellationException
 
 @Composable
@@ -40,23 +41,33 @@ internal fun BundleVersionDialog(
         ?: source.installedVersionSignature ?: source.version
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.bundle_select_version)) },
+        title = { CenteredDialogTitle(stringResource(R.string.bundle_select_version)) },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            if (error != null) {
+                TextButton(onClick = { attempt++ }) { Text(stringResource(R.string.retry)) }
+            } else {
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            }
+        },
+        dismissButton = {
+            if (error != null) {
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            }
         },
         text = {
             when {
                 error != null -> Column {
                     Text(stringResource(R.string.bundle_versions_load_error))
                     Text(error?.localizedMessage.orEmpty(), style = MaterialTheme.typography.bodySmall)
-                    TextButton(onClick = { attempt++ }) { Text(stringResource(R.string.retry)) }
                 }
                 versions == null -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
                 versions!!.isEmpty() -> Text(stringResource(R.string.bundle_versions_empty))
                 else -> LazyColumnWithScrollbar(
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
+                    thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+                    reserveScrollbarSpace = true
                 ) {
                     items(versions!!, key = { it.version }) { asset ->
                         Row(

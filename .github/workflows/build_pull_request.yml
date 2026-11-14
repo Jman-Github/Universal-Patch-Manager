@@ -79,14 +79,6 @@ jobs:
             app/build/reports/tests/testDebugUnitTest/
             api/build/test-results/testDebugUnitTest/
             api/build/reports/tests/testDebugUnitTest/
-            morphe-runtime/build/test-results/testDebugUnitTest/
-            morphe-runtime/build/reports/tests/testDebugUnitTest/
-            revanced.v21-runtime-plugin/build/test-results/testDebugUnitTest/
-            revanced.v21-runtime-plugin/build/reports/tests/testDebugUnitTest/
-            reseam-runtime/build/test-results/testDebugUnitTest/
-            revanced.v22-runtime-plugin/build/test-results/testDebugUnitTest/
-            reseam-runtime/build/reports/tests/testDebugUnitTest/
-            revanced.v22-runtime-plugin/build/reports/tests/testDebugUnitTest/
 
       - name: Setup release keystore
         id: signing
@@ -124,9 +116,7 @@ jobs:
             "${signing_args[@]}" \
             -PprTestBuild=true \
             "-PdevVersionSuffix=$PR_TEST_SUFFIX" \
-            :app:assembleDev \
-            :revanced.v21-runtime-plugin:assembleRelease \
-            :revanced.v22-runtime-plugin:assembleRelease
+            :app:assembleDev
           echo "PR build data and regular release data are kept separate to prevent conflicts when switching between release builds and PR artifacts. Because of this, when you install a PR artifact, your app data will appear to be reset. It’s only a clean slate for that specific PR build. Your previous data is still preserved, and once you reinstall the release build you were using before, that data will be restored." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify validation artifacts
@@ -140,11 +130,6 @@ jobs:
               exit 1
             fi
           done
-          for plugin in \
-            revanced.v21-runtime-plugin/build/outputs/apk/release/revanced.v21-plugin.apk \
-            revanced.v22-runtime-plugin/build/outputs/apk/release/revanced.v22-plugin.apk; do
-            [[ -f "$plugin" ]] || { echo "Missing expected runtime plugin APK: $plugin" >&2; exit 1; }
-          done
 
       - name: Upload release-signed validation APKs
         if: steps.signing.outputs.available == 'true'
@@ -155,5 +140,3 @@ jobs:
           if-no-files-found: error
           path: |
             app/build/outputs/apk/dev/*.apk
-            revanced.v21-runtime-plugin/build/outputs/apk/release/revanced.v21-plugin.apk
-            revanced.v22-runtime-plugin/build/outputs/apk/release/revanced.v22-plugin.apk

@@ -22,8 +22,10 @@ object CacheCleanupGuard {
         val closed = AtomicBoolean(false)
         return AutoCloseable {
             if (closed.compareAndSet(false, true)) {
-                if (activeCacheUsers.decrementAndGet() == 0) {
-                    mutableIdleGeneration.update { it + 1 }
+                synchronized(cleanupLock) {
+                    if (activeCacheUsers.decrementAndGet() == 0) {
+                        mutableIdleGeneration.update { it + 1 }
+                    }
                 }
             }
         }

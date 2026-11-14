@@ -1,5 +1,6 @@
 package app.universal.patch.manager.util
 
+import app.universal.patch.manager.data.platform.SharedApkFiles
 import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
@@ -80,7 +81,7 @@ class PM(
     private val scope = CoroutineScope(Dispatchers.IO)
     val application: Application get() = app
 
-    val appList = patchBundleRepository.enabledBundlesInfoFlow.map { bundles ->
+    val appList = patchBundleRepository.appListBundleInfoFlow.map { bundles ->
         val compatibleApps = scope.async {
             val compatiblePackages = bundles
                 .flatMap { (_, bundle) -> bundle.patches }
@@ -234,20 +235,28 @@ class PM(
         }
 
     fun getPackageInfo(file: File, includeSigning: Boolean = false): PackageInfo? {
-        val path = if (SplitApkPreparer.isSplitArchive(file)) {
+        val resolvedFile = SharedApkFiles.resolve(file)
+        val path = if (SplitApkPreparer.isSplitArchive(resolvedFile)) {
             SplitApkFiles.baseApk(
-                file,
+                resolvedFile,
                 app.cacheDir.resolve("split-package-info"),
-                SplitApkPreparer.splitApkEntryNames(file)
+                SplitApkPreparer.splitApkEntryNames(resolvedFile)
             ).absolutePath
-        } else file.absolutePath
+        } else resolvedFile.absolutePath
         val baseFlags = (
             PackageManager.GET_META_DATA.toLong() or
                 PackageManager.GET_ACTIVITIES.toLong()
             )
         val signingFlags = if (includeSigning) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                PackageManager.GET_SIGNING_CERTIFICATES.toLong()
+                // Always include GET_SIGNATURES alongside GET_SIGNING_CERTIFICATES: Android 9/10
+                // and several Android 11-13 OEM builds (e.g., Unisoc/Alldocube Android 13) gate
+                // PackageParser.collectCertificates() in getPackageArchiveInfo() on
+                // (flags & GET_SIGNATURES) != 0 while still populating SigningInfo when
+                // GET_SIGNING_CERTIFICATES is set.
+                @Suppress("DEPRECATION")
+                PackageManager.GET_SIGNING_CERTIFICATES.toLong() or
+                    PackageManager.GET_SIGNATURES.toLong()
             } else {
                 @Suppress("DEPRECATION")
                 PackageManager.GET_SIGNATURES.toLong()

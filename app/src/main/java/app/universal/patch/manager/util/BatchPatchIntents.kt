@@ -18,6 +18,7 @@ object BatchPatchIntents {
     const val ACTION_PATCH_APP = "app.universal.patch.manager.action.PATCH_APP"
     const val ACTION_CHECK_UPDATES = "app.universal.patch.manager.action.CHECK_PATCH_UPDATES"
     const val ACTION_SHOW_RESULT = "app.universal.patch.manager.action.SHOW_BATCH_RESULT"
+    const val ACTION_SHOW_APPS = "app.universal.patch.manager.action.SHOW_PATCHED_APPS"
     const val EXTRA_PACKAGES = "packages"
     const val EXTRA_PACKAGE = "package"
     const val EXTRA_SCHEDULED = "scheduled"

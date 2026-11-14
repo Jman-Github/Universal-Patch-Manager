@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.drawable.Icon
 import android.util.Log
 import app.universal.patch.manager.R
 import app.universal.patch.manager.MainActivity
@@ -38,10 +37,12 @@ object SplitMergeNotification {
             val notification = Notification.Builder(appContext, ensureChannel(appContext, manager))
                 .setContentTitle(appContext.getText(R.string.merge_split_notification_title))
                 .setContentText(contentText)
-                .setLargeIcon(Icon.createWithResource(appContext, R.drawable.ic_notification))
-                .setSmallIcon(Icon.createWithResource(appContext, R.drawable.ic_notification_status))
+                .applyManagerNotificationIcon(appContext)
                 .setContentIntent(createPendingIntent(appContext))
                 .applyProgressNotification(
+                    context = appContext,
+                    contentTitle = appContext.getText(R.string.merge_split_notification_title),
+                    contentText = contentText,
                     max = progress.max,
                     current = progress.current,
                     indeterminate = progress.indeterminate

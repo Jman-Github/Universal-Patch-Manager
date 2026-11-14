@@ -6,25 +6,45 @@ import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.util.LruCache
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.universal.patch.manager.domain.repository.AppNameRepository
+import app.universal.patch.manager.domain.repository.appNamePackagePattern
+import coil3.compose.AsyncImage
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
+import org.koin.compose.koinInject
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import io.github.fornewid.placeholder.material3.placeholder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import me.zhanghai.android.appiconloader.AppIconLoader
 
 @Composable
@@ -33,26 +53,21 @@ fun AppIcon(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     iconOverride: Drawable? = null,
-    cacheKey: String? = null
+    cacheKey: String? = null,
+    packageName: String? = packageInfo?.packageName
 ) {
+    val iconModifier = modifier.clip(CircleShape)
     if (iconOverride != null) {
         Image(
             painter = rememberDrawablePainter(drawable = iconOverride),
             contentDescription = contentDescription,
-            modifier = modifier
+            modifier = iconModifier
         )
         return
     }
 
     if (packageInfo == null) {
-        val fallbackPainter = rememberVectorPainter(Icons.Default.Android)
-        val colorFilter = ColorFilter.tint(LocalContentColor.current)
-        Image(
-            painter = fallbackPainter,
-            contentDescription = contentDescription,
-            modifier = modifier,
-            colorFilter = colorFilter
-        )
+        RemoteAppIcon(packageName, contentDescription, iconModifier)
         return
     }
 
@@ -87,23 +102,62 @@ fun AppIcon(
         Image(
             bitmap = bitmap.asImageBitmap(),
             contentDescription = contentDescription,
-            modifier = modifier
+            modifier = iconModifier
         )
         return
     }
 
-    val fallbackPainter = rememberVectorPainter(Icons.Default.Android)
-    val colorFilter = ColorFilter.tint(LocalContentColor.current)
-    Image(
-        painter = fallbackPainter,
-        contentDescription = contentDescription,
-        modifier = Modifier.placeholder(
-            visible = !iconState.loaded,
-            color = MaterialTheme.colorScheme.inverseOnSurface,
-            shape = RoundedCornerShape(100)
-        ).then(modifier),
-        colorFilter = colorFilter
-    )
+    if (iconState.loaded) {
+        RemoteAppIcon(packageName, contentDescription, iconModifier)
+    } else {
+        Image(
+            painter = rememberVectorPainter(Icons.Default.Android),
+            contentDescription = contentDescription,
+            modifier = iconModifier.placeholder(visible = true,
+                color = MaterialTheme.colorScheme.inverseOnSurface, shape = RoundedCornerShape(100)),
+            colorFilter = ColorFilter.tint(LocalContentColor.current)
+        )
+    }
+}
+
+/** Coil's shared loader caches downloaded icon bytes on disk and decoded images in memory. */
+@Composable
+private fun RemoteAppIcon(packageName: String?, description: String?, modifier: Modifier) {
+    val fallback = rememberVectorPainter(Icons.Default.Android)
+    if (packageName == null || !appNamePackagePattern.matches(packageName)) {
+        Image(fallback, description, modifier, colorFilter = ColorFilter.tint(LocalContentColor.current))
+        return
+    }
+    val repository = koinInject<AppNameRepository>()
+    val iconFlow = remember(repository, packageName) {
+        repository.icons.map { it[packageName] }.distinctUntilChanged()
+    }
+    val cachedUrl by key(packageName) {
+        iconFlow.collectAsStateWithLifecycle(initialValue = repository.icons.value[packageName])
+    }
+    // Keep a visible icon when an unrelated lookup evicts its repository cache entry.
+    var resolvedUrl by remember(packageName) { mutableStateOf<String?>(null) }
+    val url = cachedUrl ?: resolvedUrl
+    LaunchedEffect(packageName) { resolvedUrl = repository.resolveIconUrl(packageName) }
+    val context = LocalContext.current
+    val request = remember(url, context) {
+        ImageRequest.Builder(context).data(url)
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .diskCachePolicy(CachePolicy.ENABLED)
+            .build()
+    }
+    var loaded by remember(packageName, url) { mutableStateOf(false) }
+    Box(modifier.defaultMinSize(minWidth = 24.dp, minHeight = 24.dp).semantics {
+        if (description != null) contentDescription = description
+    }) {
+        if (!loaded) Image(fallback, null, Modifier.matchParentSize(),
+            colorFilter = ColorFilter.tint(LocalContentColor.current))
+        if (url != null) AsyncImage(
+            model = request, contentDescription = null, modifier = Modifier.matchParentSize(),
+            contentScale = ContentScale.Fit,
+            onLoading = { loaded = false }, onSuccess = { loaded = true }, onError = { loaded = false }
+        )
+    }
 }
 
 private data class AppIconState(
