@@ -158,6 +158,7 @@ ackpine-core = { module = "ru.solrudev.ackpine:ackpine-core", version.ref = "ack
 ackpine-ktx = { module = "ru.solrudev.ackpine:ackpine-ktx", version.ref = "ackpine" }
 apksig = { module = "com.android.tools.build:apksig", version.ref = "apksig" }
 bcprov = { group = "org.bouncycastle", name = "bcprov-jdk15to18", version.ref = "bouncycastle" }
+bcpkix = { group = "org.bouncycastle", name = "bcpkix-jdk15to18", version.ref = "bouncycastle" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }

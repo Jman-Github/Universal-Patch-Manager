@@ -1311,7 +1311,7 @@ Patch profiles are not affected.</string>
     <string name="split_installer_log_jump_latest">Jump to latest log entry</string>
     <string name="tools_keystore_creator_title">Keystore creator</string>
     <string name="tools_keystore_creator_description">Create a new keystore with your own alias, passwords, and output format.</string>
-    <string name="tools_keystore_creator_info">Generate a new signing keystore, then save it using your selected file picker mode.</string>
+    <string name="tools_keystore_creator_info">Generate an RSA or ECDSA P-256 signing keystore, then save it using your selected file picker mode.</string>
     <string name="tools_keystore_creator_format_title">Keystore format</string>
     <string name="tools_keystore_creator_action">Create keystore</string>
     <string name="tools_keystore_creator_created">Keystore created.</string>
@@ -2768,4 +2768,7 @@ Details: %2$s</string>
     <string name="downloader_local_source_description">Imported from an APK file. Import a newer APK to update this downloader.</string>
     <string name="runtime_shared_support_name">Shared support runtime</string>
     <string name="runtime_shared_support_updated">The shared support runtime has been updated</string>
+    <string name="tools_keystore_creator_algorithm">Key algorithm</string>
+    <string name="tools_keystore_converter_keep_algorithm">Keep existing key</string>
+    <string name="tools_keystore_converter_new_identity_warning">Selecting RSA or ECDSA generates a new key and certificate. It cannot update apps signed with the original key. Choose Keep existing key to change only the file format.</string>
 </resources>

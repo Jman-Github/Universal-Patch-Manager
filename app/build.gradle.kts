@@ -95,6 +95,8 @@ val arscLib by configurations.creating {
 configurations.all {
     exclude(group = "xmlpull", module = "xmlpull")
     exclude(group = "org.bouncycastle", module = "bcprov-jdk18on")
+    exclude(group = "org.bouncycastle", module = "bcpkix-jdk18on")
+    exclude(group = "org.bouncycastle", module = "bcutil-jdk18on")
     resolutionStrategy.force(
         "com.android.tools.smali:smali-dexlib2:3.0.9",
         "com.android.tools.smali:smali-util:3.0.9",
@@ -248,6 +250,7 @@ dependencies {
     // APK signing (supports JKS/PKCS12)
     implementation(libs.apksig)
     implementation(libs.bcprov)
+    implementation(libs.bcpkix)
 
     // Ackpine
     implementation(libs.ackpine.core)

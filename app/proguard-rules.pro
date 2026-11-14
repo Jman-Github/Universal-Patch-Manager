@@ -9,6 +9,11 @@
 
 -keep class app.revanced.library.ApkSigner** { *; }
 
+# JCA locates EC key generators, certificate factories, and keystore services
+# through provider registration strings rather than direct calls.
+-keep class org.bouncycastle.jcajce.provider.** { *; }
+-keep class org.bouncycastle.jce.provider.** { *; }
+
 # External v22 patch bundles compile against Patcher's relocated mutable
 # Dexlib API. These calls are invisible to R8 because the bundles are loaded
 # at runtime, so preserve the two relocated API packages they can reference.
