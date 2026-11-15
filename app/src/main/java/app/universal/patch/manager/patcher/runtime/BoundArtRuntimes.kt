@@ -71,6 +71,7 @@ class BoundArtRuntimes private constructor(private val context: Context) {
     }
 
     class ArtRuntime internal constructor(private val connection: PatcherConnection, val pid: Int) : Closeable {
+        suspend fun awaitExit() = connection.awaitDeath()
         fun run(requestFile: String, events: ParcelFileDescriptor) = connection.service.run(requestFile, events)
         override fun close() = connection.close()
     }
