@@ -20,7 +20,7 @@ androidx-test-runner = "1.7.0"
 androidx-test-junit = "1.3.0"
 revanced-library = "3.1.0"
 # Commit hashes are not chronological versions; keep SDK transitives from overriding this pin.
-arsclib = { strictly = "675bed2de3" }
+arsclib = { strictly = "50418a07a8" }
 koin = "4.2.2"
 ktor = "3.5.1"
 markdown-renderer = "0.30.0"

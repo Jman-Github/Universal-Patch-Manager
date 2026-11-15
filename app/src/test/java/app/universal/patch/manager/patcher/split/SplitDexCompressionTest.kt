@@ -5,7 +5,7 @@ import com.reandroid.apk.ApkModule
 import com.reandroid.arsc.chunk.TableBlock
 import com.reandroid.arsc.chunk.xml.AndroidManifestBlock
 import com.reandroid.arsc.chunk.xml.ResXmlElement
-import com.reandroid.arsc.value.ValueType
+import com.reandroid.arsc.value.DataType
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
@@ -52,7 +52,7 @@ class SplitDexCompressionTest {
     fun `unresolved embedded DEX flag keeps DEX stored`() =
         assertMergedDex(ZipEntry.STORED) {
             it.createAttribute("useEmbeddedDex", android.R.attr.useEmbeddedDex)
-                .setTypeAndData(ValueType.REFERENCE, 0x7f010000)
+                .setTypeAndData(DataType.REFERENCE, 0x7f010000)
         }
 
     private fun assertMergedDex(
@@ -82,7 +82,7 @@ class SplitDexCompressionTest {
                 writeEntry(zip, "assets/classes.dex", payloads[0], ZipEntry.STORED)
             }
             val splitManifest = manifest().apply {
-                manifestElement.createAttribute("split", 0).setValueAsString("feature")
+                manifestElement.createAttribute("split", 0).setDataAsString("feature")
                 refreshFull()
             }
             ZipOutputStream(inputDir.resolve("split_feature.apk").outputStream()).use { zip ->
