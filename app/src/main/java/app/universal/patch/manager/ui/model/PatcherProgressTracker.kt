@@ -189,6 +189,20 @@ internal class PatcherProgressTracker(
             title
         }
         val normalized = normalizeWriteApkTitle(stepId, splitNormalized)
+        // Runtime step lists can be incomplete. An explicit stripping event still
+        // needs a row, otherwise the known-phase handler silently discards its counter.
+        if (normalized.equals("Stripping native libraries", ignoreCase = true) &&
+            list.none { it.title.equals(normalized, ignoreCase = true) }
+        ) {
+            val finalizingIndex = list.indexOfFirst {
+                it.state == State.WAITING && (
+                    it.title.equals("Finalizing output", ignoreCase = true) ||
+                        it.title.equals("Finalizing merged APK", ignoreCase = true)
+                    )
+            }
+            list.add(finalizingIndex.takeIf { it >= 0 } ?: list.size,
+                StepDetail(title = normalized, state = State.WAITING))
+        }
         if (stepId == StepId.WriteAPK) {
             when {
                 normalized.equals("Writing patched files...", ignoreCase = true) -> {

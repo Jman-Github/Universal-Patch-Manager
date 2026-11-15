@@ -1,6 +1,7 @@
 package app.universal.patch.manager.ui.model
 
 import app.universal.patch.manager.patcher.StepId
+import java.util.Locale
 
 /** Aggregate child work instead of reusing counters from unrelated phases. */
 internal fun expandableStepProgressFraction(stepId: StepId, details: List<StepDetail>): Double? {
@@ -41,3 +42,33 @@ internal fun isComponentCountProgress(title: String): Boolean =
     title == "Inspecting split APKs" || title == "Preparing split APKs" ||
         title == "Writing patched APKs" || title == "Preparing unsigned APKs" ||
         (title.startsWith("Preparing ") && title.endsWith(".apk", ignoreCase = true))
+
+internal fun isPercentageProgress(title: String): Boolean = title == "Stripping native libraries"
+
+internal fun StepDetail.displayProgress(): Pair<Float?, String?> =
+    if (state == State.COMPLETED && !skipped && isPercentageProgress(title)) {
+        1f to "100%"
+    } else {
+        progress.asDisplayProgress(isComponentCountProgress(title), isPercentageProgress(title))
+    }
+
+private val Long.megaBytes get() = "%.1f".format(locale = Locale.ROOT, toDouble() / 1_000_000)
+
+internal fun Pair<Long, Long?>?.asDisplayProgress(
+    componentCount: Boolean = false, percentage: Boolean = false
+): Pair<Float?, String?> =
+    this?.let { (current, total) ->
+        val fraction = total?.takeIf { it > 0L }?.let { (current.toFloat() / it).coerceIn(0f, 1f) }
+        val text = if (percentage) {
+            total?.takeIf { it > 0L }?.let {
+                (current.coerceIn(0L, it).toDouble() * 100 / it).toInt().toString() + "%"
+            }
+        } else if (componentCount) {
+            if (total != null && total > 0L) "$current/$total" else "$current"
+        } else {
+            if (total != null && total > 0L) "${current.megaBytes}/${total.megaBytes} MB" else "${current.megaBytes} MB"
+        }
+        // Component counters advance only when an APK finishes. Keep activity visible
+        // while the first APK is still being processed instead of drawing a 0% ring.
+        (if ((componentCount || percentage) && current == 0L) null else fraction) to text
+    } ?: (null to null)

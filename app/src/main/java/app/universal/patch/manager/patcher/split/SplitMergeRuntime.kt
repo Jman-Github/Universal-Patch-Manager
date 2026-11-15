@@ -15,7 +15,8 @@ class SplitMergeRuntime(private val context: Context) {
         skipUnneededSplits: Boolean, includedModules: Set<String>? = null,
         onProgress: (String) -> Unit, onSubSteps: (List<String>) -> Unit,
         onLog: (String) -> Unit = {}, onMemoryUsage: (PatcherMemoryUsage) -> Unit = {},
-        compressNativeLibraries: Boolean = false): File {
+        compressNativeLibraries: Boolean = false,
+        onStripProgress: ((Long, Long) -> Unit)? = null): File {
         workspace.mkdirs()
         val output = workspace.resolve("last-merged-unsigned.apk")
         val current = BoundRuntimeClient(context)
@@ -36,8 +37,7 @@ class SplitMergeRuntime(private val context: Context) {
                         usedMb = (message["used"] as Number).toLong(),
                         maxMb = (message["max"] as Number).toLong()))
                     "event" -> (message["event"] as Map<*, *>).let { event ->
-                        (event["message"] as? String)?.let(onProgress)
-                        (event["subSteps"] as? List<*>)?.let { onSubSteps(it.map { step -> step as String }) }
+                        dispatchSplitMergeProgress(event, onProgress, onSubSteps, onStripProgress)
                     }
                 }
             }

@@ -3,6 +3,9 @@ package app.universal.patch.manager.patcher.util
 import app.universal.patch.manager.patcher.runtime.RuntimeDevice
 import app.universal.patch.manager.patcher.runtime.RuntimeLog as Log
 import java.io.File
+import com.android.apksig.apk.ApkFormatException
+import com.android.apksig.zip.ZipFormatException
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.zip.ZipEntry
@@ -23,99 +26,126 @@ object NativeLibStripper {
     suspend fun strip(
         apkFile: File,
         checkCancelled: () -> Unit,
-    ): Boolean = strip(apkFile, RuntimeDevice.supportedAbis.toTypedArray().filter { it.isNotBlank() }, checkCancelled)
+    ): Boolean = strip(apkFile, RuntimeDevice.supportedAbis.filter { it.isNotBlank() }, checkCancelled = checkCancelled)
+
+    suspend fun strip(
+        apkFile: File,
+        onProgress: (Int) -> Unit,
+        checkCancelled: () -> Unit = {},
+    ): Boolean = strip(apkFile, RuntimeDevice.supportedAbis.filter { it.isNotBlank() }, onProgress, checkCancelled)
 
     suspend fun strip(
         apkFile: File,
         supportedAbis: List<String>,
+        onProgress: (Int) -> Unit = {},
         checkCancelled: () -> Unit = {},
     ): Boolean =
         withContext(Dispatchers.IO) {
             currentCoroutineContext().ensureActive()
             checkCancelled()
-            if (supportedAbis.isEmpty()) return@withContext false
+            var lastProgress = -1
+            fun report(percent: Int) {
+                if (percent > lastProgress) {
+                    lastProgress = percent
+                    onProgress(percent)
+                }
+            }
+            fun unchanged(): Boolean {
+                report(100)
+                return false
+            }
+            report(0)
+            if (supportedAbis.isEmpty()) return@withContext unchanged()
 
             val abisInApk = abiDirectoriesInApk(apkFile)
-            if (abisInApk.size <= 1) return@withContext false
+            if (abisInApk.size <= 1) return@withContext unchanged()
 
             val preferredAbi = supportedAbis.firstOrNull { it in abisInApk }
-                ?: return@withContext false
+                ?: return@withContext unchanged()
             val allowedAbis = setOf(preferredAbi)
 
+            val context = currentCoroutineContext()
+            val checkActive = { context.ensureActive(); checkCancelled() }
+            val removedEntries = ZipFile(apkFile).use { zip ->
+                zip.entries().asSequence().count {
+                    checkActive()
+                    !it.isDirectory && !shouldKeepZipEntry(it.name, allowedAbis)
+                }
+            }
+            if (removedEntries == 0) return@withContext unchanged()
+            // Reserve completion for the replacement of the original. A compatibility
+            // retry must never move the visible progress backwards.
+            val reportCopy: (Long, Long) -> Unit = { current, total ->
+                if (total > 0L) report((current.toDouble() * 99 / total).toInt().coerceIn(0, 99))
+            }
             Log.i(TAG, "Preserving native libraries for ABI $preferredAbi")
 
-            val tempFile = File(apkFile.parentFile, "${apkFile.nameWithoutExtension}-abi-stripped.apk")
-            var removedEntries = 0
-
+            val tempFile = Files.createTempFile(requireNotNull(apkFile.absoluteFile.parentFile).toPath(), "abi-stripped-", ".apk").toFile()
             try {
-                ZipInputStream(apkFile.inputStream().buffered()).use { zis ->
-                    ZipOutputStream(tempFile.outputStream().buffered()).use { zos ->
-                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                        var entry = zis.nextEntry
-                        while (entry != null) {
-                            currentCoroutineContext().ensureActive()
-                            checkCancelled()
-                            val name = entry.name
-                            val keepEntry = shouldKeepZipEntry(name, allowedAbis)
-
-                            if (keepEntry) {
-                                val newEntry = cloneEntry(entry)
-                                zos.putNextEntry(newEntry)
-                                if (!entry.isDirectory) {
-                                    while (true) {
-                                        currentCoroutineContext().ensureActive()
-                                        checkCancelled()
-                                        val read = zis.read(buffer)
-                                        if (read == -1) break
-                                        zos.write(buffer, 0, read)
-                                    }
-                                }
-                                zos.closeEntry()
-                            } else if (!entry.isDirectory) {
-                                removedEntries++
-                            }
-
-                            zis.closeEntry()
-                            entry = zis.nextEntry
-                        }
-                    }
-                }
-            } catch (error: Throwable) {
-                tempFile.delete()
-                throw error
-            }
-
-            if (removedEntries > 0) {
-                currentCoroutineContext().ensureActive()
-                checkCancelled()
                 try {
-                    try {
-                        Files.move(
-                            tempFile.toPath(),
-                            apkFile.toPath(),
-                            StandardCopyOption.REPLACE_EXISTING,
-                            StandardCopyOption.ATOMIC_MOVE
-                        )
-                    } catch (_: Exception) {
-                        currentCoroutineContext().ensureActive()
-                        checkCancelled()
-                        Files.move(
-                            tempFile.toPath(),
-                            apkFile.toPath(),
-                            StandardCopyOption.REPLACE_EXISTING
-                        )
-                    }
-                } catch (error: Throwable) {
-                    tempFile.delete()
-                    throw error
+                    NativeLibRawCopy.rewrite(apkFile, tempFile, { shouldKeepZipEntry(it, allowedAbis) }, checkActive, reportCopy)
+                } catch (_: ApkFormatException) {
+                    checkActive()
+                    rewriteStreaming(apkFile, tempFile, allowedAbis, checkActive, reportCopy)
+                } catch (_: ZipFormatException) {
+                    checkActive()
+                    rewriteStreaming(apkFile, tempFile, allowedAbis, checkActive, reportCopy)
                 }
+                checkActive()
+                try {
+                    Files.move(tempFile.toPath(), apkFile.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                } catch (_: AtomicMoveNotSupportedException) {
+                    checkActive()
+                    Files.move(tempFile.toPath(), apkFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                }
+                report(100)
                 Log.i(TAG, "Removed $removedEntries native library entries for unsupported ABIs")
                 true
-            } else {
+            } finally {
                 tempFile.delete()
-                false
             }
         }
+
+    /** Compatibility path for archives that apksig cannot copy directly. */
+    private fun rewriteStreaming(
+        apkFile: File, tempFile: File, allowedAbis: Set<String>, checkCancelled: () -> Unit,
+        onProgress: (Long, Long) -> Unit
+    ) {
+        val totalWork = ZipFile(apkFile).use { zip ->
+            zip.entries().asSequence().filter { shouldKeepZipEntry(it.name, allowedAbis) }
+                .sumOf { maxOf(1L, it.size) }
+        }
+        var completedWork = 0L
+        ZipInputStream(apkFile.inputStream().buffered()).use { input ->
+            ZipOutputStream(tempFile.outputStream().buffered()).use { output ->
+                val buffer = ByteArray(64 * 1024)
+                var entry = input.nextEntry
+                while (entry != null) {
+                    checkCancelled()
+                    if (shouldKeepZipEntry(entry.name, allowedAbis)) {
+                        output.putNextEntry(cloneEntry(entry))
+                        var copied = 0L
+                        if (!entry.isDirectory) {
+                            while (true) {
+                                checkCancelled()
+                                val read = input.read(buffer)
+                                if (read == -1) break
+                                output.write(buffer, 0, read)
+                                copied += read
+                                onProgress(completedWork + copied, totalWork)
+                            }
+                        }
+                        output.closeEntry()
+                        completedWork += maxOf(1L, copied)
+                        onProgress(completedWork, totalWork)
+                    }
+                    input.closeEntry()
+                    entry = input.nextEntry
+                }
+            }
+        }
+    }
 
     private fun shouldKeepZipEntry(name: String, allowedAbis: Set<String>): Boolean {
         val abi = extractAbiFromEntry(name) ?: return true

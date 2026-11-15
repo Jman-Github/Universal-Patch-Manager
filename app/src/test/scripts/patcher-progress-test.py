@@ -46,6 +46,10 @@ with tempfile.TemporaryDirectory(prefix="patcher-progress-", dir=ROOT / "build")
     sources += [ROOT / "app/src/main/java/app/universal/patch/manager/ui/model" / name
                 for name in ("PatcherProgressTracker.kt", "ExpandableStepProgress.kt")]
     sources += [ROOT / "app/src/test/java/app/universal/patch/manager/ui/model/PatcherProgressTrackerTest.kt"]
+    sources += [ROOT / "app/src/main/java/app/universal/patch/manager/patcher/worker/ReseamProgressFraction.kt",
+                ROOT / "app/src/test/java/app/universal/patch/manager/patcher/worker/ReseamProgressFractionTest.kt"]
+    sources += [ROOT / "app/src/main/java/app/universal/patch/manager/patcher/split/SplitMergeProgress.kt",
+                ROOT / "app/src/test/java/app/universal/patch/manager/patcher/split/SplitMergeProgressTest.kt"]
     # Check the merger's production failure/cancellation row mapping too.
     merger = (ROOT / "app/src/main/java/app/universal/patch/manager/ui/screen/MergeSplitApkScreen.kt").read_text()
     resolver = merger.split("private fun resolveSubStepState(", 1)[1].split(
@@ -79,4 +83,6 @@ class MergerFailureTest {
         "-d", str(classes), *map(str, sources)], check=True, timeout=120)
     subprocess.run([str(JAVA), "-cp", cp([classes] + dependencies), "org.junit.runner.JUnitCore",
         "app.universal.patch.manager.ui.model.PatcherProgressTrackerTest",
-        "app.universal.patch.manager.ui.model.MergerFailureTest"], check=True, timeout=90)
+        "app.universal.patch.manager.ui.model.MergerFailureTest",
+        "app.universal.patch.manager.patcher.worker.ReseamProgressFractionTest",
+        "app.universal.patch.manager.patcher.split.SplitMergeProgressTest"], check=True, timeout=90)

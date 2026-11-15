@@ -721,6 +721,8 @@ class PatcherWorker(
     private fun writeApkNotificationPhaseIndex(detail: String): Int = when {
         activePatchBundleType == PatchBundleType.RESEAM && detail == "Writing patched APKs" -> 0
         activePatchBundleType == PatchBundleType.RESEAM && detail == "Preparing unsigned APKs" -> 1
+        activePatchBundleType == PatchBundleType.RESEAM && detail == "Stripping native libraries" -> 2
+        activePatchBundleType == PatchBundleType.RESEAM && detail == "Finalizing output" -> 3
         detail.equals("Validating resources", ignoreCase = true) -> 0
         detail.equals("Preparing output APK", ignoreCase = true) -> 0
         detail.equals("Copying base APK", ignoreCase = true) ||
@@ -1821,6 +1823,13 @@ class PatcherWorker(
                         skipUnneededSplits = false,
                         includedModules = selection.includedModules,
 
+                        onStripProgress = { current, total ->
+                            eventDispatcher(ProgressEvent.Progress(
+                                stepId = StepId.PrepareSplitApk,
+                                message = "Stripping native libraries",
+                                current = current, total = total
+                            ))
+                        },
                         onProgress = { message ->
                             eventDispatcher(
                                 ProgressEvent.Progress(
