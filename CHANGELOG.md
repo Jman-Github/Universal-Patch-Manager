@@ -4,6 +4,24 @@ Release notes are generated automatically from Conventional Commits.
 
 Historical manually maintained release notes remain in `api/CHANGELOG.md` and `api/DEV-CHANGELOG.md`.
 
+# [2.1.0-dev.6](https://github.com/Jman-Github/Universal-Patch-Manager/compare/v2.1.0-dev.5...v2.1.0-dev.6) (2026-11-15)
+
+
+### Bug Fixes
+
+* **patcher:** update ARSCLib and adapt split APK handling ([9088b03](https://github.com/Jman-Github/Universal-Patch-Manager/commit/9088b035293c219767aaeedac6fe985e52ee850a))
+
+
+### Features
+
+* **keystore:** add ECDSA P-256 signing support ([87eb2fd](https://github.com/Jman-Github/Universal-Patch-Manager/commit/87eb2fde6ac2439eaa07e90ee3e2300a3c5dfb07)), closes [#823](https://github.com/Jman-Github/Universal-Patch-Manager/issues/823)
+
+
+### Performance Improvements
+
+* **jvm:** add AOT caching and improve heap defaults ([ced11e0](https://github.com/Jman-Github/Universal-Patch-Manager/commit/ced11e03e3fe4c9364c57840c9a4d21286dfe3fd))
+* **patcher:** speed up native library stripping ([e169fbd](https://github.com/Jman-Github/Universal-Patch-Manager/commit/e169fbd96f01078bbbe97807806ba1450522b3ac))
+
 # [2.1.0-dev.5](https://github.com/Jman-Github/Universal-Patch-Manager/compare/v2.1.0-dev.4...v2.1.0-dev.5) (2026-11-13)
 
 
