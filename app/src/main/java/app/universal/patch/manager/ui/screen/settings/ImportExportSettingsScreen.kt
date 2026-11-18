@@ -477,7 +477,7 @@ fun ImportExportSettingsScreen(
             description = stringResource(R.string.export_app_entries_description),
             action = stringResource(R.string.app_entries_export_action),
             entries = entries.map {
-                AppEntryChoice(it.label, it.record.originalPackageName, it.record.version, it.missing, it.hasApk)
+                AppEntryChoice(it.label, it.record.originalPackageName, it.record.version, it.missing, it.hasApk, it.icon)
             },
             onDismiss = appEntries::dismissExport,
             onConfirm = { selected ->
@@ -491,7 +491,9 @@ fun ImportExportSettingsScreen(
             title = stringResource(R.string.import_app_entries),
             description = stringResource(R.string.import_app_entries_description),
             action = stringResource(R.string.import_button),
-            entries = plan.entries.map { AppEntryChoice(it.label, it.originalPackageName, it.version, it.missing) },
+            entries = plan.entries.mapIndexed { index, it ->
+                AppEntryChoice(it.label, it.originalPackageName, it.version, it.missing, icon = plan.icons.getOrNull(index))
+            },
             onDismiss = appEntries::dismissImport,
             onConfirm = appEntries::finishImport
         )

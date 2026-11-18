@@ -2,6 +2,7 @@ package app.universal.patch.manager.domain.repository
 
 import android.app.Application
 import android.net.Uri
+import androidx.core.graphics.drawable.toBitmap
 import app.universal.patch.manager.data.platform.Filesystem
 import app.universal.patch.manager.data.platform.SharedApkFiles
 import app.universal.patch.manager.data.room.apps.installed.InstallType
@@ -62,8 +63,8 @@ internal class AppEntryArchive(
     @Serializable
     private data class Manifest(val format: String, val version: Int, val entries: List<Entry>)
 
-    data class ExportEntry(val record: InstalledApp, val label: String, val missing: Boolean, val hasApk: Boolean)
-    data class ImportPlan(val file: File, val entries: List<Entry>)
+    data class ExportEntry(val record: InstalledApp, val label: String, val missing: Boolean, val hasApk: Boolean, val icon: android.graphics.drawable.Drawable? = null)
+    data class ImportPlan(val file: File, val entries: List<Entry>, val icons: List<android.graphics.drawable.Drawable?> = emptyList())
     data class ImportResult(val imported: Int, val updated: Int, val skipped: Int)
 
     enum class Stage { Preparing, Reading, Checking, Exporting, Saving, Importing }
@@ -90,7 +91,10 @@ internal class AppEntryArchive(
                 record, archive?.let { runCatching { pm.getArchiveLabel(it) }.getOrNull() }
                     ?: record.originalPackageName,
                 missing = record.installType != InstallType.SAVED && !current,
-                hasApk = archive != null
+                hasApk = archive != null,
+                icon = archive?.let { previewIcon(it) } ?: installed?.applicationInfo?.let {
+                    runCatching { it.loadIcon(app.packageManager) }.getOrNull()
+                }
             )
         }
     }
@@ -194,7 +198,22 @@ internal class AppEntryArchive(
                     file.outputStream().use { copy(input, it) }
                 }
                 onProgress(Progress(Stage.Checking))
-                ZipFile(file).use { zip -> ImportPlan(file, readManifest(zip).entries) }
+                ZipFile(file).use { zip ->
+                    val entries = readManifest(zip).entries
+                    val icons = entries.indices.map { index ->
+                        currentCoroutineContext().ensureActive()
+                        val apk = File.createTempFile("entry-preview-", ".apk", app.cacheDir)
+                        try { zip.extract(apkPath(index), apk); previewIcon(apk) }
+                        catch (error: CancellationException) { throw error }
+                        catch (error: Exception) {
+                            // Artwork is optional; restore still validates selected APKs in full.
+                            android.util.Log.w("AppEntryArchive", "Could not preview app icon", error)
+                            null
+                        }
+                        finally { apk.delete() }
+                    }
+                    ImportPlan(file, entries, icons)
+                }
             }
         } catch (failure: Throwable) {
             // withContext can be cancelled after IO finishes but before the UI receives the plan.
@@ -210,7 +229,10 @@ internal class AppEntryArchive(
         onProgress: suspend (Progress) -> Unit = {}
     ): ImportResult = withContext(Dispatchers.IO) {
         val sources = bundles.sources.first()
-        val signatures = bundles.allBundlesInfoFlow.first().toSignatureMap()
+        val bundleInfo = bundles.allBundlesInfoFlow.first()
+        val signatures = bundleInfo.toSignatureMap()
+        val context = currentCoroutineContext()
+        val checkCancelled = { context.ensureActive() }
         var imported = 0
         var updated = 0
         var skipped = 0
@@ -268,14 +290,38 @@ internal class AppEntryArchive(
                     }
                     val (payload, selection) = portable?.remapAndExtractSelection(sources, signatures)
                         ?: (null to emptyMap())
+                    val apkHash = contentHash(apk, checkCancelled)
+                    val existingEntries = apps.getAll().first()
+                    val duplicate = existingEntries.any { existing ->
+                        existing.originalPackageName == entry.originalPackageName &&
+                            existing.version == entry.version &&
+                            retainedApk(existing)?.let { contentHash(it, checkCancelled) == apkHash } == true &&
+                            samePayload(
+                                existing.selectionPayload ?: apps.getAppliedPatches(existing.currentPackageName)
+                                    .toPayload(sources, bundleInfo),
+                                payload, checkCancelled
+                            ) &&
+                            (repatch == null || existing.repatchSourcePath?.let(::File)
+                                ?.let(SharedApkFiles::resolve)?.takeIf(File::isFile)
+                                ?.let { contentHash(it, checkCancelled) == contentHash(repatch!!, checkCancelled) } == true)
+                    }
+                    // A key collision with different patching state must retain both entries.
+                    var restoredKey = entry.restoreKey()
+                    if (!duplicate && apps.get(restoredKey) != null) {
+                        restoredKey = buildSavedAppEntryKey(entry.packageName, "archive:" + java.util.UUID.randomUUID())
+                    }
                     val record = InstalledApp(
-                        entry.restoreKey(), entry.originalPackageName, entry.version, InstallType.SAVED, 0,
+                        restoredKey, entry.originalPackageName, entry.version, InstallType.SAVED, 0,
                         selectionPayload = payload, createdAt = entry.createdAt, useMount = entry.useMount,
                         versionCode = entry.versionCode
                     )
-                    val wasUpdated = apps.restoreArchivedApp(record, apk, repatch, selection.filterKeys { it in used })
-                    committed = true
-                    if (wasUpdated) updated++ else imported++
+                    if (duplicate) {
+                        skipped++
+                    } else {
+                        val wasUpdated = apps.restoreArchivedApp(record, apk, repatch, selection.filterKeys { it in used })
+                        committed = true
+                        if (wasUpdated) updated++ else imported++
+                    }
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Exception) {
@@ -293,6 +339,53 @@ internal class AppEntryArchive(
         }
         ImportResult(imported, updated, skipped)
     }
+
+    // Local option inputs are copied on restore, so compare their content, not their paths.
+    private fun samePayload(left: PatchProfilePayload?, right: PatchProfilePayload?, checkCancelled: () -> Unit = {}): Boolean {
+        fun normalized(payload: PatchProfilePayload?): PatchProfilePayload? =
+            payload?.rewriteOptions { value ->
+                if (fs.isManagedPatchOptionInputPath(value)) {
+                    val file = File(value)
+                    when {
+                        file.isFile -> "sha256:" + contentHash(file, checkCancelled)
+                        file.isDirectory -> file.walkTopDown().filter(File::isFile)
+                            .map { it.relativeTo(file).invariantSeparatorsPath to contentHash(it, checkCancelled) }
+                            .sortedBy { it.first }.joinToString(prefix = "directory:", separator = "\n")
+                        else -> value
+                    }
+                } else value
+            }?.let { value ->
+                value.copy(bundles = value.bundles.map { bundle ->
+                    bundle.copy(bundleUid = 0, patches = bundle.patches.sorted(),
+                        displayName = null, sourceName = bundle.sourceName.takeIf { bundle.sourceEndpoint == null },
+                        optionDisplayInfo = null, patchDisplayInfo = null)
+                }.sortedBy { it.sourceEndpoint.orEmpty() + "\u0000" + it.sourceName.orEmpty() +
+                    "\u0000" + it.version.orEmpty() + "\u0000" + it.patches.joinToString("\u0000") })
+            }
+        return normalized(left) == normalized(right)
+    }
+
+    private fun contentHash(file: File, checkCancelled: () -> Unit = {}): String {
+        checkCancelled()
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        file.inputStream().buffered().use { input ->
+            val bytes = ByteArray(64 * 1024)
+            while (true) {
+                checkCancelled()
+                val count = input.read(bytes)
+                if (count < 0) break
+                digest.update(bytes, 0, count)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it.toInt() and 255) }
+    }
+
+    private fun previewIcon(apk: File): android.graphics.drawable.Drawable? = runCatching {
+        val info = pm.getPackageInfo(apk)?.applicationInfo ?: return@runCatching null
+        val drawable = info.loadIcon(app.packageManager)
+        android.graphics.drawable.BitmapDrawable(app.resources,
+            drawable.toBitmap(96, 96))
+    }.getOrNull()
 
     private fun retainedApk(app: InstalledApp): File? =
         SharedApkFiles.resolve(fs.getPatchedAppFile(app.currentPackageName, app.version)).takeIf(File::isFile)

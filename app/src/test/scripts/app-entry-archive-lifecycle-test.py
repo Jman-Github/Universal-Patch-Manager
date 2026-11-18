@@ -142,7 +142,7 @@ internal class AppEntryArchive(
     enum class Stage { Preparing, Reading, Checking, Exporting, Saving, Importing }
     data class Progress(val stage: Stage, val completed: Int = 0, val total: Int = 0, val currentApp: String? = null)
     data class ExportEntry(val record: Record, val hasApk: Boolean = true)
-    data class ImportPlan(val file: File, val entries: List<Int>)
+    data class ImportPlan(val file: File, val entries: List<Int>, val icons: List<Any?> = emptyList())
     data class ImportResult(val imported: Int, val updated: Int, val skipped: Int)
     suspend fun exportEntries() = Fixture.entries.toList()
     suspend fun export(target: Uri, selected: List<ExportEntry>, onProgress: suspend (Progress) -> Unit): Int {
@@ -156,10 +156,14 @@ internal class AppEntryArchive(
         ImportResult(selected.size, 0, 0)
 }
 internal class ImportStaging(private val app: Application) {
+    var failPreview = false
     enum class Stage { Checking }
     data class Progress(val stage: Stage)
-    data class ImportPlan(val file: File, val entries: List<Int>)
+    data class ImportPlan(val file: File, val entries: List<Int>, val icons: List<Any?> = emptyList())
     data class Manifest(val entries: List<Int>)
+    private fun previewIcon(file: File): Any? = null
+    private fun apkPath(index: Int) = "apps/$index.apk"
+    private suspend fun ZipFile.extract(name: String, target: File) { if (failPreview) throw IOException("Cannot preview"); target.writeBytes(byteArrayOf()) }
     private fun readManifest(zip: ZipFile) = Manifest(listOf(1))
     private fun copy(input: InputStream, output: OutputStream) { input.copyTo(output) }
 """ + prepare + "\n}\n",
@@ -277,6 +281,11 @@ fun main() = runBlocking {
         val success = ImportStaging(app).prepareImport(Uri("source.zip"))
         check(success.file.isFile)
         success.file.delete()
+        val noIcon = ImportStaging(app).apply { failPreview = true }
+            .prepareImport(Uri("source.zip"))
+        check(noIcon.file.isFile && noIcon.icons.single() == null)
+        noIcon.file.delete()
+        println("PASS: failed optional icon extraction does not reject the import plan")
         input.writeText("invalid zip")
         check(runCatching { ImportStaging(app).prepareImport(Uri("invalid.zip")) }.isFailure)
         check(app.cacheDir.listFiles().orEmpty().isEmpty())

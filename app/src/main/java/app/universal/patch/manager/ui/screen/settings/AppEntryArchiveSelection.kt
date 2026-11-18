@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -45,7 +46,8 @@ internal data class AppEntryChoice(
     val packageName: String,
     val version: String,
     val missing: Boolean,
-    val enabled: Boolean = true
+    val enabled: Boolean = true,
+    val icon: android.graphics.drawable.Drawable? = null
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -71,142 +73,145 @@ internal fun AppEntryArchiveSelection(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp)
-        )
-        Text(
-            text = description,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Column(Modifier.fillMaxHeight(0.85f)) {
             Text(
-                pluralStringResource(R.plurals.app_entries_selected, selection.size, selection.size),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp)
             )
-            Row(
-                modifier = Modifier
-                    .triStateToggleable(
-                        state = selectionState,
-                        enabled = selectable.isNotEmpty(),
-                        role = Role.Checkbox,
-                        onClick = { selected = ArrayList(if (all) emptyList() else selectable) }
-                    )
-                    .heightIn(min = 48.dp)
-                    .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(stringResource(R.string.app_entries_all))
-                TriStateCheckbox(
-                    state = selectionState,
-                    onClick = null,
-                    enabled = selectable.isNotEmpty()
-                )
-            }
-        }
-        HorizontalDivider()
-        if (entries.isEmpty()) {
             Text(
-                stringResource(R.string.app_entries_empty),
-                style = MaterialTheme.typography.bodyLarge,
+                text = description,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(32.dp)
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
             )
-        } else {
-            LazyColumnWithScrollbar(
-                thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
-                modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
-                contentPadding = PaddingValues(vertical = 4.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                itemsIndexed(entries) { index, entry ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .toggleable(
-                                value = index in selection,
-                                enabled = entry.enabled,
-                                role = Role.Checkbox
-                            ) { checked ->
-                                selected = ArrayList(if (checked) selection + index else selection - index)
-                            }
-                            .padding(horizontal = 24.dp, vertical = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        AppIcon(
-                            packageInfo = null,
-                            packageName = entry.packageName,
-                            contentDescription = null,
-                            modifier = Modifier.size(40.dp)
+                Text(
+                    pluralStringResource(R.plurals.app_entries_selected, selection.size, selection.size),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                Row(
+                    modifier = Modifier
+                        .triStateToggleable(
+                            state = selectionState,
+                            enabled = selectable.isNotEmpty(),
+                            role = Role.Checkbox,
+                            onClick = { selected = ArrayList(if (all) emptyList() else selectable) }
                         )
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        .heightIn(min = 48.dp)
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(stringResource(R.string.app_entries_all))
+                    TriStateCheckbox(
+                        state = selectionState,
+                        onClick = null,
+                        enabled = selectable.isNotEmpty()
+                    )
+                }
+            }
+            HorizontalDivider()
+            if (entries.isEmpty()) {
+                Text(
+                    stringResource(R.string.app_entries_empty),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(32.dp)
+                )
+            } else {
+                LazyColumnWithScrollbar(
+                    thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    contentPadding = PaddingValues(vertical = 4.dp)
+                ) {
+                    itemsIndexed(entries) { index, entry ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .toggleable(
+                                    value = index in selection,
+                                    enabled = entry.enabled,
+                                    role = Role.Checkbox
+                                ) { checked ->
+                                    selected = ArrayList(if (checked) selection + index else selection - index)
+                                }
+                                .padding(horizontal = 24.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            Text(entry.name, style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                entry.packageName,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            AppIcon(
+                                packageInfo = null,
+                                iconOverride = entry.icon,
+                                packageName = entry.packageName,
+                                contentDescription = null,
+                                modifier = Modifier.size(40.dp)
                             )
-                            if (entry.version.isNotBlank()) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(entry.name, style = MaterialTheme.typography.titleMedium)
                                 Text(
-                                    entry.version,
+                                    entry.packageName,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                if (entry.version.isNotBlank()) {
+                                    Text(
+                                        entry.version,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (entry.missing) {
+                                    Text(
+                                        stringResource(R.string.app_entries_missing),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                                if (!entry.enabled) {
+                                    Text(
+                                        stringResource(R.string.app_entries_no_apk),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
                             }
-                            if (entry.missing) {
-                                Text(
-                                    stringResource(R.string.app_entries_missing),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
-                            if (!entry.enabled) {
-                                Text(
-                                    stringResource(R.string.app_entries_no_apk),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
+                            HapticCheckbox(
+                                checked = index in selection,
+                                onCheckedChange = null,
+                                enabled = entry.enabled
+                            )
                         }
-                        HapticCheckbox(
-                            checked = index in selection,
-                            onCheckedChange = null,
-                            enabled = entry.enabled
-                        )
-                    }
-                    if (index != entries.lastIndex) {
-                        HorizontalDivider(Modifier.padding(horizontal = 24.dp))
+                        if (index != entries.lastIndex) {
+                            HorizontalDivider(Modifier.padding(horizontal = 24.dp))
+                        }
                     }
                 }
             }
-        }
-        HorizontalDivider()
-        FlowRow(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-            Button(
-                onClick = { onConfirm(selection) },
-                enabled = selection.isNotEmpty()
-            ) { Text(action) }
+            HorizontalDivider()
+            FlowRow(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+                Button(
+                    onClick = { onConfirm(selection) },
+                    enabled = selection.isNotEmpty()
+                ) { Text(action) }
+            }
         }
     }
 }
