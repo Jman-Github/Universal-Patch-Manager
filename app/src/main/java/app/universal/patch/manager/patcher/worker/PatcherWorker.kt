@@ -249,7 +249,6 @@ class PatcherWorker(
             .apply {
                 if (progress != null) {
                     applyProgressNotification(
-                        context = applicationContext,
                         contentTitle = notificationTitle(),
                         contentText = contentText,
                         max = progress.max,
@@ -2259,7 +2258,6 @@ class PatcherWorker(
                 val notification = createNotificationBuilder(context, title)
                     .setContentText(contentText)
                     .applyProgressNotification(
-                        context = context,
                         contentTitle = title,
                         contentText = contentText,
                         max = 0,

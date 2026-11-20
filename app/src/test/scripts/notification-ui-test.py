@@ -1,4 +1,4 @@
-"""Inflate the production notification layouts and exercise progress on an Android emulator.
+"""Check framework progress notifications and download lifecycle on an Android emulator.
 
 Runs before assembleRelease. Installs and removes an isolated test APK;
 does not install, modify, or post notifications from the manager app.
@@ -39,10 +39,8 @@ compiler += [artifact("org.jetbrains", "annotations"), artifact("org.jetbrains.k
 with tempfile.TemporaryDirectory(prefix="notification-ui-", dir=ROOT / "build") as directory:
     work = Path(directory)
     resources = work / "res"
-    for rel in ("layout/notification_progress.xml", "layout/notification_progress_expanded.xml",
-                "drawable/notification_progress_track.xml", "values/notification_colors.xml",
-                "values-night/notification_colors.xml", "drawable/ic_notification_status.png",
-                "drawable/ic_notification_artwork.xml"):
+    for rel in ("values/notification_colors.xml", "values-night/notification_colors.xml",
+                "drawable/ic_notification_status.png", "drawable/ic_notification_artwork.xml"):
         dst = resources / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(BASE / "res" / rel, dst)
@@ -69,7 +67,7 @@ import android.content.res.Configuration
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.view.View
-import app.universal.patch.manager.R
+import android.view.ViewGroup
 import app.universal.patch.manager.util.applyProgressNotification
 import app.universal.patch.manager.util.applyManagerNotificationIcon
 import app.universal.patch.manager.util.DownloadProgressNotifier
@@ -81,7 +79,7 @@ override fun onStart() {
     runOnMainSync { try { verify() } catch (error: Throwable) { failure = error } }
     if (failure == null) try { verifyDownloads() } catch (error: Throwable) { failure = error }
     val result = android.os.Bundle().apply {
-        putString("stream", failure?.stackTraceToString() ?: "PASS: light/dark layouts, minimal artwork, background progress, completion/failure/cancellation removal")
+        putString("stream", failure?.stackTraceToString() ?: "PASS: native progress and detail, minimal artwork, download progress and removal")
     }
     finish(if (failure == null) android.app.Activity.RESULT_OK else android.app.Activity.RESULT_CANCELED, result)
 }
@@ -103,9 +101,11 @@ private fun verifyDownloads() {
         Thread.sleep(1100)
         session.update(250, 1000)
         awaitNotification {
-            val content = it.singleOrNull()?.notification?.contentView?.apply(app, null)
-            content?.findViewById<ProgressBar>(R.id.notification_progress)?.progress == 250 &&
-                content.findViewById<TextView>(R.id.notification_percentage).text.toString() == "25%"
+            val notification = it.singleOrNull()?.notification ?: return@awaitNotification false
+            notification.extras.getInt(Notification.EXTRA_PROGRESS) == 250 &&
+                notification.extras.getCharSequence(Notification.EXTRA_TITLE).toString() == "25% · Bundle download" &&
+                notification.extras.getCharSequence(Notification.EXTRA_TEXT) == null &&
+                notification.contentView == null
         }
         // Complete immediately after an update: removal must work even if replacement
         // notifications are rate-limited by Android.
@@ -135,69 +135,38 @@ private fun verify() {
             listOf(0, 0, 0, -1), listOf(100, 50, 1, -1))) {
             val builder = Notification.Builder(context, "probe")
                 .applyManagerNotificationIcon(context)
-                .setContentTitle("Patching").setContentText("Applying patches")
-                .applyProgressNotification(context, "Patching", "Applying patches", max, current, unknown != 0)
-            check(builder.build().getLargeIcon() != null) { "Minimal artwork is missing" }
-            for (views in listOf(builder.createContentView(), builder.createBigContentView())) {
-                val root = views.apply(context, null)
-                fun visibleBars(view: View): Int {
-                    if (view.visibility != View.VISIBLE) return 0
-                    if (view is ProgressBar) return 1
-                    if (view !is android.view.ViewGroup) return 0
-                    return (0 until view.childCount).sumOf { visibleBars(view.getChildAt(it)) }
-                }
-                check(visibleBars(root) == 1) { "Expected one progress bar, got " + visibleBars(root) }
-                val title = root.findViewById<TextView>(R.id.notification_title)
-                check(title.text.toString() == "Patching")
-                val detail = root.findViewById<TextView>(R.id.notification_detail)
-                check(detail.text.toString() == "Applying patches")
-                val percent = root.findViewById<TextView>(R.id.notification_percentage)
-                val bar = root.findViewById<ProgressBar>(R.id.notification_progress)
-                if (expected < 0) {
-                    check(percent.visibility == View.GONE)
-                    check(bar.isIndeterminate)
-                } else {
-                    check(percent.text.toString() == "$expected%")
-                    check(percent.visibility == View.VISIBLE)
-                    check(!bar.isIndeterminate)
-                    check(bar.progress == current.coerceIn(0, max))
-                    val track = bar.progressDrawable as android.graphics.drawable.LayerDrawable
-                    val fill = track.findDrawableByLayerId(android.R.id.progress)
-                    check(fill.level == (bar.progress.toDouble() * 10000 / max).toInt())
-                }
-                root.measure(View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY),
-                    View.MeasureSpec.makeMeasureSpec(2000, View.MeasureSpec.AT_MOST))
-                check(root.measuredHeight > 0)
-                // OEM templates may measure their custom content with AT_MOST.
-                // A weighted 0dp detail used to shrink the entire compact column.
-                for (widthDp in listOf(320, 360, 480)) {
-                    for (direction in listOf(View.LAYOUT_DIRECTION_LTR, View.LAYOUT_DIRECTION_RTL)) {
-                        root.layoutDirection = direction
-                        val width = (widthDp * context.resources.displayMetrics.density).toInt()
-                        fun measure(mode: Int): Int {
-                            root.measure(View.MeasureSpec.makeMeasureSpec(width, mode),
-                                View.MeasureSpec.makeMeasureSpec(2000, View.MeasureSpec.AT_MOST))
-                            root.layout(0, 0, root.measuredWidth, root.measuredHeight)
-                            return bar.measuredWidth
-                        }
-                        val available = measure(View.MeasureSpec.EXACTLY)
-                        check(available > 0)
-                        check(measure(View.MeasureSpec.AT_MOST) == available) {
-                            "Custom notification shrank at " + widthDp + "dp"
-                        }
-                        if (percent.parent is android.widget.RelativeLayout &&
-                            percent.visibility == View.VISIBLE && detail.visibility == View.VISIBLE) {
-                            check(if (direction == View.LAYOUT_DIRECTION_RTL)
-                                percent.right <= detail.left else detail.right <= percent.left) {
-                                "Percentage overlaps notification detail: direction=" + direction +
-                                    " actual=" + detail.layoutDirection + " detail=" + detail.left +
-                                    ".." + detail.right + " percent=" + percent.left + ".." + percent.right
-                            }
-                        }
-                    }
-                }
+                .applyProgressNotification("Patching", "Applying patches", max, current, unknown != 0)
+            val notification = builder.build()
+            check(notification.getLargeIcon() != null) { "Minimal artwork is missing" }
+            check(notification.contentView == null && notification.bigContentView == null &&
+                notification.headsUpContentView == null) { "System UI must own the progress layouts" }
+            val title = if (expected < 0) "Patching" else "$expected% · Patching"
+            check(notification.extras.getCharSequence(Notification.EXTRA_TITLE).toString() == title)
+            check(notification.extras.getCharSequence(Notification.EXTRA_TEXT).toString() == "Applying patches")
+            check(notification.extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE) == (expected < 0))
+            check(notification.extras.getInt(Notification.EXTRA_PROGRESS_MAX) == max)
+            check(notification.extras.getInt(Notification.EXTRA_PROGRESS) == current.coerceIn(0, max))
+
+            val collapsed = builder.createContentView().apply(context, null)
+            val expanded = builder.createBigContentView().apply(context, null)
+            for (root in listOf(collapsed, expanded)) {
+                val visible = root.visibleViews().toList()
+                val bar = visible.filterIsInstance<ProgressBar>().single()
+                check(bar.isIndeterminate == (expected < 0))
+                if (expected >= 0) check(bar.progress == current.coerceIn(0, max))
+                check(visible.filterIsInstance<TextView>().any { it.text.toString() == title })
             }
+            check(expanded.visibleViews().filterIsInstance<TextView>()
+                .any { it.text.toString() == "Applying patches" })
         }
+    }
+}
+
+private fun View.visibleViews(): Sequence<View> = sequence {
+    if (visibility != View.VISIBLE) return@sequence
+    yield(this@visibleViews)
+    if (this@visibleViews is ViewGroup) {
+        for (index in 0 until childCount) yieldAll(getChildAt(index).visibleViews())
     }
 }
 }

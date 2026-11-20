@@ -6,8 +6,6 @@ source_path = Path(__file__).with_name("notification-ui-test.py")
 root = source_path.resolve().parents[4]
 base = root / "app/src/main"
 source = source_path.read_text(encoding="utf-8")
-source = source.replace('"drawable/ic_notification_status.png"',
-    '"drawable/ic_notification_status.png", "drawable/ic_notification_artwork.xml"')
 resources = ET.parse(base / "res/values/strings.xml").getroot()
 needed = {"runtime_updates_channel", "runtime_shared_support_updated",
           "runtime_updates_found", "runtime_updates_available_count",
@@ -33,18 +31,6 @@ import app.universal.patch.manager.util.PendingRuntimeUpdate
 ''', 1)
 source = source.replace("    Locale.setDefault(Locale.US)", """
     Locale.setDefault(Locale.US)
-    for (detail in listOf("98%", " 98 % ", "98.5%", "９８％", "٩٨٪", "٩٨\\u061c٪")) {
-        val builder = Notification.Builder(targetContext, "probe")
-            .applyProgressNotification(targetContext, "Download", detail, 100, 98, false)
-        for (expanded in listOf(false, true)) {
-            val views = if (expanded) builder.createBigContentView() else builder.createContentView()
-            val root = views.apply(targetContext, null)
-            val left = root.findViewById<TextView>(R.id.notification_detail)
-            check(left.text.isNullOrEmpty())
-            check(left.visibility == if (expanded) View.GONE else View.INVISIBLE)
-            check(root.findViewById<TextView>(R.id.notification_percentage).text.toString() == "98%")
-        }
-    }
     val manager = targetContext.getSystemService(android.app.NotificationManager::class.java)
     fun notice(): Notification {
         repeat(50) {
@@ -72,10 +58,4 @@ source = source.replace("    Locale.setDefault(Locale.US)", """
     check(result.extras.getCharSequence(Notification.EXTRA_BIG_TEXT).toString().contains("Morphe v2"))
     manager.cancel(9018)
 """, 1)
-source = source.replace(
-    'it.singleOrNull()?.notification?.extras?.getInt(Notification.EXTRA_PROGRESS) == 250 ||\n'
-    '                it.singleOrNull()?.notification?.extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString() == "25%"',
-    '''val content = it.singleOrNull()?.notification?.contentView?.apply(app, null)
-            content?.findViewById<ProgressBar>(R.id.notification_progress)?.progress == 250 &&
-                content.findViewById<TextView>(R.id.notification_percentage).text.toString() == "25%"''')
 exec(compile(source, str(source_path), "exec"), {"__file__": str(source_path), "__name__": "__main__"})

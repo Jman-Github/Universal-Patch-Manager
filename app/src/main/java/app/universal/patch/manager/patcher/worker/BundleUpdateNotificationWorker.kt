@@ -364,7 +364,6 @@ class BundleUpdateNotificationWorker(
             val total = progress.bytesTotal?.takeIf { it > 0L }
             if (total == null) {
                 builder.applyProgressNotification(
-                    context = applicationContext,
                     contentTitle = title,
                     contentText = description,
                     max = 0,
@@ -376,7 +375,6 @@ class BundleUpdateNotificationWorker(
                 val max = min(total, Int.MAX_VALUE.toLong()).toInt()
                 val current = min(progress.bytesRead, max.toLong()).toInt()
                 builder.applyProgressNotification(
-                    context = applicationContext,
                     contentTitle = title,
                     contentText = description,
                     max = max,

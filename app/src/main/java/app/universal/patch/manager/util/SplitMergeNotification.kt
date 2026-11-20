@@ -40,7 +40,6 @@ object SplitMergeNotification {
                 .applyManagerNotificationIcon(appContext)
                 .setContentIntent(createPendingIntent(appContext))
                 .applyProgressNotification(
-                    context = appContext,
                     contentTitle = appContext.getText(R.string.merge_split_notification_title),
                     contentText = contentText,
                     max = progress.max,

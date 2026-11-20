@@ -1,20 +1,13 @@
 package app.universal.patch.manager.util
 
 import android.app.Notification
-import android.content.Context
 import android.os.Build
-import android.view.View
-import android.widget.RemoteViews
-import app.universal.patch.manager.R
+import android.text.BidiFormatter
+import android.text.TextUtils
 import java.text.NumberFormat
 
-/**
- * Uses the same decorated progress layout on every Android version.
- * ProgressStyle owns its renderer and
- * cannot hide its end marker or position the percentage above the bar.
- */
+/** Lets System UI lay out progress within its own notification bounds. */
 fun Notification.Builder.applyProgressNotification(
-    context: Context,
     contentTitle: CharSequence,
     contentText: CharSequence?,
     max: Int,
@@ -29,43 +22,28 @@ fun Notification.Builder.applyProgressNotification(
         (safeCurrent.toLong() * 100L / safeMax).toDouble() / 100.0
     )
 
-    // The right-hand label already displays percentage. Retain useful stage descriptions.
+    // Some callers pass progress as text too. Keep only the actual operation detail.
     val detail = contentText?.takeUnless {
         it.isBlank() || it.toString().matches(
             Regex("""[\p{N}.,\s\p{Z}\p{Cf}]+[%\u066A\uFF05][\s\p{Z}\p{Cf}]*""")
         )
     }
-    setContentTitle(contentTitle)
+
+    // The compact system template can hide the body while showing a progress bar.
+    val title = if (percentage == null) {
+        contentTitle
+    } else {
+        val bidi = BidiFormatter.getInstance()
+        TextUtils.concat(bidi.unicodeWrap(percentage), " · ", bidi.unicodeWrap(contentTitle))
+    }
+    setContentTitle(title)
     setContentText(detail)
     setCategory(Notification.CATEGORY_PROGRESS)
     setOnlyAlertOnce(true)
     setOngoing(ongoing)
     setShowWhen(false)
-    // DecoratedCustomViewStyle renders the framework progress bar in addition to
-    // the custom content when these fields are populated. Only the custom view
-    // should draw progress, including its indeterminate state.
-    setProgress(0, 0, false)
-
-    fun content(expanded: Boolean) = RemoteViews(
-        context.packageName,
-        if (expanded) R.layout.notification_progress_expanded else R.layout.notification_progress
-    ).apply {
-        setTextViewText(R.id.notification_title, contentTitle)
-        setTextViewText(R.id.notification_detail, detail)
-        // Keep the compact detail slot so percentage stays end-aligned.
-        setViewVisibility(R.id.notification_detail, when {
-            detail != null -> View.VISIBLE
-            expanded -> View.GONE
-            else -> View.INVISIBLE
-        })
-        setTextViewText(R.id.notification_percentage, percentage)
-        setViewVisibility(R.id.notification_percentage, if (percentage == null) View.GONE else View.VISIBLE)
-        setProgressBar(R.id.notification_progress, safeMax, safeCurrent, unknown)
-    }
-
-    setStyle(Notification.DecoratedCustomViewStyle())
-    setCustomContentView(content(expanded = false))
-    setCustomBigContentView(content(expanded = true))
+    setProgress(safeMax, safeCurrent, unknown)
+    detail?.let { setStyle(Notification.BigTextStyle().bigText(it)) }
     if (Build.VERSION.SDK_INT >= 36) {
         setShortCriticalText(percentage)
     }
