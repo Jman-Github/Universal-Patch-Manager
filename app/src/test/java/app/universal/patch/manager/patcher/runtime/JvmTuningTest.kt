@@ -3,11 +3,11 @@ package app.universal.patch.manager.patcher.runtime
 import kotlin.test.*
 
 class JvmTuningTest {
-    @Test fun aotEnablesProfilingAndC2OnlyOn64Bit() {
+    @Test fun aotWorksOnBothAbis() {
         val flags = listOf("-XX:AOTMode=record")
         assertTrue(JvmTuning.options(true, flags).containsAll(flags))
         assertTrue(JvmTuning.options(true, flags).none { it.contains("TieredStopAtLevel") })
-        assertTrue(JvmTuning.options(false, flags).none { it.contains("AOT") })
+        assertTrue(JvmTuning.options(false, flags).containsAll(flags))
     }
 
     @Test fun thirtyTwoBitUsesSerialGcAndCapsTheCodeCache() {

@@ -163,7 +163,7 @@ Existing URV JSON exports can be imported directly without renaming the files: *
 
 Export/import the signing keystore separately; JSON backups do not include its key material. Files stored privately by URV and Android file-access grants do not move with a JSON backup. Reselect custom backgrounds, local bundle files, APK inputs, or option files if Android no longer grants access to them.
 
-The embedded JVM uses OpenJDK 25 with compact object headers in 64-bit processes and OpenJDK 17 on 32-bit ARM. This configuration follows [Morphe Manager PR #1302](https://github.com/MorpheApp/morphe-manager/pull/1302). Reseam continues to run in its isolated ART worker.
+The shared support APK supplies BellSoft Liberica 25 for arm64-v8a, armeabi-v7a, and x86_64. UPM runs it as a child of the patcher service using glibc, adapted from [Morphe Manager PR #1474](https://github.com/MorpheApp/morphe-manager/pull/1474). Update shared support and the manager together to enable Liberica. Reseam and 32-bit x86 continue to use ART.
 
 All four patcher engines are downloaded runtime plugins. Fresh installations and upgrades from bundled runtimes must choose their engines during setup. OpenJDK images and JVM tool hosts are downloaded once as shared support. Runtime source and independent releases live in [Universal-Patch-Manager-Runtimes](https://github.com/Jman-Github/Universal-Patch-Manager-Runtimes); see [runtime documentation](docs/runtimes/README.md).
 

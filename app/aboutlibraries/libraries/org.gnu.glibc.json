@@ -1,0 +1,9 @@
+{
+  "uniqueId": "org.gnu:glibc",
+  "name": "GNU C Library",
+  "description": "The patcher JVM loader and C library. Android build recipes and corresponding source: https://github.com/MorpheApp/morphe-jvm/tree/gpkg-2",
+  "website": "https://www.gnu.org/software/libc/",
+  "licenses": [
+    "LGPL-2.1-or-later"
+  ]
+}

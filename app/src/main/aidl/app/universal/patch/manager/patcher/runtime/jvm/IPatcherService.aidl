@@ -12,11 +12,9 @@ package app.universal.patch.manager.patcher.runtime.jvm;
 import app.universal.patch.manager.patcher.runtime.jvm.JvmLaunch;
 
 interface IPatcherService {
-    // Starts the JVM, which loads the patch bundles while it waits for run, and returns the pid of
-    // the process it runs in
+    // Reserves this one-shot worker and returns the service PID.
     int prepare(in JvmLaunch launch, in String[] bundles);
 
-    // Hands the started JVM the request written to requestFile. The run reports on events, which
-    // closes once the process is gone
-    void run(String requestFile, in ParcelFileDescriptor events);
+    // Starts the run and returns the PID of the process doing the patching.
+    int run(String requestFile, in ParcelFileDescriptor events);
 }

@@ -69,13 +69,13 @@ class Context {
     "Service.kt": """
 package app.universal.patch.manager.patcher.runtime.jvm
 import android.os.*
-data class JvmLaunch(val libjvm: String, val preload: List<String>, val options: List<String>,
+data class JvmLaunch(val command: List<String>, val options: List<String>,
     val mainClass: String, val entryClass: String,
     val runtimeClassPath: String? = null, val nativeLibraryDir: String? = null)
 interface IPatcherService {
     fun asBinder(): IBinder
     fun prepare(launch: JvmLaunch, bundles: Array<String>): Int
-    fun run(request: String, events: ParcelFileDescriptor)
+    fun run(request: String, events: ParcelFileDescriptor): Int
     object Stub { fun asInterface(binder: IBinder) = binder as IPatcherService }
 }
 class FakeService : IBinder, IPatcherService {
@@ -99,7 +99,7 @@ class FakeService : IBinder, IPatcherService {
         if (dead) throw RemoteException()
         return 1234
     }
-    override fun run(request: String, events: ParcelFileDescriptor) = Unit
+    override fun run(request: String, events: ParcelFileDescriptor) = 2345
 }
 open class PatcherService
 class PatcherService1 : PatcherService()
@@ -118,7 +118,7 @@ import kotlinx.coroutines.*
 fun main() = runBlocking {
     val context = Context()
     val pool = BoundArtRuntimes.get(context)
-    val launch = JvmLaunch("libjvm", emptyList(), emptyList(), "main", "entry")
+    val launch = JvmLaunch(listOf("loader", "java"), emptyList(), "main", "entry")
     withTimeout(3000) {
         repeat(16) { index ->
             val worker = if (index % 2 == 0) pool.take(RuntimeEngine.TOOLS, null, null)

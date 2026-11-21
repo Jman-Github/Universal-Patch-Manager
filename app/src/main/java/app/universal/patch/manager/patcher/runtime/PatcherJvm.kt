@@ -9,6 +9,7 @@ package app.universal.patch.manager.patcher.runtime
 // https://github.com/MorpheApp/morphe-manager/commit/76b5477eca7a97b393a95cc5880d90d1ab47354a
 
 // https://github.com/MorpheApp/morphe-manager/commit/ded5f5bcbdb7c47d3dc551a882b4546dcf803b8c
+// https://github.com/MorpheApp/morphe-manager/pull/1474
 
 import android.app.ActivityManager
 import android.app.Application
@@ -56,21 +57,43 @@ class PatcherJvm private constructor(
     suspend fun run(engine: RuntimeEngine, runtimeClassPath: String?, request: File,
         cancelled: AtomicBoolean, cancelAction: AtomicReference<(() -> Unit)?>,
         onMessage: (String, Map<String, Any?>) -> Unit) {
-        try {
-            runAttempt(engine, runtimeClassPath, request, cancelled, cancelAction, onMessage, true)
-        } catch (_: AotStartupFailure) {
-            // No patch has started: retry the JVM without optional acceleration before ART.
-            onMessage("log", mapOf("level" to "WARN", "message" to
-                "JVM AOT startup failed; retrying without the cache"))
-            runAttempt(engine, runtimeClassPath, request, cancelled, cancelAction, onMessage, false)
+        var heap = heapLimitMb(app)
+        var allowAot = true
+        while (true) {
+            try {
+                runAttempt(engine, runtimeClassPath, request, cancelled, cancelAction, onMessage, heap, allowAot)
+                return
+            } catch (failure: StartupFailure) {
+                currentCoroutineContext().ensureActive()
+                if (cancelled.get()) throw CancellationException("Runtime cancelled")
+                val retryHeap = JvmHeapPolicy.minimumMb(Process.is64Bit())
+                when {
+                    failure.heapNotReserved && heap > retryHeap -> {
+                        heap = retryHeap
+                        onMessage("log", mapOf("level" to "WARN", "message" to
+                            "${failure.message}. Retrying the JVM with ${heap}MB heap"))
+                    }
+                    !failure.heapNotReserved && allowAot && failure.usedAot -> {
+                        allowAot = false
+                        onMessage("log", mapOf("level" to "WARN", "message" to
+                            "${failure.message}. Retrying the JVM without the AOT cache"))
+                    }
+                    else -> throw JvmUnavailableException(failure.message.orEmpty(), failure)
+                }
+            }
         }
     }
 
-    private class AotStartupFailure(cause: Throwable) : Exception(cause)
+    private class StartupFailure(
+        message: String,
+        cause: Throwable? = null,
+        val heapNotReserved: Boolean = false,
+        val usedAot: Boolean = false
+    ) : Exception(message, cause)
 
     private suspend fun runAttempt(engine: RuntimeEngine, runtimeClassPath: String?, request: File,
         cancelled: AtomicBoolean, cancelAction: AtomicReference<(() -> Unit)?>,
-        onMessage: (String, Map<String, Any?>) -> Unit, allowAot: Boolean) = withContext(Dispatchers.IO) {
+        onMessage: (String, Map<String, Any?>) -> Unit, requestedHeapMb: Int, allowAot: Boolean) = withContext(Dispatchers.IO) {
         runLock.withLock {
             fun checkCancelled() {
                 if (cancelled.get()) throw CancellationException("Runtime cancelled")
@@ -84,12 +107,11 @@ class PatcherJvm private constructor(
                 }) {
                 throw JvmUnavailableException("This runtime plugin needs an update for disposable JVM workers")
             }
-            val requestedHeapMb = heapLimitMb(app)
             val debug = if (BuildConfig.DEBUG) app.managerStorageContext.filesDir.resolve("jvm-options.txt")
                 .takeIf { it.isFile }?.readLines()?.map(String::trim)
                 ?.filter { it.isNotEmpty() && !it.startsWith("#") }.orEmpty() else emptyList()
             // A debug override can change cache-sensitive flags; do not cache those runs.
-            val aot = if (allowAot && Process.is64Bit() && debug.isEmpty() && !aotBusy.get()) runCatching {
+            val aot = if (allowAot && debug.isEmpty() && !aotBusy.get()) runCatching {
                 JvmAotCache(app.managerStorageContext.cacheDir.resolve("jvm-aot"),
                     installed.home, installed.hostJar).also { it.prepare() }
             }.getOrNull() else null
@@ -111,8 +133,9 @@ class PatcherJvm private constructor(
                 "-Xms${minOf(512, requestedHeapMb)}m", "-Xrs",
                 "-XX:-UsePerfData", "-XX:ErrorFile=" + errorFile
             ) + tuning
-            val launch = JvmLaunch(installed.libjvm.path, installed.preload, options,
-                "app/universal/patch/manager/patcher/host/HostMainKt", engine.entry)
+            val launch = JvmLaunch(installed.command, options,
+                "app.universal.patch.manager.patcher.host.HostMainKt", engine.entry)
+            errorFile.delete()
             val runtime = try {
                 BoundArtRuntimes.get(app).takeJvm(launch)
             } catch (error: Throwable) {
@@ -121,7 +144,7 @@ class PatcherJvm private constructor(
                 if (aotOptions.isNotEmpty()) {
                     runCatching { aot?.failed(error) }
                     aot?.discardRecording()
-                    throw AotStartupFailure(error)
+                    throw StartupFailure("Could not prepare the embedded JVM", error, usedAot = true)
                 }
                 throw JvmUnavailableException("Could not prepare the embedded JVM", error)
             }
@@ -130,75 +153,77 @@ class PatcherJvm private constructor(
             var succeeded = false
             var started = false
             try {
-                run {
-                    checkCancelled()
-                    onMessage("log", mapOf("level" to "INFO", "message" to
-                        "Runtime mode: bound JVM worker (OpenJDK ${installation.feature}); requested memory budget: ${requestedHeapMb}MB"))
-                    onMessage("log", mapOf("level" to "INFO", "message" to
-                        "Patcher process: pid=${runtime.pid} vm=JVM engine=${engine.name} heap=requested-${requestedHeapMb}MB bits=${if (Process.is64Bit()) 64 else 32} age=0s"))
-                    onMessage("log", mapOf("level" to "INFO", "message" to
-                        "Patcher JVM: libjvm=${installed.libjvm.name} options=${tuning.joinToString(" ")}"))
-                    if (errorFile.isFile) {
-                        onMessage("log", mapOf("level" to "ERROR", "message" to errorFile.reader().use {
-                            val buffer = CharArray(262144)
-                            val count = it.read(buffer)
-                            if (count > 0) String(buffer, 0, count) else ""
-                        }))
-                        errorFile.delete()
-                    }
-                    val (events, sink) = ParcelFileDescriptor.createPipe()
-                    val channel = try {
-                        readEvents(events)
-                    } catch (error: Throwable) {
-                        events.close()
-                        sink.close()
-                        throw error
-                    }
-                    try {
+                checkCancelled()
+                val (events, sink) = ParcelFileDescriptor.createPipe()
+                val channel = readEvents(events)
+                try {
+                    val pid = try {
                         sink.use { runtime.run(request.path, it) }
-                        // No patch runs before "started". Only startup failures may fall back to ART.
-                        val first = withTimeoutOrNull(30_000L) { channel.receiveCatching().getOrNull() }
-                        checkCancelled()
-                        if (first == null) throw JvmUnavailableException("The embedded JVM did not start reporting")
-                        if (first["type"] == "startup_failed") {
-                            throw JvmUnavailableException(first["error"] as? String ?: "The embedded JVM could not start")
-                        }
-                        check(first["type"] == "started") { "Unexpected JVM startup event" }
-                        started = true
-                        onMessage("started", first)
-                        var memoryReported = false
-                        for (event in channel) {
-                            checkCancelled()
-                            val type = event.getValue("type") as String
-                            if (type == "finished") {
-                                (event["error"] as? String)?.let {
-                                    throw BoundRuntimeFailureException(it, originalStackTrace = it)
-                                }
-                                succeeded = true
-                                return@withLock
-                            }
-                            if (type == "memory" && !memoryReported) {
-                                memoryReported = true
-                                onMessage("log", mapOf("level" to "INFO", "message" to "Memory limit: ${event["max"]}MB"))
-                            }
-                            onMessage(type, event)
-                        }
-                        checkCancelled()
-                        throw BoundRuntimeFailureException("The JVM worker ended during patching. Android may have stopped its process.")
-                    } finally {
-                        channel.cancel()
-                        events.close()
+                    } catch (_: android.os.RemoteException) {
+                        // A fast JVM failure may close Binder before the reply, with diagnostics
+                        // already in the pipe. Read it before deciding whether to fall back.
+                        0
                     }
+                    val first = withTimeoutOrNull(30_000L) { channel.receiveCatching().getOrNull() }
+                    checkCancelled()
+                    val earlyExit = first?.let(JvmProcessExit::fromEvent)
+                    if (earlyExit != null) {
+                        throw StartupFailure(earlyExit.describe("The JVM ended before starting"),
+                            heapNotReserved = earlyExit.heapNotReserved, usedAot = aotOptions.isNotEmpty())
+                    }
+                    if (first?.get("type") != "started") {
+                        throw StartupFailure(first?.get("error") as? String ?: "The embedded JVM did not start reporting",
+                            usedAot = aotOptions.isNotEmpty())
+                    }
+                    started = true
+                    onMessage("log", mapOf("level" to "INFO", "message" to
+                        "Runtime mode: bound JVM worker (Liberica 25); requested memory budget: ${requestedHeapMb}MB"))
+                    onMessage("log", mapOf("level" to "INFO", "message" to
+                        "Patcher process: pid=$pid servicePid=${runtime.pid} vm=JVM engine=${engine.name} heap=requested-${requestedHeapMb}MB bits=${if (Process.is64Bit()) 64 else 32} age=0s"))
+                    onMessage("log", mapOf("level" to "INFO", "message" to
+                        "Patcher JVM options: ${tuning.joinToString(" ")}"))
+                    onMessage("started", first)
+                    var memoryReported = false
+                    for (event in channel) {
+                        checkCancelled()
+                        JvmProcessExit.fromEvent(event)?.let {
+                            val diagnostic = readCrashReport()
+                            if (diagnostic.isNotBlank()) onMessage("log", mapOf("level" to "ERROR", "message" to diagnostic))
+                            throw BoundRuntimeFailureException(it.describe("The JVM ended during patching"))
+                        }
+                        val type = event.getValue("type") as String
+                        if (type == "finished") {
+                            (event["error"] as? String)?.let {
+                                throw BoundRuntimeFailureException(it, originalStackTrace = it)
+                            }
+                            succeeded = true
+                            return@withLock
+                        }
+                        if (type == "memory" && !memoryReported) {
+                            memoryReported = true
+                            onMessage("log", mapOf("level" to "INFO", "message" to "Memory limit: ${event["max"]}MB"))
+                        }
+                        onMessage(type, event)
+                    }
+                    checkCancelled()
+                    throw BoundRuntimeFailureException("The JVM worker ended during patching. Android may have stopped its process.")
+                } finally {
+                    channel.cancel()
                 }
             } catch (error: Throwable) {
-                if (!started && aotOptions.isNotEmpty() &&
-                    (error is JvmUnavailableException || error is android.os.RemoteException)) {
-                    runCatching { aot?.failed(error) }
-                    checkCancelled()
-                    throw AotStartupFailure(error)
-                }
+                currentCoroutineContext().ensureActive()
                 checkCancelled()
-                throw error
+                if (started && error is JvmUnavailableException) {
+                    throw BoundRuntimeFailureException(error.message.orEmpty()).apply { initCause(error) }
+                }
+                val failure = if (!started && (error is java.io.IOException || error is IllegalStateException)) {
+                    StartupFailure("Could not start the embedded JVM: ${error.message}", error,
+                        usedAot = aotOptions.isNotEmpty())
+                } else error
+                if (failure is StartupFailure && aotOptions.isNotEmpty() && !failure.heapNotReserved) {
+                    runCatching { aot?.failed(failure) }
+                }
+                throw failure
             } finally {
                 cancelAction.compareAndSet(cancel, null)
                 if (recording && succeeded) {
@@ -235,7 +260,7 @@ class PatcherJvm private constructor(
     private suspend fun createAotCache(aot: JvmAotCache, launch: JvmLaunch) {
         if (!aot.directory.isDirectory) return // Cache cleared during recording.
         check(aot.configuration.isFile) { "The JVM recorded no AOT configuration" }
-        val tuning = JvmTuning.options(true, aot.createOptions())
+        val tuning = JvmTuning.options(Process.is64Bit(), aot.createOptions())
         val createLaunch = launch.copy(options = launch.options.filterNot {
             it.startsWith("-XX:AOT") || it.startsWith("-Xlog:aot") ||
                 it.startsWith("-XX:TieredStopAtLevel")
@@ -243,18 +268,36 @@ class PatcherJvm private constructor(
         val worker = BoundArtRuntimes.get(app).takeJvm(createLaunch)
         try {
             val (events, sink) = ParcelFileDescriptor.createPipe()
+            val channel = readEvents(events)
             try {
                 try {
                     sink.use { worker.run("", it) }
                 } catch (_: android.os.RemoteException) {
-                    // AOTMode=create exits the process before a Binder reply can arrive.
+                    // AOTMode=create can exit before a Binder reply arrives.
                 }
-                withTimeout(120_000L) { worker.awaitExit() }
-            } finally { events.close() }
+                withTimeout(120_000L) {
+                    var exit: JvmProcessExit? = null
+                    for (event in channel) {
+                        check(event["type"] != "started") { "The AOT cache process unexpectedly ran the patcher host" }
+                        JvmProcessExit.fromEvent(event)?.let { exit = it }
+                    }
+                    val result = checkNotNull(exit) { "The AOT cache process did not report its exit" }
+                    check(result.status == 0) { result.describe("AOT cache creation failed") }
+                    worker.awaitExit()
+                }
+            } finally { channel.cancel() }
             check(aot.staging.isFile && aot.staging.length() > 0) { "The JVM made no AOT cache" }
             check(aot.staging.renameTo(aot.cache)) { "Could not publish AOT cache" }
         } finally { worker.close() }
     }
+
+    private fun readCrashReport(): String = runCatching {
+        errorFile.reader().use {
+            val buffer = CharArray(65536)
+            val count = it.read(buffer)
+            if (count > 0) String(buffer, 0, count) else ""
+        }
+    }.getOrDefault("")
 
     private fun readEvents(events: ParcelFileDescriptor): Channel<Map<String, Any?>> {
         val channel = Channel<Map<String, Any?>>(64)

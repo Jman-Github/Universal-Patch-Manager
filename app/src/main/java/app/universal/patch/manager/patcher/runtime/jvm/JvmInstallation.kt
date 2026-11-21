@@ -9,11 +9,11 @@ package app.universal.patch.manager.patcher.runtime.jvm
 // https://github.com/MorpheApp/morphe-manager/pull/1202
 // https://github.com/MorpheApp/morphe-manager/pull/1212
 // https://github.com/MorpheApp/morphe-manager/pull/1215
+// https://github.com/MorpheApp/morphe-manager/pull/1474
 
 import app.universal.patch.manager.util.managerStorageContext
 import android.app.Application
 import android.os.Build
-import android.os.Process
 import android.util.Log
 import app.universal.patch.manager.BuildConfig
 import app.universal.patch.manager.network.runtime.PatcherRuntimeKind
@@ -30,6 +30,9 @@ import kotlinx.coroutines.withContext
 import org.tukaani.xz.XZInputStream
 import java.io.File
 import java.io.IOException
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
 import java.io.RandomAccessFile
 import java.util.zip.ZipInputStream
 
@@ -49,15 +52,18 @@ class JvmInstallation(private val app: Application) {
     private val supportPack: File
         get() = PatcherRuntimePluginRegistry.runtimeFor(PatcherRuntimeKind.SHARED_SUPPORT)?.apkFile
             ?: throw JvmUnavailableException("UPM runtime support plugin is missing")
-    val abi: String?
-        get() = runCatching {
-            ZipFile(supportPack).use { zip ->
-                (if (Process.is64Bit()) Build.SUPPORTED_64_BIT_ABIS else Build.SUPPORTED_32_BIT_ABIS)
-                    .firstOrNull { zip.getEntry("assets/jvm/$it.zip.xz") != null }
-            }
-        }.getOrNull()
-    val isAvailable get() = abi != null
-    val feature get() = if (Process.is64Bit()) 25 else 17
+    private val nativeDirectory = File(app.applicationInfo.nativeLibraryDir)
+    private val loader = nativeDirectory.resolve("libglibc_loader.so")
+
+    private fun abi(pack: File): String? {
+        val target = ABIS_BY_INSTRUCTION_SET[nativeDirectory.name] ?: return null
+        if (!loader.canExecute()) return null
+        return ZipFile(pack).use { zip ->
+            target.takeIf { zip.getEntry("assets/$RUNTIME_DIR/$it.zip.xz") != null }
+        }
+    }
+
+    val isAvailable get() = runCatching { abi(supportPack) != null }.getOrDefault(false)
 
     private fun contentHash(file: File): String = java.security.MessageDigest.getInstance("SHA-256").let { digest ->
         file.inputStream().use { input ->
@@ -86,7 +92,7 @@ class JvmInstallation(private val app: Application) {
     }
 
     private fun runtimeHome(pack: File): File {
-        val abi = abi ?: throw JvmUnavailableException("No patcher JVM for ${Build.SUPPORTED_ABIS.joinToString()}")
+        val abi = abi(pack) ?: throw JvmUnavailableException("No compatible Liberica JVM for ${Build.SUPPORTED_ABIS.joinToString()}")
         if (!root.isDirectory && !root.mkdirs()) throw IOException("Could not create $root")
         val home = root.resolve("runtime-$abi-${contentHash(pack)}")
         if (!home.isDirectory) unpackRuntime(pack, abi, home)
@@ -96,10 +102,6 @@ class JvmInstallation(private val app: Application) {
     /** The runtime and host ready to start, unpacked first if they are not yet. */
     suspend fun install(host: String, plugin: File? = null): Installed = lock.withLock {
         withContext(Dispatchers.IO) {
-            val abi = abi ?: throw JvmUnavailableException(
-                "No patcher JVM for ${Build.SUPPORTED_ABIS.joinToString()}"
-            )
-
             try {
                 val pack = supportPack
                 val home = runtimeHome(pack)
@@ -124,7 +126,7 @@ class JvmInstallation(private val app: Application) {
                 if (!hostJar.isFile) unpackHost(host, hostJar, source)
 
                 // Previous images and hosts remain valid for jobs using an older plugin.
-                Installed(home, hostJar)
+                Installed(home, hostJar, loader)
             } catch (e: IOException) {
                 throw JvmUnavailableException("Could not unpack the patcher JVM", e)
             }
@@ -136,7 +138,7 @@ class JvmInstallation(private val app: Application) {
     private fun unpackRuntime(pack: File, abi: String, home: File) {
         val staging = File(home.path + STAGING_SUFFIX).apply { deleteRecursively() }
 
-        ZipInputStream(XZInputStream(openAsset(pack, "$ASSETS_DIR/$abi.zip.xz").buffered())).use { zip ->
+        ZipInputStream(XZInputStream(openAsset(pack, "$RUNTIME_DIR/$abi.zip.xz").buffered())).use { zip ->
             generateSequence { zip.nextEntry }.forEach { entry ->
                 val target = staging.resolve(entry.name)
                 if (!target.canonicalPath.startsWith(staging.canonicalPath + File.separator)) {
@@ -153,6 +155,16 @@ class JvmInstallation(private val app: Application) {
         }
 
         unpackImage(pack, abi, staging.resolve("lib/modules"))
+
+        // The installed loader opens the launcher directly as an ELF object. It needs its
+        // execute bit, but the file remains in app-private storage and is not execve'd.
+        val launcher = staging.resolve("bin/java")
+        if (!launcher.isFile) throw IOException("The patcher JVM has no launcher")
+        try {
+            Os.chmod(launcher.path, OsConstants.S_IRUSR or OsConstants.S_IXUSR)
+        } catch (error: ErrnoException) {
+            throw IOException("Could not make the patcher JVM launcher executable", error)
+        }
 
         if (!staging.renameTo(home)) throw IOException("Could not move the runtime into $home")
         Log.i(tag, "Unpacked the patcher JVM for $abi")
@@ -200,29 +212,21 @@ class JvmInstallation(private val app: Application) {
         } finally { staging.delete() }
     }
 
-    class Installed(val home: File, val hostJar: File) {
-        /** The VM the runtime ships, the server one where there is one, as the 32-bit ARM one only has the client one. */
-        val libjvm
-            get() = VMS.map { home.resolve("lib/$it/libjvm.so") }.firstOrNull { it.isFile }
-                ?: throw JvmUnavailableException("The patcher JVM ships no VM")
-
-        /** The libraries of the runtime that others of it link against, dependencies first. */
-        val preload get() = PRELOAD.map { home.resolve("lib/$it").path }
+    class Installed(val home: File, val hostJar: File, private val loader: File) {
+        val command: List<String>
+            get() {
+                val libraries = listOf("glibc", "lib", "lib/server").joinToString(":") { home.resolve(it).path }
+                return listOf(loader.path, "--library-path", libraries, home.resolve("bin/java").path)
+            }
     }
 
     private companion object {
         const val ROOT_DIR = "jvm"
         const val ASSETS_DIR = "jvm"
+        // Keep the loader and the support APK on the same glibc build. Older managers look
+        // for the ABI archives directly in assets/jvm and continue with ART on new packs.
+        const val RUNTIME_DIR = "$ASSETS_DIR/liberica-gpkg-2"
         const val STAGING_SUFFIX = ".staging"
-
-        val VMS = listOf("server", "client")
-
-        // The app's linker namespace does not search the runtime's directory, so a library naming
-        // one of these would not find it unless it is already loaded
-        val PRELOAD = listOf(
-            "libjava.so", "libnet.so", "libnio.so", "libzip.so",
-            // Headless AWT libraries name these dependencies without their extracted path.
-            "libawt.so", "libawt_headless.so", "libfreetype.so"
-        )
+        val ABIS_BY_INSTRUCTION_SET = mapOf("arm" to "armeabi-v7a", "arm64" to "arm64-v8a", "x86_64" to "x86_64")
     }
 }

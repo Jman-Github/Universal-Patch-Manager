@@ -421,8 +421,34 @@ android {
     }
 }
 
+// glibc loader pins must match shared-support in Universal-Patch-Manager-Runtimes.
+// Adapted from https://github.com/MorpheApp/morphe-manager/pull/1474
+val glibcRelease = "gpkg-2"
+val glibcLoaderLibrary = "libglibc_loader.so"
+val glibcLoaderTasks = mapOf(
+    "arm64-v8a" to Triple("aarch64", "d724753a7bc5374972b95b6c720bca64922d54701d07d5758ad338c24ad015bc", "ld-linux-aarch64.so.1"),
+    "armeabi-v7a" to Triple("arm", "f28c0682b8b15333180a47bc551245183c16f7ced24dd8bda09ba5a9394507d9", "ld-linux-armhf.so.3"),
+    "x86_64" to Triple("x86_64", "71b57bdf1fb9dc13701bea732303dac5499ed0542c6d70a28d59b7f6645f2f0e", "ld-linux-x86-64.so.2")
+).map { (targetAbi, build) ->
+    val (arch, digest, loaderName) = build
+    tasks.register<PrepareGlibcTask>("prepareJvmLoader" + targetAbi.replace("-", "").replace("_", "")) {
+        packages.set(mapOf("https://github.com/MorpheApp/morphe-jvm/releases/download/$glibcRelease/glibc-2.44-0-$arch.pkg.tar.xz" to digest))
+        libraryDirectory.set("data/data/com.termux/files/usr/glibc/lib")
+        libraries.set(emptyList())
+        loader.set(loaderName)
+        abi.set(targetAbi)
+        loaderLibraryName.set(glibcLoaderLibrary)
+        downloadCache.set(File(gradle.gradleUserHomeDir, "caches/upm-embedded-jvm"))
+        runtimeFiles.set(layout.buildDirectory.dir("generated/glibcLoaderNotices/$targetAbi"))
+        nativeLibraries.set(layout.buildDirectory.dir("generated/glibcLoader/$targetAbi"))
+    }
+}
+
 androidComponents {
     onVariants { variant ->
+        glibcLoaderTasks.forEach { task ->
+            variant.sources.jniLibs?.addGeneratedSourceDirectory(task, PrepareGlibcTask::nativeLibraries)
+        }
         val developmentBuild = variant.buildType == "debug" || variant.buildType == "dev"
         variant.outputs.forEach { output ->
             if (prReleaseVersionCode != null) {

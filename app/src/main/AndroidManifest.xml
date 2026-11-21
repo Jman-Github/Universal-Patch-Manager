@@ -48,23 +48,39 @@
 
         <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
         <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
-        <!-- ART-only workers for Android JNI engines and JVM startup fallback. -->
+        <!-- Disposable patcher workers on ART or supervising a Liberica JVM child. -->
         <service
             android:name="app.universal.patch.manager.patcher.runtime.jvm.PatcherService"
             android:exported="false"
-            android:process=":patcher" />
+            android:foregroundServiceType="specialUse"
+            android:process=":patcher">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the JVM patching worker active during a user-requested patch" />
+        </service>
         <service
             android:name="app.universal.patch.manager.patcher.runtime.jvm.PatcherService1"
             android:exported="false"
-            android:process=":patcher1" />
+            android:foregroundServiceType="specialUse"
+            android:process=":patcher1">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the JVM patching worker active during a user-requested patch" />
+        </service>
         <service
             android:name="app.universal.patch.manager.patcher.runtime.jvm.PatcherService2"
             android:exported="false"
-            android:process=":patcher2" />
+            android:foregroundServiceType="specialUse"
+            android:process=":patcher2">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the JVM patching worker active during a user-requested patch" />
+        </service>
         <service
             android:name="app.universal.patch.manager.patcher.runtime.jvm.PatcherService3"
             android:exported="false"
-            android:process=":patcher3" />
+            android:foregroundServiceType="specialUse"
+            android:process=":patcher3">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the JVM patching worker active during a user-requested patch" />
+        </service>
 
         <meta-data
             android:name="app.universal.patch.manager.DATABASE_VERSION"

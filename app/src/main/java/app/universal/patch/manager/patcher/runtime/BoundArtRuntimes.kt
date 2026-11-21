@@ -34,10 +34,10 @@ class BoundArtRuntimes private constructor(private val context: Context) {
     }
 
     suspend fun take(engine: RuntimeEngine, runtimeClassPath: String?, nativeLibraryDir: String?): ArtRuntime =
-        take(JvmLaunch("", emptyList(), emptyList(), "", engine.entry, runtimeClassPath, nativeLibraryDir))
+        take(JvmLaunch(emptyList(), emptyList(), "", engine.entry, runtimeClassPath, nativeLibraryDir))
 
     suspend fun takeJvm(launch: JvmLaunch): ArtRuntime {
-        require(launch.libjvm.isNotEmpty())
+        require(launch.command.isNotEmpty())
         return take(launch)
     }
 

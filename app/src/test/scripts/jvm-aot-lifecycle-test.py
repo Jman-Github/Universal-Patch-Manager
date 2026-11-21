@@ -32,7 +32,7 @@ open class Context {
 package android.app
 class Application : android.content.Context()
 class ActivityManager {
- class MemoryInfo { var totalMem = 6144L * 1048576 }
+ class MemoryInfo { var totalMem = 9216L * 1048576 }
  fun getMemoryInfo(info: MemoryInfo) {}
 }
 """,
@@ -41,12 +41,15 @@ package android.os
 import java.io.*
 object Process { fun is64Bit() = true }
 class RemoteException : Exception()
-class ParcelFileDescriptor : Closeable {
- val fd = 1
- override fun close() {}
- class AutoCloseInputStream(fd: ParcelFileDescriptor) :
-    ByteArrayInputStream("started\nfinished\n".toByteArray())
- companion object { fun createPipe() = arrayOf(ParcelFileDescriptor(),ParcelFileDescriptor()) }
+class ParcelFileDescriptor(val source: PipedInputStream? = null, val sink: PipedOutputStream? = null) : Closeable {
+ override fun close() { source?.close(); sink?.close() }
+ class AutoCloseInputStream(fd: ParcelFileDescriptor) : FilterInputStream(fd.source!!)
+ companion object {
+    fun createPipe(): Array<ParcelFileDescriptor> {
+      val input = PipedInputStream()
+      return arrayOf(ParcelFileDescriptor(source = input), ParcelFileDescriptor(sink = PipedOutputStream(input)))
+    }
+ }
 }
 """,
 "Storage.kt": """
@@ -74,24 +77,29 @@ object Json { fun parseToJsonElement(value: String) = value }
 """,
 "Protocol.kt": """
 package app.universal.patch.manager.patcher.host
-object RuntimeProtocol { fun decode(value: String): Any = mapOf("type" to value) }
+object RuntimeProtocol {
+ fun decode(value: String): Any = when (value) {
+    "startup-heap" -> mapOf("type" to "jvm_ended", "status" to 1, "output" to listOf("Could not reserve enough space"))
+    "crash" -> mapOf("type" to "jvm_ended", "status" to 139, "output" to listOf("fatal error"))
+    "exit" -> mapOf("type" to "jvm_ended", "status" to 0, "output" to emptyList<String>())
+    else -> mapOf("type" to value)
+ }
+}
 """,
 "Install.kt": """
 package app.universal.patch.manager.patcher.runtime.jvm
 import java.io.File
 class JvmInstallation(app: android.app.Application) {
  val isAvailable = true
- val feature = 25
  suspend fun prepareRuntime() {}
  suspend fun install(host: String, plugin: File?) = Installed()
  class Installed {
   val home = File(System.getProperty("test.root"),"runtime")
   val hostJar = File(System.getProperty("test.root"),"host.jar")
-  val libjvm = File(home,"libjvm.so")
-  val preload = emptyList<String>()
+  val command = listOf("loader", "java")
  }
 }
-data class JvmLaunch(val libjvm: String, val preload: List<String>, val options: List<String>,
+data class JvmLaunch(val command: List<String>, val options: List<String>,
  val mainClass: String, val entryClass: String)
 """,
 "Koin.kt": """
@@ -110,6 +118,8 @@ object BoundArtRuntimes {
  val launches = mutableListOf<JvmLaunch>()
  var release = CompletableDeferred<Unit>()
  var failNext = false
+ var failHeapNext = false
+ var crashNext = false
  fun get(app: android.app.Application) = this
  suspend fun takeJvm(launch: JvmLaunch): ArtRuntime {
   launches.add(launch)
@@ -117,14 +127,27 @@ object BoundArtRuntimes {
  }
  class ArtRuntime(val launch: JvmLaunch): java.io.Closeable {
   val pid = 42
-  fun run(path: String, fd: android.os.ParcelFileDescriptor) {
+  fun run(path: String, fd: android.os.ParcelFileDescriptor): Int {
    if (failNext) { failNext = false; throw android.os.RemoteException() }
+   if (failHeapNext) {
+    failHeapNext = false
+    fd.sink!!.write(("startup-heap" + 10.toChar()).toByteArray())
+    return 100
+   }
+   if (crashNext) {
+    crashNext = false
+    fd.sink!!.write(listOf("started", "crash", "").joinToString(10.toChar().toString()).toByteArray())
+    return 100
+   }
    if (launch.options.contains("-XX:AOTMode=record")) {
     File(launch.options.single { it.startsWith("-XX:AOTConfiguration=") }.substringAfter("=")).writeText("config")
    }
    launch.options.firstOrNull { it.startsWith("-XX:AOTMode=create") }?.let {
     File(launch.options.single { it.startsWith("-XX:AOTCache=") }.substringAfter("=")).writeText("cache")
    }
+   val events = if (path.isEmpty()) listOf("exit", "") else listOf("started", "finished", "")
+   fd.sink!!.write(events.joinToString(10.toChar().toString()).toByteArray())
+   return 100
   }
   suspend fun awaitExit() { release.await() }
   override fun close() {}
@@ -149,7 +172,7 @@ fun main(args: Array<String>) = runBlocking {
  }
  val ctor=PatcherJvm::class.java.declaredConstructors.single { it.parameterCount == 3 }.apply { isAccessible=true }
  fun manager()=ctor.newInstance(app,Filesystem(),PreferencesManager()) as PatcherJvm
- val request=File(app.filesDir,"request")
+ val request=File(app.filesDir,"request").apply { writeText("{}") }
  suspend fun run(manager: PatcherJvm, callback: (String,Map<String,Any?>)->Unit = {_,_->}) =
   manager.run(RuntimeEngine.MORPHE,null,request,AtomicBoolean(),AtomicReference(null),callback)
  val m=manager()
@@ -173,9 +196,23 @@ fun main(args: Array<String>) = runBlocking {
  try {
   run(manager()) { type,_ -> if(type=="started") throw JvmUnavailableException("failure after start") }
   error("Expected callback failure")
- } catch (_: JvmUnavailableException) {}
+ } catch (_: BoundRuntimeFailureException) {}
  check(BoundArtRuntimes.launches.size==1) { "A started patch was retried" }
- println("PASS: AOT serializes workers, retries early Binder failure, never retries a started patch")
+ BoundArtRuntimes.launches.clear()
+ BoundArtRuntimes.failHeapNext = true
+ run(manager())
+ check(BoundArtRuntimes.launches.map { launch -> launch.options.first { it.startsWith("-Xmx") } } ==
+    listOf("-Xmx3072m", "-Xmx2048m"))
+ BoundArtRuntimes.launches.clear()
+ BoundArtRuntimes.crashNext = true
+ try {
+  run(manager())
+  error("Expected crash failure")
+ } catch (error: BoundRuntimeFailureException) {
+  check(error.message!!.contains("signal 11") && error.message!!.contains("fatal error"))
+ }
+ check(BoundArtRuntimes.launches.size == 1)
+ println("PASS: AOT lifecycle, startup heap retry, and crash reporting without replay")
 }
 """
 }
@@ -187,7 +224,7 @@ with tempfile.TemporaryDirectory(prefix="aot-lifecycle-", dir=ROOT / "build") as
         path.write_text(code, encoding="utf-8")
         sources.append(path)
     base = ROOT / "app/src/main/java/app/universal/patch/manager/patcher/runtime"
-    sources += [base / (n + ".kt") for n in ("PatcherJvm", "JvmAotCache", "JvmHeapPolicy", "JvmTuning", "RuntimeEngine")]
+    sources += [base / (n + ".kt") for n in ("PatcherJvm", "JvmAotCache", "JvmHeapPolicy", "JvmTuning", "JvmProcessExit", "RuntimeEngine")]
     subprocess.run(list(map(str, [JAVA,"-cp",cp,"org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
         "-no-stdlib","-no-reflect","-jvm-target","17","-classpath",cp,"-d",directory,*sources])),check=True,timeout=120)
     subprocess.run([str(JAVA),"-cp",str(directory)+os.pathsep+cp,
