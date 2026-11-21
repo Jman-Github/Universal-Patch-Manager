@@ -17,6 +17,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.Icons
@@ -163,10 +168,11 @@ fun AboutSettingsScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         val scrollState = rememberScrollState()
-        Column(
+        app.universal.patch.manager.ui.component.ColumnWithScrollbar(
+            state = scrollState,
+            thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(scrollState)
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -246,6 +252,57 @@ fun AboutSettingsScreen(
                             )
                         )
                     }
+                }
+            }
+
+            SettingsSearchHighlight(
+                targetKey = R.string.about_donate,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                ExpressiveSettingsCard(
+                    modifier = Modifier.fillMaxWidth().then(highlightModifier),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    ExpressiveSettingsItem(
+                        headlineContent = stringResource(R.string.about_donate),
+                        supportingContent = stringResource(R.string.about_donate_description),
+                        leadingContent = {
+                            Box(Modifier.size(56.dp)) {
+                                Surface(
+                                    modifier = Modifier.size(48.dp),
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.secondaryContainer
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Filled.Favorite, contentDescription = null,
+                                            modifier = Modifier.size(24.dp),
+                                            tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                                        AsyncImage(
+                                            model = "https://github.com/Jman-Github.png?size=128",
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize().clip(CircleShape)
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    modifier = Modifier.size(24.dp).align(Alignment.BottomEnd),
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primaryContainer
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Filled.Favorite, contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                            tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                                    }
+                                }
+                            }
+                        },
+                        onClick = {
+                            context.openUrl("https://github.com/sponsors/Jman-Github?frequency=one-time&sponsor=Jman-Github")
+                        }
+                    )
                 }
             }
 

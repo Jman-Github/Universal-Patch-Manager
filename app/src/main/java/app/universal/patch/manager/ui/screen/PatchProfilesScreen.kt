@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.CollectionDialog
+import app.universal.patch.manager.ui.component.minimalActionButtons
 import app.universal.patch.manager.util.managerStorageContext
 
 import android.graphics.drawable.ColorDrawable
@@ -1740,7 +1742,7 @@ private fun PatchProfilesOrderDialog(
         workingOrder.add(to.index, workingOrder.removeAt(from.index))
     }
 
-    AlertDialog(
+    CollectionDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {
             TextButton(onClick = { onConfirm(workingOrder.toList()) }, enabled = workingOrder.isNotEmpty()) {
@@ -1754,16 +1756,17 @@ private fun PatchProfilesOrderDialog(
         },
         title = { CenteredDialogTitle(text = stringResource(R.string.patch_profiles_reorder_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     text = stringResource(R.string.patch_profiles_reorder_description),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LazyColumnWithScrollbar(
+                    thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 320.dp),
+                        .weight(1f, fill = false),
                     reserveScrollbarSpace = true,
                     state = lazyListState
                 ) {
@@ -1878,7 +1881,7 @@ private fun ProfileActionPill(
                 tint = contentColor,
                 modifier = Modifier.size(14.dp)
             )
-            Text(
+            if (!minimalActionButtons("profiles")) Text(
                 text = text,
                 style = MaterialTheme.typography.labelSmall,
                 color = contentColor,

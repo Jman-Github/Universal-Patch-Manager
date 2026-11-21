@@ -1,18 +1,15 @@
 package app.universal.patch.manager.util
 
-import android.annotation.SuppressLint
 import android.app.Notification
 import android.os.Build
-import java.lang.reflect.Method
+import android.text.BidiFormatter
+import android.text.TextUtils
+import java.text.NumberFormat
 
-/**
- * Applies the common metadata used by active progress notifications.
- *
- * Standard progress fields support existing Android and OEM presentations. Android 16 also
- * receives [Notification.ProgressStyle], while Android 16 QPR releases can request promoted
- * ongoing presentation when that public API is available at runtime.
- */
+/** Lets System UI lay out progress within its own notification bounds. */
 fun Notification.Builder.applyProgressNotification(
+    contentTitle: CharSequence,
+    contentText: CharSequence?,
     max: Int,
     current: Int,
     indeterminate: Boolean,
@@ -20,53 +17,35 @@ fun Notification.Builder.applyProgressNotification(
 ): Notification.Builder {
     val safeMax = max.coerceAtLeast(0)
     val safeCurrent = current.coerceIn(0, safeMax)
+    val unknown = indeterminate || safeMax == 0
+    val percentage = if (unknown) null else NumberFormat.getPercentInstance().format(
+        (safeCurrent.toLong() * 100L / safeMax).toDouble() / 100.0
+    )
 
+    // Some callers pass progress as text too. Keep only the actual operation detail.
+    val detail = contentText?.takeUnless {
+        it.isBlank() || it.toString().matches(
+            Regex("""[\p{N}.,\s\p{Z}\p{Cf}]+[%\u066A\uFF05][\s\p{Z}\p{Cf}]*""")
+        )
+    }
+
+    // The compact system template can hide the body while showing a progress bar.
+    val title = if (percentage == null) {
+        contentTitle
+    } else {
+        val bidi = BidiFormatter.getInstance()
+        TextUtils.concat(bidi.unicodeWrap(percentage), " · ", bidi.unicodeWrap(contentTitle))
+    }
+    setContentTitle(title)
+    setContentText(detail)
     setCategory(Notification.CATEGORY_PROGRESS)
     setOnlyAlertOnce(true)
     setOngoing(ongoing)
     setShowWhen(false)
-    setProgress(safeMax, safeCurrent, indeterminate)
-
+    setProgress(safeMax, safeCurrent, unknown)
+    detail?.let { setStyle(Notification.BigTextStyle().bigText(it)) }
     if (Build.VERSION.SDK_INT >= 36) {
-        applyAndroid16ProgressStyle(safeMax, safeCurrent, indeterminate, ongoing)
+        setShortCriticalText(percentage)
     }
-
     return this
-}
-
-@SuppressLint("NewApi")
-private fun Notification.Builder.applyAndroid16ProgressStyle(
-    max: Int,
-    current: Int,
-    indeterminate: Boolean,
-    ongoing: Boolean
-) {
-    val percent = if (!indeterminate && max > 0) {
-        ((current.toLong() * 100L) / max.toLong()).toInt().coerceIn(0, 100)
-    } else {
-        null
-    }
-
-    val style = Notification.ProgressStyle()
-        .setProgressIndeterminate(indeterminate)
-    percent?.let {
-        style.setProgress(it)
-        setShortCriticalText("$it%")
-    }
-    setStyle(style)
-
-    if (ongoing) {
-        runCatching {
-            requestPromotedOngoingMethod?.invoke(this, true)
-        }
-    }
-}
-
-private val requestPromotedOngoingMethod: Method? by lazy {
-    runCatching {
-        Notification.Builder::class.java.getMethod(
-            "setRequestPromotedOngoing",
-            Boolean::class.javaPrimitiveType
-        )
-    }.getOrNull()
 }

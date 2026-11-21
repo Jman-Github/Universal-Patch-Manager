@@ -33,7 +33,7 @@ internal fun LazyListScrollbar(
     state: LazyListState,
     modifier: Modifier,
     prominent: Boolean,
-    thumbLength: Dp? = null
+    thumbLength: Dp? = DASHBOARD_SCROLLBAR_THUMB_LENGTH
 ) {
     val measurements = remember(state) { LazyScrollbarMeasurements() }
     val geometry by remember(state) {

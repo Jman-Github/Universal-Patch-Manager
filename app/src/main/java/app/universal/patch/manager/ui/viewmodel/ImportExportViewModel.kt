@@ -225,8 +225,10 @@ internal fun importedBackgroundWorkNeedsNotifications(
     announcementInterval: SearchForUpdatesBackgroundInterval,
     autoClearCacheInterval: AutoClearCacheInterval,
     deliveryMode: BundleUpdateDeliveryMode,
-    autoPatchEnabled: Boolean
+    autoPatchEnabled: Boolean,
+    runtimeInterval: SearchForUpdatesBackgroundInterval = SearchForUpdatesBackgroundInterval.NEVER
 ): Boolean = autoPatchEnabled ||
+    runtimeInterval != SearchForUpdatesBackgroundInterval.NEVER ||
     bundleInterval != SearchForUpdatesBackgroundInterval.NEVER ||
     managerInterval != SearchForUpdatesBackgroundInterval.NEVER ||
     announcementInterval != SearchForUpdatesBackgroundInterval.NEVER ||
@@ -254,6 +256,7 @@ class ImportExportViewModel(
     private val installerManager: InstallerManager
 ) : ViewModel() {
     data class ImportedNotificationRollback(
+        val runtimeInterval: SearchForUpdatesBackgroundInterval,
         val bundleInterval: SearchForUpdatesBackgroundInterval,
         val managerInterval: SearchForUpdatesBackgroundInterval,
         val announcementInterval: SearchForUpdatesBackgroundInterval,
@@ -1189,7 +1192,7 @@ class ImportExportViewModel(
                                 endpoint,
                                 snapshot.searchUpdate,
                                 snapshot.autoUpdate,
-                                usePrereleases = snapshot.usePrereleases == true && snapshot.useLatest != true,
+                                usePrereleases = snapshot.usePrereleases == true,
                                 useLatest = snapshot.useLatest == true,
                                 useSpecificVersion = snapshot.useSpecificVersion == true,
                                 selectedVersion = snapshot.selectedVersion,
@@ -1559,15 +1562,16 @@ class ImportExportViewModel(
         } else null
         // Activity resume checks disable automatic patching without notification permission.
         // Save the intended Shizuku settings, but enable automatic patching only after permission.
-        preferencesManager.importSettings(
-            deferred?.let {
-                settings.copy(
-                    autoPatchEnabled = false,
-                    autoPatchInstallWithShizuku = it.autoPatchInstallWithShizuku,
-                    autoPatchUninstallOnConflictWithShizuku = it.autoPatchUninstallOnConflictWithShizuku
-                )
-            } ?: settings
-        )
+        val importedSettings = deferred?.let {
+            settings.copy(
+                autoPatchEnabled = false,
+                autoPatchInstallWithShizuku = it.autoPatchInstallWithShizuku,
+                autoPatchUninstallOnConflictWithShizuku = it.autoPatchUninstallOnConflictWithShizuku
+            )
+        } ?: settings
+        patcherRuntimePluginRepository.importSettingsWithRuntimeRestore(importedSettings) { prepared, restore ->
+            preferencesManager.importSettings(prepared, restoreRuntimes = restore)
+        }
         deferredImportedAutoPatchSettings = deferred
     }
 
@@ -1672,6 +1676,7 @@ class ImportExportViewModel(
         preferencesManager.importSettings(
             PreferencesManager.SettingsSnapshot(
                 announcementPushNotificationInterval = rollback.announcementInterval,
+                backgroundRuntimeUpdateInterval = rollback.runtimeInterval,
                 autoClearCacheInterval = rollback.autoClearCacheInterval,
                 searchForUpdatesBackgroundInterval = rollback.bundleInterval,
                 searchForManagerUpdatesBackgroundInterval = rollback.managerInterval,
@@ -1686,6 +1691,7 @@ class ImportExportViewModel(
     }
 
     private suspend fun syncImportedPeriodicWork() {
+        workerRepository.scheduleRuntimeUpdateWork(preferencesManager.backgroundRuntimeUpdateInterval.get())
         workerRepository.scheduleBundleUpdateNotificationWork(
             preferencesManager.searchForUpdatesBackgroundInterval.get()
         )
@@ -1705,6 +1711,7 @@ class ImportExportViewModel(
     }
 
     private fun suspendImportedPeriodicWork() {
+        workerRepository.scheduleRuntimeUpdateWork(SearchForUpdatesBackgroundInterval.NEVER)
         workerRepository.scheduleBundleUpdateNotificationWork(
             SearchForUpdatesBackgroundInterval.NEVER
         )
@@ -1747,18 +1754,10 @@ class ImportExportViewModel(
                 Log.e(tag, "Failed to update imported downloader plugins", error)
             }
         }
-        if (settings.acknowledgedPatcherRuntimePlugins != null ||
-            settings.trustedPatcherRuntimePluginsJson != null ||
-            settings.patcherRuntimePluginSourcesJson != null
+        if (settings.patcherRuntimePluginSourcesJson == null &&
+            (settings.acknowledgedPatcherRuntimePlugins != null || settings.trustedPatcherRuntimePluginsJson != null)
         ) {
             patcherRuntimePluginRepository.reload()
-            try {
-                patcherRuntimePluginRepository.updateCheck()
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                Log.e(tag, "Failed to update imported patcher runtime plugins", error)
-            }
         }
         patchBundleRepository.reload()
     }
@@ -1794,6 +1793,7 @@ class ImportExportViewModel(
             ).permissionGranted
 
         val backgroundNotificationsEnabled = importedBackgroundWorkNeedsNotifications(
+            runtimeInterval = preferencesManager.backgroundRuntimeUpdateInterval.get(),
             bundleInterval = bundleInterval,
             managerInterval = managerInterval,
             announcementInterval = announcementInterval,
@@ -1808,6 +1808,8 @@ class ImportExportViewModel(
             needsShizukuPermission = needsShizukuPermission,
             notificationRollback = if (backgroundNotificationsEnabled) {
                 ImportedNotificationRollback(
+                    runtimeInterval = previousSettings.backgroundRuntimeUpdateInterval
+                        ?: SearchForUpdatesBackgroundInterval.NEVER,
                     bundleInterval = previousSettings.searchForUpdatesBackgroundInterval
                         ?: SearchForUpdatesBackgroundInterval.NEVER,
                     managerInterval = previousSettings.searchForManagerUpdatesBackgroundInterval

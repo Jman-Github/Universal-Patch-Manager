@@ -7,33 +7,46 @@ internal fun resolveAppDisplayLabel(
     context: Context,
     packageInfo: PackageInfo?,
     defaultText: String? = null,
+    requireMetadataLabel: Boolean = false,
 ): String? {
     val packageName = packageInfo?.packageName
+    fun clean(raw: String?): String? = if (requireMetadataLabel) {
+        actualAppMetadataLabel(raw, packageName)
+    } else raw?.let { cleanDisplayLabel(it, packageName) }
     val launcherLabel = packageName
         ?.let { loadInstalledLauncherLabel(context, it) }
-        ?.let { cleanDisplayLabel(it, packageName) }
+        .let(::clean)
         ?.takeIf { it.isNotBlank() && it != packageName }
     if (launcherLabel != null) return launcherLabel
 
     val installedLabel = packageName
         ?.let { loadInstalledLabel(context, it) }
-        ?.let { cleanDisplayLabel(it, packageName) }
+        .let(::clean)
         ?.takeIf { it.isNotBlank() && it != packageName }
     if (installedLabel != null) return installedLabel
 
     val localLabel = runCatching {
         packageInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString()
     }.getOrNull()
-    val cleanedLocal = localLabel?.let { raw ->
-        val cleaned = cleanDisplayLabel(raw, packageName)
+    val cleanedLocal = clean(localLabel)?.let { cleaned ->
         cleaned.takeIf { it.isNotBlank() && cleaned != packageName }
     }
     if (!cleanedLocal.isNullOrBlank()) return cleanedLocal
 
     return packageInfo?.applicationInfo?.nonLocalizedLabel?.toString()
+        ?.takeIf { !requireMetadataLabel || actualAppMetadataLabel(it, packageName) != null }
         ?.takeIf { it.isNotBlank() }
-        ?: packageName
+        ?: packageName?.takeUnless { requireMetadataLabel }
         ?: defaultText
+}
+
+/** Package/class-name guesses must not suppress a real application-name lookup. */
+internal fun actualAppMetadataLabel(raw: String?, packageName: String?): String? {
+    val label = raw?.trim()?.takeIf(String::isNotBlank) ?: return null
+    if (packageName != null && (label == packageName || label.startsWith("$packageName."))) return null
+    if (looksLikePackageLabel(label) && label.endsWith("Application")) return null
+    if (shouldFallbackUnderscoreLabel(label, packageName)) return null
+    return label
 }
 
 private fun cleanDisplayLabel(raw: String, packageName: String?): String {

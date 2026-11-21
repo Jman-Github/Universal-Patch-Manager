@@ -36,6 +36,9 @@ interface InstalledAppDao {
     @Query("UPDATE installed_app SET selection_payload = :payload WHERE current_package_name = :packageName")
     suspend fun updateSelectionPayload(packageName: String, payload: PatchProfilePayload)
 
+    @Query("UPDATE installed_app SET version_code = :versionCode WHERE current_package_name = :packageName AND version = :version AND version_code IS NULL")
+    suspend fun rememberVersionCode(packageName: String, version: String, versionCode: Long)
+
     @Query("UPDATE installed_app SET repatch_source_path = NULL WHERE repatch_source_path IS NOT NULL")
     suspend fun clearRepatchSourcePaths()
 

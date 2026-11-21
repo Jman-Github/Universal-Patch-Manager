@@ -332,7 +332,8 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         alias: String,
         storePass: String,
         keyPass: String,
-        format: KeystoreFormat
+        format: KeystoreFormat,
+        algorithm: SigningKeyAlgorithm = SigningKeyAlgorithm.RSA
     ): KeystoreBinary = withContext(Dispatchers.Default) {
         keystoreMutex.withLock {
             val normalizedAlias = alias.trim()
@@ -341,40 +342,16 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
                 ?: throw IllegalArgumentException("Keystore password is required.")
             val normalizedKeyPass = keyPass.takeIf { it.isNotBlank() } ?: normalizedStorePass
 
-            val keyCertPair = RevancedApkSigner.newPrivateKeyCertificatePair(
-                normalizedAlias,
-                maxCertificateNotAfter
-            )
-            val generated = RevancedApkSigner.newKeyStore(
-                setOf(
-                    RevancedApkSigner.KeyStoreEntry(
-                        normalizedAlias,
-                        normalizedKeyPass,
-                        keyCertPair
-                    )
-                )
-            )
-            val generatedBytes = ByteArrayOutputStream().use { output ->
-                generated.store(output, normalizedStorePass.toCharArray())
-                output.toByteArray()
-            }
-
-            val loaded = tryLoadKeyMaterial(
-                generatedBytes,
-                normalizedAlias,
-                normalizedStorePass,
-                normalizedKeyPass
-            ) ?: throw IllegalStateException("Failed to load generated keystore.")
-
+            val (privateKey, certificate) = generateSigningKey(normalizedAlias, maxCertificateNotAfter, algorithm)
             val converted = buildKeystoreBytes(
-                alias = loaded.keyMaterial.alias,
+                alias = normalizedAlias,
                 keyPass = normalizedKeyPass,
                 storePass = normalizedStorePass,
-                privateKey = loaded.keyMaterial.privateKey,
-                certificates = loaded.keyMaterial.certificates,
+                privateKey = privateKey,
+                certificates = listOf(certificate),
                 storeType = format.keyStoreType
             )
-            KeystoreBinary(converted, loaded.keyMaterial.alias, format)
+            KeystoreBinary(converted, normalizedAlias, format)
         }
     }
 
@@ -383,7 +360,8 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         alias: String,
         storePass: String,
         keyPass: String,
-        format: KeystoreFormat
+        format: KeystoreFormat,
+        algorithm: SigningKeyAlgorithm? = null
     ): KeystoreBinary = withContext(Dispatchers.Default) {
         keystoreMutex.withLock {
             val keystoreData = withContext(Dispatchers.IO) { keystore.readBytes() }
@@ -399,12 +377,16 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
                 normalizedKeyPass
             ) ?: throw IllegalArgumentException("Wrong keystore credentials.")
 
+            val (convertedKey, convertedCertificates) = convertedSigningKey(
+                loaded.keyMaterial.privateKey, loaded.keyMaterial.certificates,
+                loaded.keyMaterial.alias, algorithm, maxCertificateNotAfter
+            )
             val converted = buildKeystoreBytes(
                 alias = loaded.keyMaterial.alias,
                 keyPass = normalizedKeyPass,
                 storePass = normalizedStorePass,
-                privateKey = loaded.keyMaterial.privateKey,
-                certificates = loaded.keyMaterial.certificates,
+                privateKey = convertedKey,
+                certificates = convertedCertificates,
                 storeType = format.keyStoreType
             )
             KeystoreBinary(converted, loaded.keyMaterial.alias, format)
@@ -781,6 +763,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
             AndroidApkSigner.Builder(listOf(signerConfig))
                 .setInputApk(input)
                 .setOutputApk(output)
+                .supportSigningKey(keyMaterial.privateKey, input)
                 .setV1SigningEnabled(!preserveSignatureMetadata)
                 .setV2SigningEnabled(true)
                 .setV3SigningEnabled(true)

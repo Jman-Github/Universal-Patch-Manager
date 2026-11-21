@@ -1,0 +1,9 @@
+{
+  "uniqueId": "net.zlib:zlib",
+  "name": "zlib",
+  "description": "The compression library used by the patcher JVM. Build recipes: https://github.com/termux-pacman/glibc-packages",
+  "website": "https://zlib.net/",
+  "licenses": [
+    "Zlib"
+  ]
+}

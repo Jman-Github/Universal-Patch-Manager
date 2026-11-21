@@ -84,7 +84,7 @@ class SplitNativeLibraryCompressionTest {
                 packageName = "app.upm.test"
                 versionCode = 1
                 getOrCreateApplicationElement()
-                manifestElement.createAttribute("split", 0).setValueAsString("config.arm64_v8a")
+                manifestElement.createAttribute("split", 0).setDataAsString("config.arm64_v8a")
                 refreshFull()
             }
             ZipOutputStream(inputDir.resolve("split_config.arm64_v8a.apk").outputStream()).use { zip ->

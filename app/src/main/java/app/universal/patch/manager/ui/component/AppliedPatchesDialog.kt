@@ -52,7 +52,8 @@ data class AppliedPatchBundleUi(
     val patchInfos: List<PatchInfo>,
     val fallbackNames: List<String>,
     val bundleAvailable: Boolean,
-    val hasUpdate: Boolean = false
+    val hasUpdate: Boolean = false,
+    val fallbackDetails: Map<String, app.universal.patch.manager.data.room.profile.PatchProfilePayload.PatchDisplayInfo> = emptyMap()
 )
 
 @Composable
@@ -230,14 +231,23 @@ fun AppliedPatchesDialog(
                                 }
 
                                 bundle.fallbackNames.forEach { patchName ->
+                                    val details = bundle.fallbackDetails[patchName]
                                     Text(
-                                        text = "\u2022 $patchName",
+                                        text = "\u2022 ${details?.label ?: patchName}",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.padding(start = 8.dp, top = 2.dp)
                                     )
+                                    details?.description?.takeIf { it.isNotBlank() }?.let { description ->
+                                        Text(
+                                            text = description,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(start = 16.dp, bottom = 4.dp)
+                                        )
+                                    }
                                 }
                             }
                         }

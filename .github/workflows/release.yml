@@ -148,14 +148,6 @@ jobs:
             app/build/reports/tests/testDebugUnitTest/
             api/build/test-results/testDebugUnitTest/
             api/build/reports/tests/testDebugUnitTest/
-            morphe-runtime/build/test-results/testDebugUnitTest/
-            morphe-runtime/build/reports/tests/testDebugUnitTest/
-            revanced.v21-runtime-plugin/build/test-results/testDebugUnitTest/
-            revanced.v21-runtime-plugin/build/reports/tests/testDebugUnitTest/
-            reseam-runtime/build/test-results/testDebugUnitTest/
-            revanced.v22-runtime-plugin/build/test-results/testDebugUnitTest/
-            reseam-runtime/build/reports/tests/testDebugUnitTest/
-            revanced.v22-runtime-plugin/build/reports/tests/testDebugUnitTest/
 
       - name: Upload release workflow artifacts
         if: steps.semantic-release.outputs.new_release_published == 'true'

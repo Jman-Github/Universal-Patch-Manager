@@ -23,11 +23,13 @@ import com.gigamole.composescrollbars.scrolltype.knobtype.ScrollbarsStaticKnobTy
 fun Scrollbar(
     scrollState: ScrollState,
     modifier: Modifier = Modifier,
-    prominent: Boolean = false
+    prominent: Boolean = false,
+    thumbLength: Dp? = DASHBOARD_SCROLLBAR_THUMB_LENGTH
 ) {
     Scrollbar(
         ScrollbarsScrollType.Scroll(
-            knobType = ScrollbarsStaticKnobType.Auto(),
+            knobType = thumbLength?.let { ScrollbarsStaticKnobType.Exact(size = it) }
+                ?: ScrollbarsStaticKnobType.Auto(),
             state = scrollState
         ),
         modifier,
@@ -40,7 +42,7 @@ fun Scrollbar(
     lazyListState: LazyListState,
     modifier: Modifier = Modifier,
     prominent: Boolean = false,
-    thumbLength: Dp? = null
+    thumbLength: Dp? = DASHBOARD_SCROLLBAR_THUMB_LENGTH
 ) {
     LazyListScrollbar(lazyListState, modifier, prominent, thumbLength)
 }

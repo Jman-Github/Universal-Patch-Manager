@@ -92,14 +92,6 @@ jobs:
             app/build/reports/tests/testDebugUnitTest/
             api/build/test-results/testDebugUnitTest/
             api/build/reports/tests/testDebugUnitTest/
-            morphe-runtime/build/test-results/testDebugUnitTest/
-            morphe-runtime/build/reports/tests/testDebugUnitTest/
-            revanced.v21-runtime-plugin/build/test-results/testDebugUnitTest/
-            revanced.v21-runtime-plugin/build/reports/tests/testDebugUnitTest/
-            reseam-runtime/build/test-results/testDebugUnitTest/
-            revanced.v22-runtime-plugin/build/test-results/testDebugUnitTest/
-            reseam-runtime/build/reports/tests/testDebugUnitTest/
-            revanced.v22-runtime-plugin/build/reports/tests/testDebugUnitTest/
 
       - name: Build debug artifacts
         env:
@@ -111,9 +103,7 @@ jobs:
         run: |
           ./gradlew -Dorg.gradle.java.home="${{ steps.setup-java.outputs.path }}" --no-daemon \
             -Pversion="${{ needs.prepare.outputs.version }}" \
-            :app:assembleDev \
-            :revanced.v21-runtime-plugin:assembleRelease \
-            :revanced.v22-runtime-plugin:assembleRelease
+            :app:assembleDev
 
       - name: Locate debug artifacts
         shell: bash
@@ -127,8 +117,6 @@ jobs:
             "${apk_dir}/universal-patch-manager-v${VERSION}-armeabi-v7a.apk"
             "${apk_dir}/universal-patch-manager-v${VERSION}-x86.apk"
             "${apk_dir}/universal-patch-manager-v${VERSION}-x86_64.apk"
-            "revanced.v21-runtime-plugin/build/outputs/apk/release/revanced.v21-plugin.apk"
-            "revanced.v22-runtime-plugin/build/outputs/apk/release/revanced.v22-plugin.apk"
           )
           for artifact in "${expected[@]}"; do
             [[ -f "$artifact" ]] || { echo "Missing expected debug artifact: $artifact" >&2; exit 1; }
@@ -142,6 +130,4 @@ jobs:
           if-no-files-found: error
           path: |
             app/build/outputs/apk/dev/*.apk
-            revanced.v21-runtime-plugin/build/outputs/apk/release/revanced.v21-plugin.apk
-            revanced.v22-runtime-plugin/build/outputs/apk/release/revanced.v22-plugin.apk
             app/build/outputs/apk/dev/output-metadata.json

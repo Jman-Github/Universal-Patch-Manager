@@ -4,6 +4,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
@@ -119,15 +121,19 @@ fun ExpressiveSettingsItem(
     }
 
     ListItem(
-        headlineContent = headlineContent,
+        headlineContent = {
+            Box(Modifier.alpha(if (enabled) 1f else 0.38f)) { headlineContent() }
+        },
         supportingContent = when {
-            supportingContentSlot != null -> supportingContentSlot
+            supportingContentSlot != null -> {
+                { Box(Modifier.alpha(if (enabled) 1f else 0.38f)) { supportingContentSlot() } }
+            }
             supportingContent != null -> {
                 {
                     androidx.compose.material3.Text(
                         text = supportingContent,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.38f)
                     )
                 }
             }

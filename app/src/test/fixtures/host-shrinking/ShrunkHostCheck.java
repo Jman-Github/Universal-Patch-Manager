@@ -4,6 +4,16 @@ public class ShrunkHostCheck {
   try(URLClassLoader engine=new URLClassLoader(new URL[]{new File(args[0]).toURI().toURL()},ClassLoader.getPlatformClassLoader())) {
    Thread.currentThread().setContextClassLoader(engine);
    String entry=args[1].equals("morphe")?"app.universal.patch.manager.morphe.runtime.MorpheRuntimeEntry":"app.universal.patch.manager.revanced.runtime.RevancedRuntimeEntry";
+   if(args[1].equals("morphe")) {
+    var match=engine.loadClass("app.morphe.patcher.Match$InstructionMatch");
+    for(String getter:List.of("getFieldReference","getMethodReference")) {
+     var method=match.getMethod(getter);
+     String expected=getter.equals("getFieldReference")?"FieldReference":"MethodReference";
+     if(!method.getReturnType().getName().equals("com.android.tools.smali.dexlib2.iface.reference."+expected))
+      throw new AssertionError("Incorrect SDK method descriptor: "+method);
+    }
+    System.out.println("PASS Morphe instruction reference APIs");
+   }
    if(args.length>2) {
     List<?> result=(List<?>)engine.loadClass(entry).getMethod("loadMetadataForBundle",String.class).invoke(null,args[2]);
     if(result.isEmpty())throw new AssertionError("Empty metadata");

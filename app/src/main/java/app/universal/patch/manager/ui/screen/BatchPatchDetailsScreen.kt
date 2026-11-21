@@ -60,6 +60,7 @@ import app.universal.patch.manager.ui.component.haptics.HapticExtendedFloatingAc
 import app.universal.patch.manager.ui.component.patcher.PatcherInformation
 import app.universal.patch.manager.ui.component.patcher.PatcherInformationCard
 import app.universal.patch.manager.ui.component.patcher.PatcherResourceUsageCards
+import app.universal.patch.manager.ui.component.patcher.ResourceUsageProgressLayout
 import app.universal.patch.manager.ui.component.patcher.rememberResourceGraphState
 import app.universal.patch.manager.ui.component.patcher.Steps
 import androidx.compose.runtime.toMutableStateList
@@ -102,6 +103,7 @@ fun BatchPatchDetailsScreen(
     val prefs: PreferencesManager = koinInject()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val showPatcherMemoryUsageGraph by prefs.showPatcherMemoryUsageGraph.getAsState()
+    val pinResourceGraphs by prefs.pinPatcherResourceGraphs.getAsState()
     val compactResourceGraphs by prefs.compactPatcherResourceGraphs.getAsState()
     val showGraphExtraInfo by prefs.showPatcherResourceGraphExtraInfo.getAsState()
     val showCompactGraphExtraInfo by prefs.showCompactPatcherResourceGraphExtraInfo.getAsState()
@@ -310,133 +312,142 @@ fun BatchPatchDetailsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 drawStopIndicator = {}
             )
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(16.dp)
-            ) {
-                item(key = "app-info") {
-                    Surface(
-                        shape = MaterialTheme.shapes.large,
-                        color = MaterialTheme.colorScheme.surfaceContainerLow,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(item.appName, style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                item.packageName,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            item.message?.let {
-                                Text(it, color = MaterialTheme.colorScheme.error)
-                            }
-                        }
-                    }
-                }
-
-                if (
-                    showPatcherMemoryUsageGraph &&
-                    item.memoryUsageSamples.isNotEmpty()
+            val pinGraphs = pinResourceGraphs && showPatcherMemoryUsageGraph && item.memoryUsageSamples.isNotEmpty()
+            val resourceGraphs: @Composable () -> Unit = {
+                PatcherResourceUsageCards(
+                    compact = compactResourceGraphs,
+                    showExtraInfo = if (compactResourceGraphs) showCompactGraphExtraInfo else showGraphExtraInfo,
+                    samples = item.memoryUsageSamples,
+                    isActive = item.state == BatchItemState.RUNNING,
+                    graphState = resourceGraphState
+                )
+            }
+            ResourceUsageProgressLayout(
+                pinGraphs = pinGraphs,
+                graphContent = resourceGraphs
+            ) { progressModifier ->
+                LazyColumn(
+                    modifier = progressModifier,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(16.dp)
                 ) {
-                    item(key = "memory-usage") {
-                        PatcherResourceUsageCards(
-                            compact = compactResourceGraphs,
-                            showExtraInfo = if (compactResourceGraphs) showCompactGraphExtraInfo else showGraphExtraInfo,
-                            samples = item.memoryUsageSamples,
-                            isActive = item.state == BatchItemState.RUNNING,
-                            graphState = resourceGraphState
-                        )
-                    }
-                }
-
-                item(key = "patcher-information") {
-                    val parsedSessionInfo = remember(item.logLines) {
-                        parsePatcherSessionInfo(
-                            item.logLines.map { line -> line.substringAfter("]: ", line) }
-                        )
-                    }
-                    val sessionInfo = item.patcherSessionInfo.withFallback(parsedSessionInfo)
-                    val activeBundleIds = remember(item.selection) {
-                        item.selection.filterValues { patches -> patches.isNotEmpty() }.keys
-                    }
-                    val patchBundleLabels = remember(item.bundles, activeBundleIds) {
-                        item.bundles
-                            .filter { bundle -> bundle.uid in activeBundleIds }
-                            .map { bundle ->
-                                bundle.version
-                                    ?.takeIf(String::isNotBlank)
-                                    ?.let { version -> "${bundle.name} $version" }
-                                    ?: bundle.name
+                    item(key = "app-info") {
+                        Surface(
+                            shape = MaterialTheme.shapes.large,
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(item.appName, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    item.packageName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                item.message?.let {
+                                    Text(it, color = MaterialTheme.colorScheme.error)
+                                }
                             }
+                        }
                     }
-                    val localInput = item.input as? SelectedApp.Local
-                    val fallbackSplitApk by produceState<Boolean?>(
-                        initialValue = null,
-                        key1 = localInput?.file
+
+                    if (
+                        !pinGraphs && showPatcherMemoryUsageGraph &&
+                        item.memoryUsageSamples.isNotEmpty()
                     ) {
-                        value = localInput?.file?.let { file ->
-                            withContext(Dispatchers.IO) {
-                                SplitApkPreparer.isSplitArchive(file)
-                            }
+                        item(key = "memory-usage") {
+                            resourceGraphs()
                         }
                     }
-                    PatcherInformationCard(
-                        information = PatcherInformation(
-                            appVersion = item.version,
-                            appVersionCode = item.versionCode,
-                            patchCount = item.patchCount,
-                            patchBundles = patchBundleLabels,
-                            fallbackApkSizeBytes = localInput?.file
-                                ?.takeIf { it.isFile }
-                                ?.length(),
-                            fallbackSplitApk = fallbackSplitApk,
-                            fallbackPatcherEngine = item.patcherEngine,
-                            session = sessionInfo
-                        ),
-                        expanded = patcherInformationExpanded,
-                        onExpandedChange = { expanded ->
-                            coroutineScope.launch {
-                                prefs.patcherInformationExpanded.update(expanded)
+
+                    item(key = "patcher-information") {
+                        val parsedSessionInfo = remember(item.logLines) {
+                            parsePatcherSessionInfo(
+                                item.logLines.map { line -> line.substringAfter("]: ", line) }
+                            )
+                        }
+                        val sessionInfo = item.patcherSessionInfo.withFallback(parsedSessionInfo)
+                        val activeBundleIds = remember(item.selection) {
+                            item.selection.filterValues { patches -> patches.isNotEmpty() }.keys
+                        }
+                        val patchBundleLabels = remember(item.bundles, activeBundleIds) {
+                            item.bundles
+                                .filter { bundle -> bundle.uid in activeBundleIds }
+                                .map { bundle ->
+                                    bundle.version
+                                        ?.takeIf(String::isNotBlank)
+                                        ?.let { version -> "${bundle.name} $version" }
+                                        ?: bundle.name
+                                }
+                        }
+                        val localInput = item.input as? SelectedApp.Local
+                        val fallbackSplitApk by produceState<Boolean?>(
+                            initialValue = null,
+                            key1 = localInput?.file
+                        ) {
+                            value = localInput?.file?.let { file ->
+                                withContext(Dispatchers.IO) {
+                                    SplitApkPreparer.isSplitArchive(file)
+                                }
                             }
                         }
-                    )
-                }
-
-                items(
-                    items = groupedSteps.toList(),
-                    key = { (category, _) -> category }
-                ) { (category, steps) ->
-                    Steps(
-                        category = category,
-                        steps = steps,
-                        subStepsById = progressUi?.subStepsById.orEmpty(),
-                        isExpanded = expandedCategories.contains(category),
-                        autoExpandRunning = autoExpandRunningSteps,
-                        autoExpandRunningMainOnly = useExclusiveAutoExpand,
-                        continueOnPatchError = continueOnPatchError,
-                        onExpand = {
-                            if (useExclusiveAutoExpand) {
-                                expandedCategories.clear()
+                        PatcherInformationCard(
+                            information = PatcherInformation(
+                                appVersion = item.version,
+                                appVersionCode = item.versionCode,
+                                patchCount = item.patchCount,
+                                patchBundles = patchBundleLabels,
+                                fallbackApkSizeBytes = localInput?.file
+                                    ?.takeIf { it.isFile }
+                                    ?.length(),
+                                fallbackSplitApk = fallbackSplitApk,
+                                fallbackPatcherEngine = item.patcherEngine,
+                                session = sessionInfo
+                            ),
+                            expanded = patcherInformationExpanded,
+                            onExpandedChange = { expanded ->
+                                coroutineScope.launch {
+                                    prefs.patcherInformationExpanded.update(expanded)
+                                }
                             }
-                            expandedCategories.add(category)
-                        },
-                        onClick = {
-                            if (expandedCategories.contains(category)) {
-                                expandedCategories.remove(category)
-                            } else {
+                        )
+                    }
+
+                    items(
+                        items = groupedSteps.toList(),
+                        key = { (category, _) -> category }
+                    ) { (category, steps) ->
+                        Steps(
+                            category = category,
+                            steps = steps,
+                            subStepsById = progressUi?.subStepsById.orEmpty(),
+                            isExpanded = expandedCategories.contains(category),
+                            autoExpandRunning = autoExpandRunningSteps,
+                            autoExpandRunningMainOnly = useExclusiveAutoExpand,
+                            continueOnPatchError = continueOnPatchError,
+                            onExpand = {
+                                if (useExclusiveAutoExpand) {
+                                    expandedCategories.clear()
+                                }
                                 expandedCategories.add(category)
-                            }
-                        },
-                        autoCollapseCompleted = autoCollapsePatcherSteps
-                    )
-                }
+                            },
+                            onClick = {
+                                if (expandedCategories.contains(category)) {
+                                    expandedCategories.remove(category)
+                                } else {
+                                    expandedCategories.add(category)
+                                }
+                            },
+                            autoCollapseCompleted = autoCollapsePatcherSteps
+                        )
+                    }
 
-                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
-                    item(key = "legacy-memory-warning") {
+                    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
+                        item(key = "legacy-memory-warning") {
+                        }
                     }
                 }
             }

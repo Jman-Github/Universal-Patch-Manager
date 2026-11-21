@@ -44,6 +44,13 @@ object ToolRuntimeEntry {
                         skipUnneededSplits = params["skipUnneededSplits"] as Boolean,
                         includedModules = (params["includedModules"] as? List<*>)?.map { it as String }?.toSet(),
                         compressNativeLibraries = params["compressNativeLibraries"] as Boolean,
+                        onStripProgress = { percent ->
+                            checkCancelled()
+                            callback.event(mapOf(
+                                "message" to "Stripping native libraries",
+                                "current" to percent.toLong(), "total" to 100L
+                            ))
+                        },
                         onProgress = { callback.event(mapOf("message" to it)) },
                         onSubSteps = { callback.event(mapOf("subSteps" to it)) },
                         onLog = { checkCancelled(); callback.log("INFO", it) }

@@ -178,14 +178,65 @@ class InPlaceApkSignerTest {
         assertContentEquals(before, apk.readBytes())
     }
 
-    private fun unsignedApk(libraryAlignment: Int? = null): File {
+    @Test
+    fun `P256 signs through both signing paths and preserves certificate identity`() {
+        val (key, certificate) = generateP256SigningKey("UPM EC", Date(System.currentTimeMillis() + 86_400_000))
+        for (alignment in listOf(null, 4096)) {
+            val apk = unsignedApk(alignment)
+            InPlaceApkSigner("ec", key, listOf(certificate)).sign(apk, 26)
+            for (sdk in listOf(26, 28, 36)) {
+                val result = ApkVerifier.Builder(apk).setMinCheckedPlatformVersion(sdk)
+                    .setMaxCheckedPlatformVersion(sdk).build().verify()
+                assertTrue(result.isVerified, result.errors.toString())
+                assertEquals(listOf(certificate), result.signerCertificates)
+            }
+        }
+        for (minSdk in listOf(16, 18, 21, 28)) {
+            val input = unsignedApk(minSdk = minSdk)
+            val payload = zipContents(input)
+            val output = temporaryDirectory.newFile("ec-signed-$minSdk.apk")
+            val config = com.android.apksig.ApkSigner.SignerConfig.Builder("ec", key, listOf(certificate)).build()
+            com.android.apksig.ApkSigner.Builder(listOf(config)).setInputApk(input).setOutputApk(output)
+                .supportSigningKey(key, input)
+                .setV1SigningEnabled(true).setV2SigningEnabled(true).setV3SigningEnabled(true).build().sign()
+            val result = ApkVerifier.Builder(output).setMinCheckedPlatformVersion(maxOf(18, minSdk))
+                .setMaxCheckedPlatformVersion(36).build().verify()
+            assertTrue(result.isVerified, result.errors.toString())
+            if (minSdk < 24) assertTrue(result.isVerifiedUsingV1Scheme)
+            if (minSdk < 28) assertTrue(result.isVerifiedUsingV2Scheme)
+            assertTrue(result.isVerifiedUsingV3Scheme)
+            assertEquals(listOf(certificate), result.signerCertificates)
+            val contents = zipContents(output)
+            payload.forEach { (name, bytes) -> assertContentEquals(bytes, contents.getValue(name), name) }
+        }
+    }
+
+    @Test
+    fun `RSA keeps legacy platform signing compatibility`() {
+        val (key, certificate) = generateSigningKey("RSA, Unicode ?", Date(System.currentTimeMillis() + 86_400_000), SigningKeyAlgorithm.RSA)
+        assertEquals(4096, (certificate.publicKey as java.security.interfaces.RSAPublicKey).modulus.bitLength())
+        val input = unsignedApk(minSdk = 16)
+        val output = temporaryDirectory.newFile("rsa-legacy.apk")
+        val config = com.android.apksig.ApkSigner.SignerConfig.Builder(
+            "rsa", key, listOf(certificate)).build()
+        com.android.apksig.ApkSigner.Builder(listOf(config)).setInputApk(input).setOutputApk(output)
+            .supportSigningKey(key, input)
+            .setV1SigningEnabled(true).setV2SigningEnabled(true).setV3SigningEnabled(true).build().sign()
+        val result = ApkVerifier.Builder(output).setMinCheckedPlatformVersion(16)
+            .setMaxCheckedPlatformVersion(36).build().verify()
+        assertTrue(result.isVerified, result.errors.toString())
+        assertTrue(result.isVerifiedUsingV1Scheme)
+        assertEquals(listOf(certificate), result.signerCertificates)
+    }
+
+    private fun unsignedApk(libraryAlignment: Int? = null, minSdk: Int = 21): File {
         val apk = temporaryDirectory.newFile("input-${System.nanoTime()}.apk")
         ApkModule().use { module ->
             val manifest = AndroidManifestBlock().apply {
                 packageName = "app.upm.signing.test"
                 versionCode = 1
                 versionName = "1"
-                setMinSdkVersion(21)
+                setMinSdkVersion(minSdk)
             }
             module.setManifest(manifest)
             module.add(ByteInputSource("test payload".toByteArray(), "assets/payload.txt"))

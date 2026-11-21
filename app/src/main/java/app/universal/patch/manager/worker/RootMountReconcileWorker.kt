@@ -1,12 +1,12 @@
 package app.universal.patch.manager.worker
 
+import app.universal.patch.manager.util.applyManagerNotificationIcon
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.drawable.Icon
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import app.universal.patch.manager.R
@@ -135,7 +135,7 @@ class RootMountReconcileWorker(
                     .setContentTitle(title)
                     .setContentText(reason)
                     .setStyle(Notification.BigTextStyle().bigText(reason))
-                    .setSmallIcon(Icon.createWithResource(context, R.drawable.ic_notification_status))
+                    .applyManagerNotificationIcon(context)
                     .setContentIntent(pendingIntent)
                     .setAutoCancel(true)
                     .build()

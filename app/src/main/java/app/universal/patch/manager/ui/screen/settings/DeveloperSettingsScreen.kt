@@ -139,11 +139,21 @@ fun DeveloperSettingsScreen(
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
-        Column(modifier = Modifier.padding(paddingValues)) {
-            GroupHeader(
-                stringResource(R.string.stability_update_controls_section),
-                icon = SettingsSectionIcons.StabilityUpdateControls
-            )
+        app.universal.patch.manager.ui.component.ColumnWithScrollbar(
+            modifier = Modifier.padding(paddingValues),
+            thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH
+        ) {
+            SettingsSearchHighlight(
+                targetKey = R.string.stability_update_controls_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.stability_update_controls_section),
+                    icon = SettingsSectionIcons.StabilityUpdateControls,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {

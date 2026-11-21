@@ -67,6 +67,17 @@ class RepatchSourceCleanup(
                 if (isPatcherActive()) return@withLock
                 installedAppRepository.pruneRepatchInputs(retainedPaths)
                 filesystem.pruneRepatchInputStagingFiles(retainedPaths)
+                val generation = CacheCleanupGuard.idleGeneration.value
+                filesystem.deduplicateRetainedApks { commit ->
+                    CacheCleanupGuard.runIfIdle {
+                        // A completed user operation may have replaced a file while its
+                        // shared copy was prepared. Leave that path untouched and retry later.
+                        if (CacheCleanupGuard.idleGeneration.value != generation || isPatcherActive()) false else {
+                            commit()
+                            true
+                        }
+                    } == true
+                }
                 val detachedFiles = CacheCleanupGuard.runIfIdle {
                     filesystem.pruneRestoredBatchPatchOutputFiles(retainedBatchOutputs)
                     filesystem.detachTemporaryPatchFiles()

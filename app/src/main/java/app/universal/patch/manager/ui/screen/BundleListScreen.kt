@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.universal.patch.manager.ui.component.CollectionDialog
 import app.universal.patch.manager.ui.component.LazyColumnWithScrollbar
 import app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH
 import app.universal.patch.manager.ui.component.bundle.BundleItem
@@ -246,7 +247,7 @@ private fun BundleOrderDialog(
         workingOrder.add(to.index, workingOrder.removeAt(from.index))
     }
 
-    AlertDialog(
+    CollectionDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {
             TextButton(onClick = { onConfirm(workingOrder.toList()) }, enabled = workingOrder.isNotEmpty()) {
@@ -260,16 +261,17 @@ private fun BundleOrderDialog(
         },
         title = { CenteredDialogTitle(text = stringResource(R.string.bundle_reorder_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     text = stringResource(R.string.bundle_reorder_description),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LazyColumnWithScrollbar(
+                    thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 320.dp),
+                        .weight(1f, fill = false),
                     reserveScrollbarSpace = true,
                     state = lazyListState
                 ) {

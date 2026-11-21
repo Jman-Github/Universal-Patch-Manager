@@ -5,6 +5,7 @@
 
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.minimalActionButtons
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -49,6 +50,7 @@ import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
+import app.universal.patch.manager.ui.component.CollectionDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -525,7 +527,7 @@ private fun BatchOrderDialog(
         workingOrder.add(to.index, workingOrder.removeAt(from.index))
     }
 
-    AlertDialog(
+    CollectionDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {
             TextButton(onClick = { onConfirm(workingOrder.toList()) }) {
@@ -550,7 +552,8 @@ private fun BatchOrderDialog(
                 LazyColumnWithScrollbar(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 320.dp),
+                        .weight(1f, fill = false),
+                    reserveScrollbarSpace = true,
                     state = lazyListState
                 ) {
                     itemsIndexed(
@@ -838,6 +841,7 @@ private fun BatchItemCard(
                 }
                 AppIcon(
                     packageInfo = packageInfo,
+                    packageName = item.packageName,
                     contentDescription = null,
                     modifier = Modifier.size(44.dp)
                 )
@@ -1084,7 +1088,7 @@ private fun BatchQuickActionButton(
                     modifier = Modifier.size(14.dp)
                 )
             }
-            Text(
+            if (!minimalActionButtons("batch")) Text(
                 text = description,
                 style = MaterialTheme.typography.labelSmall,
                 color = contentColor,

@@ -1,69 +1,61 @@
-"""Test packaged headless image support on an existing Android emulator before assembleRelease.
-Uses cached JRE build intermediates; invokes no Gradle tasks and modifies no installed apps.
+"""Smoke-test the linked Liberica image on an existing Android x86_64 emulator.
+
+Uses the manager and support build intermediates. No apps are installed.
+This checks the packaged runtime and headless image support, not the bound worker.
 """
+import lzma
 import os
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import tempfile
 import uuid
+import zipfile
 
-root = Path(__file__).resolve().parents[4]
-jdk = Path(os.environ.get("JAVA_HOME", r"C:\Program Files\Java\jdk-17"))
-sdk = Path(os.environ["ANDROID_HOME"])
-adb = sdk / "platform-tools/adb.exe"
-source = root / "app/build/tmp/prepareEmbeddedJvmX8664"
-config = (root / "app/build.gradle.kts").read_text()
-def strings(name):
-    block = config.split("val " + name + " = listOf(", 1)[1].split("\n)", 1)[0]
-    return re.findall(r'"([^"]+)"', block)
-def run(*args, **kw):
-    return subprocess.run([str(a) for a in args], check=True, **kw)
-with tempfile.TemporaryDirectory(prefix="jvm-image-", dir=root / "build") as directory:
+ROOT = Path(__file__).resolve().parents[4]
+RUNTIMES = Path(os.environ.get(
+    "UPM_RUNTIMES", ROOT.parent.parent / "UP-Manager-Runtimes" / "main-worktree"
+))
+JDK = Path(os.environ.get("JAVA_HOME", r"C:\Program Files\Java\jdk-17"))
+ADB = Path(os.environ["ANDROID_HOME"]) / "platform-tools/adb.exe"
+DEVICE = [ADB, "-s", os.environ.get("ANDROID_SERIAL", "emulator-5554")]
+ABI = "x86_64"
+runtime_output = RUNTIMES / "shared-support/build/intermediates/embeddedJvm"
+loader = ROOT / f"app/build/generated/glibcLoader/{ABI}/{ABI}/libglibc_loader.so"
+host = RUNTIMES / "revanced21-patcher-core/build/shrunk-host/revanced21-patcher-core.jar"
+
+
+def run(*args, **kwargs):
+    return subprocess.run(list(map(str, args)), check=True, **kwargs)
+
+
+with tempfile.TemporaryDirectory(prefix="liberica-image-", dir=ROOT / "build") as directory:
     work = Path(directory)
-    linked = work / "linked"
-    run(jdk / "bin/jlink.exe", "--module-path", source / "jmods",
-        "--add-modules", ",".join(strings("embeddedJvmModules")),
-        "--disable-plugin", "generate-jli-classes", "--strip-debug", "--no-header-files",
-        "--no-man-pages", "--output", linked)
-    for pattern in strings("embeddedJvmFiles"):
-        for file in (source / "build").glob(pattern):
-            target = linked / file.relative_to(source / "build")
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if file.is_dir():
-                shutil.copytree(file, target, dirs_exist_ok=True)
-            else:
-                shutil.copyfile(file, target)
-    run(jdk / "bin/javac.exe", "-d", work, root / "app/src/test/fixtures/jvm-image/ImageProbe.java")
-    ndk = sdk / "ndk/27.0.12077973/toolchains/llvm/prebuilt/windows-x86_64"
-    launcher = work / "image-launcher"
-    run(ndk / "bin/clang++.exe", "--target=x86_64-linux-android26",
-        "-static-libstdc++", "-std=c++17",
-        root / "app/src/test/fixtures/jvm-image/JvmImageLauncher.cpp", "-ldl", "-o", launcher)
-    installation = (root / "app/src/main/java/app/universal/patch/manager/patcher/runtime/jvm/JvmInstallation.kt").read_text()
-    preloads = re.findall(r'"([^"]+)"', installation.split("val PRELOAD = listOf(", 1)[1].split(")", 1)[0])
-    host = root / "revanced21-patcher-core/build/shrunk-host/revanced21-patcher-core.jar"
-    if not host.is_file():
-        raise RuntimeError("Assemble the v21 runtime once to supply the Apktool classpath")
-    shutil.copyfile(host, work / "host.jar")
-    remote = "/data/local/tmp/upm-jvm-image-" + uuid.uuid4().hex
-    device = [adb, "-s", "emulator-5554"]
+    runtime = work / "jre"
+    with lzma.open(runtime_output / f"{ABI}.zip.xz") as compressed, zipfile.ZipFile(compressed) as archive:
+        archive.extractall(runtime)
+    shutil.copyfile(runtime_output / f"{ABI}.modules", runtime / "lib/modules")
+    run(JDK / "bin/javac.exe", "--release", "17", "-d", work,
+        ROOT / "app/src/test/fixtures/jvm-image/ImageProbe.java")
+
+    remote = "/data/local/tmp/upm-liberica-" + uuid.uuid4().hex
     try:
-        run(*device, "shell", "mkdir", "-p", remote)
-        run(*device, "push", linked, remote + "/jre")
-        run(*device, "push", work / "ImageProbe.class", remote + "/ImageProbe.class")
-        run(*device, "push", work / "host.jar", remote + "/host.jar")
-        run(*device, "push", launcher, remote + "/image-launcher")
-        run(*device, "shell", "chmod", "755", remote + "/image-launcher")
-        command = device + ["shell", "env", "JAVA_HOME=" + remote + "/jre", "LD_LIBRARY_PATH=",
-                            remote + "/image-launcher", remote + "/jre", remote + ":" + remote + "/host.jar"]
-        baseline = subprocess.run([str(a) for a in command + preloads[:4]], capture_output=True, text=True, timeout=90)
-        if baseline.returncode == 0 or "libfreetype.so" not in baseline.stderr:
-            raise AssertionError("Expected missing freetype dependency without image preloads:\n" + baseline.stdout + baseline.stderr)
-        print("PASS: reproduced missing freetype dependency with original app preload list")
-        run(*command, *preloads, timeout=90)
+        run(*DEVICE, "shell", "mkdir", "-p", remote)
+        run(*DEVICE, "push", runtime, remote + "/jre")
+        run(*DEVICE, "push", work / "ImageProbe.class", remote + "/ImageProbe.class")
+        run(*DEVICE, "push", host, remote + "/host.jar")
+        run(*DEVICE, "push", loader, remote + "/loader")
+        java = remote + "/jre/bin/java"
+        run(*DEVICE, "shell", "chmod", "700", remote + "/loader", java)
+        libraries = ":".join(remote + "/jre/" + name for name in ("glibc", "lib", "lib/server"))
+        command = [*DEVICE, "shell", remote + "/loader", "--library-path", libraries, java]
+        # Check the version and image support in one startup. The probe needs only a
+        # small heap and baseline JIT, which limits contention on a busy emulator.
+        run(*command, "-showversion", "-Xms64m", "-Xmx512m", "-XX:+UseSerialGC",
+            "-XX:TieredStopAtLevel=1", "-Djava.awt.headless=true", "-cp",
+            remote + ":" + remote + "/host.jar", "ImageProbe", timeout=180)
     finally:
-        resolved = subprocess.check_output([str(a) for a in device + ["shell", "readlink", "-f", remote]], text=True).strip()
-        if resolved == remote and remote.startswith("/data/local/tmp/upm-jvm-image-"):
-            run(*device, "shell", "rm", "-rf", remote)
+        resolved = subprocess.check_output(list(map(str, [*DEVICE, "shell", "readlink", "-f", remote])),
+                                          text=True).strip()
+        if resolved == remote and remote.startswith("/data/local/tmp/upm-liberica-"):
+            run(*DEVICE, "shell", "rm", "-rf", remote)

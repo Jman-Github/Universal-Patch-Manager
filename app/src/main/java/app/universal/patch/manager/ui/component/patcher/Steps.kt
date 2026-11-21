@@ -46,8 +46,8 @@ import app.universal.patch.manager.ui.model.Step
 import app.universal.patch.manager.ui.model.StepCategory
 import app.universal.patch.manager.ui.model.StepDetail
 import app.universal.patch.manager.ui.model.StepLog
-import app.universal.patch.manager.ui.model.isComponentCountProgress
-import java.util.Locale
+import app.universal.patch.manager.ui.model.displayProgress
+import app.universal.patch.manager.ui.model.asDisplayProgress
 import kotlin.math.floor
 
 // Credits: https://github.com/Aliucord/AliucordManager/blob/main/app/src/main/kotlin/com/aliucord/manager/ui/component/installer/InstallGroup.kt
@@ -278,7 +278,7 @@ private fun ExpandableSubStep(
                             isLast = index == subSteps.lastIndex,
                         )
                     } else {
-                        val (subProgress, subProgressText) = detail.progress.asDisplayProgress(isComponentCountProgress(detail.title))
+                        val (subProgress, subProgressText) = detail.displayProgress()
 
                         SubStep(
                             name = detail.title,
@@ -310,7 +310,7 @@ private fun ExpandableDetailSubStep(
     var expanded by rememberSaveable(detail.title) { mutableStateOf(false) }
     var autoCollapsed by rememberSaveable("${detail.title}-auto") { mutableStateOf(false) }
     val completedChildren = detail.children.count { it.state == State.COMPLETED || it.skipped }
-    val (progress, progressText) = detail.progress.asDisplayProgress(isComponentCountProgress(detail.title))
+    val (progress, progressText) = detail.displayProgress()
 
     LaunchedEffect(detail.state, detail.children.size) {
         if (detail.state != State.COMPLETED) {
@@ -393,7 +393,7 @@ private fun ExpandableDetailSubStep(
                 modifier = Modifier.padding(start = 18.dp, top = 4.dp)
             ) {
                 detail.children.forEachIndexed { index, child ->
-                    val (childProgress, childProgressText) = child.progress.asDisplayProgress(isComponentCountProgress(child.title))
+                    val (childProgress, childProgressText) = child.displayProgress()
                     MiniSubStep(
                         name = child.title,
                         state = child.state,
@@ -600,16 +600,3 @@ fun StepIcon(state: State, progress: Float? = null, size: Dp, partialFailure: Bo
         }
     }
 }
-
-private val Long.megaBytes get() = "%.1f".format(locale = Locale.ROOT, toDouble() / 1_000_000)
-
-private fun Pair<Long, Long?>?.asDisplayProgress(componentCount: Boolean = false): Pair<Float?, String?> =
-    this?.let { (current, total) ->
-        val fraction = total?.takeIf { it > 0L }?.let { (current.toFloat() / it).coerceIn(0f, 1f) }
-        val text = if (componentCount) {
-            if (total != null && total > 0L) "$current/$total" else "$current"
-        } else {
-            if (total != null && total > 0L) "${current.megaBytes}/${total.megaBytes} MB" else "${current.megaBytes} MB"
-        }
-        fraction to text
-    } ?: (null to null)

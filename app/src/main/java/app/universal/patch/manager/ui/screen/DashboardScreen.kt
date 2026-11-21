@@ -2602,138 +2602,160 @@ fun DashboardScreen(
         floatingActionButton = {
             when (uiPage) {
                 DashboardPage.BUNDLES -> {
-                    val enterExitSpec = tween<IntOffset>(durationMillis = 220, easing = FastOutSlowInEasing)
-                    val sizeSpec = tween<IntSize>(durationMillis = 220, easing = FastOutSlowInEasing)
-                    Row(
-                        modifier = Modifier
-                            .height(56.dp)
-                            .offset(x = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        AnimatedVisibility(
-                            visible = !bundlesFabCollapsed,
-                            enter = fadeIn(animationSpec = tween(180)) +
-                                expandHorizontally(expandFrom = Alignment.End, animationSpec = sizeSpec) +
-                                slideInHorizontally(
-                                    initialOffsetX = { it / 2 },
-                                    animationSpec = enterExitSpec
-                                ),
-                            exit = fadeOut(animationSpec = tween(180)) +
-                                shrinkHorizontally(shrinkTowards = Alignment.End, animationSpec = sizeSpec) +
-                                slideOutHorizontally(
-                                    targetOffsetX = { it / 2 },
-                                    animationSpec = enterExitSpec
-                                )
+                    val storedOrder by prefs.dashboardBundlesActionOrder.getAsState()
+                    val hiddenButtons by prefs.dashboardHiddenActions.getAsState()
+                    val visibleButtons = app.universal.patch.manager.ui.model.dashboardActionOrder(
+                        storedOrder, listOf("discovery", "add"), hiddenButtons, "bundles"
+                    )
+                    if (visibleButtons.isNotEmpty()) {
+                        val enterExitSpec = tween<IntOffset>(durationMillis = 220, easing = FastOutSlowInEasing)
+                        val sizeSpec = tween<IntSize>(durationMillis = 220, easing = FastOutSlowInEasing)
+                        Row(
+                            modifier = Modifier
+                                .height(56.dp)
+                                .offset(x = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                HapticFloatingActionButton(
-                                    onClick = onBundleDiscoveryClick
-                                ) {
-                                    Icon(
-                                        Icons.Outlined.Public,
-                                        stringResource(R.string.patch_bundle_discovery_title)
+                            AnimatedVisibility(
+                                visible = !bundlesFabCollapsed,
+                                enter = fadeIn(animationSpec = tween(180)) +
+                                    expandHorizontally(expandFrom = Alignment.End, animationSpec = sizeSpec) +
+                                    slideInHorizontally(
+                                        initialOffsetX = { it / 2 },
+                                        animationSpec = enterExitSpec
+                                    ),
+                                exit = fadeOut(animationSpec = tween(180)) +
+                                    shrinkHorizontally(shrinkTowards = Alignment.End, animationSpec = sizeSpec) +
+                                    slideOutHorizontally(
+                                        targetOffsetX = { it / 2 },
+                                        animationSpec = enterExitSpec
                                     )
-                                }
-                                HapticFloatingActionButton(
-                                    onClick = {
-                                        vm.cancelSourceSelection()
-                                        installedAppsViewModel.clearSelection()
-                                        patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
-                                        showAddBundleDialog = true
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    visibleButtons.forEach { button ->
+                                        when (button) {
+                                            "discovery" -> HapticFloatingActionButton(
+                                                onClick = onBundleDiscoveryClick
+                                            ) {
+                                                Icon(
+                                                    Icons.Outlined.Public,
+                                                    stringResource(R.string.patch_bundle_discovery_title)
+                                                )
+                                            }
+                                            "add" -> HapticFloatingActionButton(
+                                                onClick = {
+                                                    vm.cancelSourceSelection()
+                                                    installedAppsViewModel.clearSelection()
+                                                    patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+                                                    showAddBundleDialog = true
+                                                }
+                                            ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
+                                        }
                                     }
-                                ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
-                            }
-                        }
-                        BundleFabHandle(
-                            collapsed = bundlesFabCollapsed,
-                            onToggle = {
-                                composableScope.launch {
-                                    prefs.dashboardBundlesFabCollapsed.update(!bundlesFabCollapsed)
                                 }
                             }
-                        )
+                            BundleFabHandle(
+                                collapsed = bundlesFabCollapsed,
+                                onToggle = {
+                                    composableScope.launch {
+                                        prefs.dashboardBundlesFabCollapsed.update(!bundlesFabCollapsed)
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
 
                 DashboardPage.DASHBOARD -> {
-                    val enterExitSpec = tween<IntOffset>(durationMillis = 220, easing = FastOutSlowInEasing)
-                    val sizeSpec = tween<IntSize>(durationMillis = 220, easing = FastOutSlowInEasing)
-                    Row(
-                        modifier = Modifier
-                            .height(56.dp)
-                            .offset(x = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        AnimatedVisibility(
-                            visible = !appsFabCollapsed,
-                            enter = fadeIn(animationSpec = tween(180)) +
-                                expandHorizontally(expandFrom = Alignment.End, animationSpec = sizeSpec) +
-                                slideInHorizontally(
-                                    initialOffsetX = { it / 2 },
-                                    animationSpec = enterExitSpec
-                                ),
-                            exit = fadeOut(animationSpec = tween(180)) +
-                                shrinkHorizontally(shrinkTowards = Alignment.End, animationSpec = sizeSpec) +
-                                slideOutHorizontally(
-                                    targetOffsetX = { it / 2 },
-                                    animationSpec = enterExitSpec
-                                )
+                    val storedOrder by prefs.dashboardAppsActionOrder.getAsState()
+                    val hiddenButtons by prefs.dashboardHiddenActions.getAsState()
+                    val visibleButtons = app.universal.patch.manager.ui.model.dashboardActionOrder(
+                        storedOrder, listOf("storage", "add", "batch"), hiddenButtons, "apps"
+                    )
+                    if (visibleButtons.isNotEmpty()) {
+                        val enterExitSpec = tween<IntOffset>(durationMillis = 220, easing = FastOutSlowInEasing)
+                        val sizeSpec = tween<IntSize>(durationMillis = 220, easing = FastOutSlowInEasing)
+                        Row(
+                            modifier = Modifier
+                                .height(56.dp)
+                                .offset(x = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                HapticFloatingActionButton(
-                                    onClick = { attemptAppInput(openStoragePicker) },
-                                    enabled = appInputEnabled,
-                                    containerColor = if (appInputEnabled) {
-                                        FloatingActionButtonDefaults.containerColor
-                                    } else {
-                                        disabledAppInputFabColor
-                                    }
-                                ) {
-                                    Icon(Icons.Default.Storage, stringResource(R.string.select_from_storage))
-                                }
-                                HapticFloatingActionButton(
-                                    onClick = { attemptAppInput(onAppSelectorClick) },
-                                    enabled = appInputEnabled,
-                                    containerColor = if (appInputEnabled) {
-                                        FloatingActionButtonDefaults.containerColor
-                                    } else {
-                                        disabledAppInputFabColor
-                                    }
-                                ) {
-                                    Icon(Icons.Default.Add, stringResource(R.string.add))
-                                }
-                                HapticFloatingActionButton(
-                                    onClick = { attemptAppInput(onBatchQueueClick) },
-                                    enabled = appInputEnabled,
-                                    containerColor = if (appInputEnabled) {
-                                        FloatingActionButtonDefaults.containerColor
-                                    } else {
-                                        disabledAppInputFabColor
-                                    }
-                                ) {
-                                    Icon(
-                                        Icons.AutoMirrored.Outlined.PlaylistPlay,
-                                        stringResource(R.string.batch_queue_create)
+                            AnimatedVisibility(
+                                visible = !appsFabCollapsed,
+                                enter = fadeIn(animationSpec = tween(180)) +
+                                    expandHorizontally(expandFrom = Alignment.End, animationSpec = sizeSpec) +
+                                    slideInHorizontally(
+                                        initialOffsetX = { it / 2 },
+                                        animationSpec = enterExitSpec
+                                    ),
+                                exit = fadeOut(animationSpec = tween(180)) +
+                                    shrinkHorizontally(shrinkTowards = Alignment.End, animationSpec = sizeSpec) +
+                                    slideOutHorizontally(
+                                        targetOffsetX = { it / 2 },
+                                        animationSpec = enterExitSpec
                                     )
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    visibleButtons.forEach { button ->
+                                        when (button) {
+                                            "storage" -> HapticFloatingActionButton(
+                                                onClick = { attemptAppInput(openStoragePicker) },
+                                                enabled = appInputEnabled,
+                                                containerColor = if (appInputEnabled) {
+                                                    FloatingActionButtonDefaults.containerColor
+                                                } else {
+                                                    disabledAppInputFabColor
+                                                }
+                                            ) {
+                                                Icon(Icons.Default.Storage, stringResource(R.string.select_from_storage))
+                                            }
+                                            "add" -> HapticFloatingActionButton(
+                                                onClick = { attemptAppInput(onAppSelectorClick) },
+                                                enabled = appInputEnabled,
+                                                containerColor = if (appInputEnabled) {
+                                                    FloatingActionButtonDefaults.containerColor
+                                                } else {
+                                                    disabledAppInputFabColor
+                                                }
+                                            ) {
+                                                Icon(Icons.Default.Add, stringResource(R.string.add))
+                                            }
+                                            "batch" -> HapticFloatingActionButton(
+                                                onClick = { attemptAppInput(onBatchQueueClick) },
+                                                enabled = appInputEnabled,
+                                                containerColor = if (appInputEnabled) {
+                                                    FloatingActionButtonDefaults.containerColor
+                                                } else {
+                                                    disabledAppInputFabColor
+                                                }
+                                            ) {
+                                                Icon(
+                                                    Icons.AutoMirrored.Outlined.PlaylistPlay,
+                                                    stringResource(R.string.batch_queue_create)
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
+                            BundleFabHandle(
+                                collapsed = appsFabCollapsed,
+                                onToggle = {
+                                    composableScope.launch {
+                                        prefs.dashboardAppsFabCollapsed.update(!appsFabCollapsed)
+                                    }
+                                }
+                            )
                         }
-                        BundleFabHandle(
-                            collapsed = appsFabCollapsed,
-                            onToggle = {
-                                composableScope.launch {
-                                    prefs.dashboardAppsFabCollapsed.update(!appsFabCollapsed)
-                                }
-                            }
-                        )
                     }
                 }
 

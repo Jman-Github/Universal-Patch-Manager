@@ -679,18 +679,25 @@ class DownloadsViewModel(
         downloaderPluginRepository.acknowledgeAllNewPlugins()
     }
 
+    suspend fun pluginSourceApk(id: String) = downloaderPluginRepository.getManagedSourceApk(id)
+
     fun importPluginSource(url: String) = viewModelScope.launch {
+        importPluginSourceResult(url)
+    }
+
+    suspend fun importPluginSourceResult(url: String): Boolean {
+        if (remoteSourceBusyState != null) return false
         remoteSourceBusyState = RemoteSourceBusyState.Importing
-        runCatching {
+        return try {
             downloaderPluginRepository.importSourcesFromUrl(url)
-        }.onFailure {
-            appContext.toast(
-                appContext.getString(
-                    R.string.downloader_replace_fail,
-                    it.simpleMessage().orEmpty()
-                )
-            )
-        }.also {
+            true
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            appContext.toast(appContext.getString(
+                R.string.downloader_replace_fail, error.simpleMessage().orEmpty()))
+            false
+        } finally {
             remoteSourceBusyState = null
         }
     }

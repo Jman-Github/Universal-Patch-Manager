@@ -47,7 +47,7 @@ else
   APK_DIR="app/build/outputs/apk/release"
 fi
 
-run_gradle -Pversion="$VERSION" "$MANAGER_TASK" :revanced.v21-runtime-plugin:assembleRelease :revanced.v22-runtime-plugin:assembleRelease
+run_gradle -Pversion="$VERSION" "$MANAGER_TASK"
 
 rm -rf release-assets
 mkdir -p release-assets
@@ -70,22 +70,9 @@ for apk in "${EXPECTED_MANAGER_APKS[@]}"; do
   cp "$src" release-assets/
 done
 
-PLUGIN="revanced.v21-runtime-plugin/build/outputs/apk/release/revanced.v21-plugin.apk"
-if [[ ! -f "$PLUGIN" ]]; then
-  echo "Missing expected runtime plugin APK: $PLUGIN" >&2
-  exit 1
-fi
-cp "$PLUGIN" release-assets/
-V22_PLUGIN="revanced.v22-runtime-plugin/build/outputs/apk/release/revanced.v22-plugin.apk"
-if [[ ! -f "$V22_PLUGIN" ]]; then
-  echo "Missing expected runtime plugin APK: $V22_PLUGIN" >&2
-  exit 1
-fi
-cp "$V22_PLUGIN" release-assets/
-
 count="$(find release-assets -maxdepth 1 -type f -name '*.apk' | wc -l | tr -d ' ')"
-if [[ "$count" != "7" ]]; then
-  echo "Expected 7 release APKs, found $count" >&2
+if [[ "$count" != "5" ]]; then
+  echo "Expected 5 release APKs, found $count" >&2
   find release-assets -maxdepth 1 -type f -print
   exit 1
 fi

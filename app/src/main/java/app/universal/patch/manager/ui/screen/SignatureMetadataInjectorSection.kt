@@ -13,7 +13,7 @@ import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.lazy.LazyColumn
+import app.universal.patch.manager.ui.component.LazyColumnWithScrollbar
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -1350,7 +1350,7 @@ private fun SignatureMetadataAppPickerDialog(
                 )
             }
         ) { padding ->
-            LazyColumn(
+            LazyColumnWithScrollbar(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)

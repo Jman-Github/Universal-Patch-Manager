@@ -44,6 +44,17 @@ class ReseamProgressFractionTest {
         assertTrue(fractions.last() < 1f)
     }
 
+    @Test fun strippingUsesItsOwnShareAndFinalizingCannotRegress() {
+        val titles = listOf("Writing patched APKs", "Preparing unsigned APKs", "Stripping native libraries", "Finalizing output")
+        val fractions = titles.flatMap { title -> listOf(0L, 1L, 2L).map { current ->
+            reseamStageFraction(ProgressEvent.Progress(StepId.WriteAPK, current, 2, title, titles), emptyList())!!
+        } }
+        assertTrue(fractions.zipWithNext().all { (a, b) -> b >= a })
+        assertEquals(0.5f, fractions[5], 0.00001f)
+        assertEquals(0.75f, fractions[8], 0.00001f)
+        assertTrue(fractions.last() < 1f)
+    }
+
     @Test fun unavailableTotalsAndUnrelatedEventsDoNotInventProgress() {
         assertEquals(0f, reseamStageFraction(
             ProgressEvent.Progress(StepId.PrepareSplitApk, 0, 0, "Extracting split APKs"), emptyList())!!, 0f)

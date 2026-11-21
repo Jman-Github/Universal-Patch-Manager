@@ -1,5 +1,11 @@
 package app.universal.patch.manager.domain.repository
 
+import app.universal.patch.manager.network.downloader.toDownloaderMainName
+import app.universal.patch.manager.util.DownloaderUpdateNotifications
+import app.universal.patch.manager.util.PendingDownloaderUpdate
+import app.universal.patch.manager.network.downloader.DownloaderCatalogItem
+import app.universal.patch.manager.network.runtime.RuntimeDownloadProgress
+import app.universal.patch.manager.network.runtime.RuntimeDownloadStage
 import android.app.Application
 import android.content.Context
 import android.content.ContextWrapper
@@ -44,12 +50,16 @@ import app.revanced.manager.plugin.downloader.Scope as RevancedLegacyScope
 import app.universal.patch.manager.downloader.DownloaderBuilder as ModernDownloaderBuilder
 import app.universal.patch.manager.downloader.DownloaderHostApi as ModernDownloaderHostApi
 import app.universal.patch.manager.downloader.Scope as ModernScope
+import app.universal.patch.manager.downloader.toDownloaderDisplayName
 import app.universal.patch.manager.util.PM
 import app.universal.patch.manager.util.DownloadProgressNotifier
 import app.universal.patch.manager.util.tag
 import dalvik.system.PathClassLoader
 import io.ktor.client.request.url
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
@@ -244,6 +254,19 @@ class DownloaderPluginRepository(
             it.packageName to (it.versionName to it.applicationInfo?.sourceDir)
         }
         _hasLoadedInitialState.value = true
+        val notificationStorage = app.getSharedPreferences("downloader-update-notifications", Context.MODE_PRIVATE)
+        val notices = runCatching {
+            json.decodeFromString<List<PendingDownloaderUpdate>>(
+                notificationStorage.getString("pending", "[]") ?: "[]")
+        }.getOrDefault(emptyList()).filter { notice ->
+            managedSources[notice.sourceId]?.entry?.let { entry ->
+                !entry.autoUpdate && entry.versionKey == notice.installedVersionKey &&
+                    (if (entry.latest) null else entry.prerelease) == notice.prerelease
+            } == true
+        }
+        notificationStorage.edit().putString("pending", json.encodeToString(notices)).apply()
+        DownloaderUpdateNotifications.showAvailable(app, notices, onlyIfActive = true)
+
 
         // Android can briefly omit a package while replacing its APK. Only a confirmed
         // removal or explicit revocation should discard the stored signer trust.
@@ -295,29 +318,41 @@ class DownloaderPluginRepository(
         false
     }
 
-    suspend fun importSourcesFromUrl(rawUrl: String): Int = withContext(Dispatchers.IO) {
-        val importRequest = parseImportUrl(rawUrl)
-        val importedEntries = importSourceEntries(importRequest)
-        reload()
-        importedEntries.size
+    suspend fun importSourcesFromUrl(
+        rawUrl: String,
+        onProgress: ((RuntimeDownloadProgress) -> Unit)? = null
+    ): Int = updateCheckMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val importRequest = parseImportUrl(rawUrl)
+            val importedEntries = importSourceEntries(importRequest, onProgress)
+            reload()
+            importedEntries.size
+        }
     }
 
-    suspend fun updateSource(id: String) = withContext(Dispatchers.IO) {
-        val entries = readSourceEntries().toMutableList()
-        val index = entries.indexOfFirst { it.id == id }
-        if (index == -1) return@withContext
+    suspend fun updateSource(
+        id: String,
+        onProgress: ((RuntimeDownloadProgress) -> Unit)? = null
+    ) = updateCheckMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val entries = readSourceEntries().toMutableList()
+            val index = entries.indexOfFirst { it.id == id }
+            if (index == -1) return@withContext
 
-        val updatedEntry = updateEntry(entries[index], force = true)
-        entries[index] = updatedEntry
-        writeSourceEntries(entries)
-        reload()
+            val updatedEntry = updateEntry(entries[index], force = true, onProgress = onProgress)
+            entries[index] = updatedEntry
+            writeSourceEntries(entries)
+            reload()
+        }
     }
 
-    suspend fun removeSource(id: String) = withContext(Dispatchers.IO) {
-        val entries = readSourceEntries().filterNot { it.id == id }
-        managedSourceDirectory(id).deleteRecursively()
-        writeSourceEntries(entries)
-        reload()
+    suspend fun removeSource(id: String) = updateCheckMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val entries = readSourceEntries().filterNot { it.id == id }
+            managedSourceDirectory(id).deleteRecursively()
+            writeSourceEntries(entries)
+            reload()
+        }
     }
 
     suspend fun getManagedSourceApk(id: String): File? = withContext(Dispatchers.IO) {
@@ -325,14 +360,16 @@ class DownloaderPluginRepository(
         sourceFile(entry).takeIf(File::isFile)
     }
 
-    suspend fun removeSources(ids: Set<String>) = withContext(Dispatchers.IO) {
-        if (ids.isEmpty()) return@withContext
-        val entries = readSourceEntries()
-        entries
-            .filter { it.id in ids }
-            .forEach { managedSourceDirectory(it.id).deleteRecursively() }
-        writeSourceEntries(entries.filterNot { it.id in ids })
-        reload()
+    suspend fun removeSources(ids: Set<String>) = updateCheckMutex.withLock {
+        withContext(Dispatchers.IO) {
+            if (ids.isEmpty()) return@withContext
+            val entries = readSourceEntries()
+            entries
+                .filter { it.id in ids }
+                .forEach { managedSourceDirectory(it.id).deleteRecursively() }
+            writeSourceEntries(entries.filterNot { it.id in ids })
+            reload()
+        }
     }
 
     suspend fun trustApkDownloadHelper(
@@ -361,97 +398,224 @@ class DownloaderPluginRepository(
         writeTrustedApkDownloadHelpers(readTrustedApkDownloadHelpers() - packageName)
     }
 
-    suspend fun trustSource(id: String) = withContext(Dispatchers.IO) {
-        val entries = readSourceEntries().toMutableList()
-        val index = entries.indexOfFirst { it.id == id }
-        if (index == -1) return@withContext
-
-        val entry = entries[index]
-        val file = sourceFile(entry)
-        val packageInfo = readArchivePackageInfo(file)
-        val signatureHex = archiveSignatureHex(packageInfo)
-        entries[index] = entry.copy(
-            trustedSignatureHex = signatureHex,
-            trustedAsHelperApp = ApkDownloadHelperContract.isHelperArchive(file, packageInfo)
-        )
-        writeSourceEntries(entries)
-        reload()
-    }
-
-    suspend fun revokeTrustForSource(id: String) = withContext(Dispatchers.IO) {
-        val entries = readSourceEntries().toMutableList()
-        val index = entries.indexOfFirst { it.id == id }
-        if (index == -1) return@withContext
-
-        val entry = entries[index]
-        if (entry.trustedSignatureHex == null) return@withContext
-
-        entries[index] = entry.copy(
-            trustedSignatureHex = null,
-            trustedAsHelperApp = false
-        )
-        writeSourceEntries(entries)
-        reload()
-    }
-
-    suspend fun setSourceAutoUpdate(id: String, enabled: Boolean) = withContext(Dispatchers.IO) {
-        val entries = readSourceEntries().map { entry ->
-            if (entry.id == id) entry.copy(autoUpdate = enabled) else entry
-        }
-        writeSourceEntries(entries)
-        reload()
-    }
-
-    suspend fun setSourceLatest(id: String, enabled: Boolean) = withContext(Dispatchers.IO) {
-        val entries = readSourceEntries().map { entry ->
-            if (entry.id == id) {
-                entry.copy(
-                    latest = enabled,
-                    prerelease = if (enabled) false else entry.prerelease
-                )
-            } else {
-                entry
-            }
-        }
-        writeSourceEntries(entries)
-        reload()
-    }
-
-    suspend fun setSourcePrerelease(id: String, enabled: Boolean) = withContext(Dispatchers.IO) {
-        val entries = readSourceEntries().map { entry ->
-            if (entry.id == id) entry.copy(prerelease = enabled) else entry
-        }
-        writeSourceEntries(entries)
-        reload()
-    }
-
-    suspend fun updateCheck() {
-        if (!networkInfo.isConnected()) return
-        if (!prefs.allowMeteredUpdates.get() && !networkInfo.isUnmetered()) return
-
-        val entries = withContext(Dispatchers.IO) { readSourceEntries() }
-        if (entries.none { it.autoUpdate && it.trustedSignatureHex != null }) return
-        val currentSourceStates = sourceStates.value
-
-        val updatedEntries = buildList {
-            entries.forEach { entry ->
-                val updateMode = shouldAutoUpdate(entry, currentSourceStates[entry.id]?.state)
-                if (updateMode == SourceUpdateMode.SKIP) {
-                    add(entry)
-                    return@forEach
-                }
-
-                val updated = runCatching { updateEntry(entry, force = updateMode == SourceUpdateMode.FORCE) }
-                    .onFailure { Log.e(tag, "Failed to update downloader source ${entry.repoUrl}", it) }
-                    .getOrElse { entry }
-                add(updated)
-            }
-        }
-
+    suspend fun trustSource(id: String) = updateCheckMutex.withLock {
         withContext(Dispatchers.IO) {
-            writeSourceEntries(updatedEntries)
+            val entries = readSourceEntries().toMutableList()
+            val index = entries.indexOfFirst { it.id == id }
+            if (index == -1) return@withContext
+
+            val entry = entries[index]
+            val file = sourceFile(entry)
+            val packageInfo = readArchivePackageInfo(file)
+            val signatureHex = archiveSignatureHex(packageInfo)
+            entries[index] = entry.copy(
+                trustedSignatureHex = signatureHex,
+                trustedAsHelperApp = ApkDownloadHelperContract.isHelperArchive(file, packageInfo)
+            )
+            writeSourceEntries(entries)
+            reload()
         }
+    }
+
+    suspend fun revokeTrustForSource(id: String) = updateCheckMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val entries = readSourceEntries().toMutableList()
+            val index = entries.indexOfFirst { it.id == id }
+            if (index == -1) return@withContext
+
+            val entry = entries[index]
+            if (entry.trustedSignatureHex == null) return@withContext
+
+            entries[index] = entry.copy(
+                trustedSignatureHex = null,
+                trustedAsHelperApp = false
+            )
+            writeSourceEntries(entries)
+            reload()
+        }
+    }
+
+    suspend fun setSourceAutoUpdate(id: String, enabled: Boolean) = updateCheckMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val entries = readSourceEntries().map { entry ->
+                if (entry.id == id) entry.copy(autoUpdate = enabled) else entry
+            }
+            writeSourceEntries(entries)
+            reload()
+        }
+    }
+
+    suspend fun setSourceLatest(id: String, enabled: Boolean) = updateCheckMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val entries = readSourceEntries().map { entry ->
+                if (entry.id == id) {
+                    entry.copy(
+                        latest = enabled
+                    )
+                } else {
+                    entry
+                }
+            }
+            writeSourceEntries(entries)
+            reload()
+        }
+    }
+
+    suspend fun setSourcePrerelease(id: String, enabled: Boolean) = updateCheckMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val entries = readSourceEntries().map { entry ->
+                if (entry.id == id) entry.copy(prerelease = enabled) else entry
+            }
+            writeSourceEntries(entries)
+            reload()
+        }
+    }
+
+    private val updateCheckMutex = Mutex()
+    suspend fun updateCheck() = updateCheckMutex.withLock {
+        if (!networkInfo.isConnected()) return@withLock
+        if (!prefs.allowMeteredUpdates.get() && !networkInfo.isUnmetered()) return@withLock
+        val entries = withContext(Dispatchers.IO) { readSourceEntries() }
+        val storage = app.getSharedPreferences("downloader-update-notifications", Context.MODE_PRIVATE)
+        val pending = runCatching {
+            json.decodeFromString<List<PendingDownloaderUpdate>>(
+                storage.getString("pending", "[]") ?: "[]")
+        }.getOrDefault(emptyList()).associateByTo(linkedMapOf()) { it.sourceId }
+        pending.keys.retainAll(entries.filter { !it.autoUpdate }.map { it.id }.toSet())
+        val completed = mutableListOf<PendingDownloaderUpdate>()
+        for (entry in entries) {
+            if (!entry.repoUrl.startsWith("https://")) continue
+            try {
+                val release = latestReleaseFor(entry.repoUrl, if (entry.latest) null else entry.prerelease)
+                val asset = release.assets.filter(::isSupportedDownloaderAsset).firstOrNull {
+                    canonicalAssetSelector(normalizeAssetSelector(it.name)) == canonicalAssetSelector(entry.assetSelector)
+                }
+                if (asset == null) {
+                    pending.remove(entry.id)
+                    continue
+                }
+                val key = releaseVersionKey(release, asset)
+                if (key == entry.versionKey && sourceFile(entry).exists()) {
+                    pending.remove(entry.id)
+                    continue
+                }
+                val notice = PendingDownloaderUpdate(
+                    entry.id, entry.versionKey, if (entry.latest) null else entry.prerelease,
+                    sourceStates.value[entry.id]?.name ?: entry.assetSelector, release.tagName)
+                val mode = shouldAutoUpdate(entry, sourceStates.value[entry.id]?.state)
+                if (mode != SourceUpdateMode.SKIP) {
+                    val updated = updateEntry(entry, force = mode == SourceUpdateMode.FORCE, selectedRelease = release)
+                    withContext(Dispatchers.IO) {
+                        writeSourceEntries(readSourceEntries().map { if (it == entry) updated else it })
+                    }
+                    pending.remove(entry.id)
+                    completed.add(notice)
+                } else if (!entry.autoUpdate) pending[entry.id] = notice
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.e(tag, "Failed to check downloader source " + entry.repoUrl, error)
+            }
+        }
+        storage.edit().putString("pending", json.encodeToString(pending.values.toList())).apply()
+        DownloaderUpdateNotifications.showAvailable(app, pending.values.toList())
+        DownloaderUpdateNotifications.showCompleted(app, completed)
         reload()
+    }
+    suspend fun importSourceFile(uri: Uri) = updateCheckMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val file = File.createTempFile("downloader-import-", ".apk", app.cacheDir)
+            try {
+                requireNotNull(app.contentResolver.openInputStream(uri)).use { input ->
+                    file.outputStream().use { output -> input.copyTo(output) }
+                }
+                val info = readArchivePackageInfo(file)
+                val entries = readSourceEntries()
+                val existing = entries.firstOrNull {
+                    it.repoUrl.isBlank() && it.assetSelector == info.packageName
+                }
+                val entry = existing ?: DownloaderPluginSourceEntry(
+                    id = UUID.randomUUID().toString(), repoUrl = "",
+                    assetSelector = info.packageName, autoUpdate = false)
+                val target = sourceFile(entry)
+                check(target.parentFile?.let { it.mkdirs() || it.isDirectory } == true)
+                currentCoroutineContext().ensureActive()
+                val backup = File.createTempFile("downloader-backup-", ".apk", app.cacheDir)
+                val existed = target.isFile
+                var replaced = false
+                var retainBackup = false
+                withContext(NonCancellable) {
+                    try {
+                        if (existed) target.copyTo(backup, overwrite = true)
+                        java.nio.file.Files.move(file.toPath(), target.toPath(),
+                            java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                        replaced = true
+                        writeSourceEntries(if (existing == null) entries + entry else entries)
+                    } catch (failure: Throwable) {
+                        if (replaced) {
+                            runCatching {
+                                if (existed) java.nio.file.Files.move(backup.toPath(), target.toPath(),
+                                    java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                                    java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                                else check(target.delete() || !target.exists())
+                            }.onFailure {
+                                retainBackup = existed
+                                failure.addSuppressed(it)
+                            }
+                        }
+                        throw failure
+                    } finally {
+                        if (!retainBackup) backup.delete()
+                    }
+                }
+                reload()
+            } finally {
+                file.delete()
+            }
+        }
+    }
+
+    suspend fun catalogAssets(
+        onProviderFailure: ((String) -> Unit)? = null
+    ): List<DownloaderCatalogItem> = withContext(Dispatchers.IO) {
+        var failure: Exception? = null
+        val assets = listOf("https://github.com/brosssh/revanced-manager-downloaders",
+            "https://github.com/rushiranpise/helper-for-morphe").flatMap { repo ->
+            try {
+                val release = latestImportReleaseFor(repo)
+                release.assets.filter(::isSupportedDownloaderAsset).map {
+                    val selector = canonicalAssetSelector(normalizeAssetSelector(it.name))
+                    DownloaderCatalogItem(
+                        id = "$repo|$selector",
+                        name = selector.toReadableSourceName().toDownloaderMainName(),
+                        version = release.tagName,
+                        repoUrl = repo,
+                        assetSelector = selector,
+                        downloadUrl = it.downloadUrl,
+                        versionKey = releaseVersionKey(release, it),
+                        size = it.size
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                failure = error
+                onProviderFailure?.invoke(repo)
+                Log.w(tag, "Failed to load downloader catalog from " + repo, error)
+                emptyList()
+            }
+        }
+        if (assets.isEmpty()) failure?.let { throw it }
+        assets
+    }
+
+    fun catalogSource(
+        item: DownloaderCatalogItem,
+        sources: Map<String, DownloaderPluginSourceState> = sourceStates.value
+    ): DownloaderPluginSourceState? = sources.values.firstOrNull {
+        it.repoUrl == item.repoUrl &&
+            canonicalAssetSelector(it.entry.assetSelector) == item.assetSelector
     }
 
     fun unwrapParceledData(data: ParceledDownloaderData): Pair<LoadedDownloaderPlugin, Parcelable> {
@@ -675,7 +839,7 @@ class DownloaderPluginRepository(
     ): ResolvedPluginPackage {
         val classNames = resolveClassNames(packageInfo, pluginContext)
         val classLoader = PathClassLoader(packageInfo.applicationInfo!!.sourceDir, app.classLoader)
-        val packageLabel = with(pm) { packageInfo.label() }
+        val packageLabel = with(pm) { packageInfo.label() }.toDownloaderDisplayName()
 
         val scopeImpl = object : LegacyScope, ModernScope, RevancedLegacyScope, RevancedModernScope {
             override val hostPackageName = app.packageName
@@ -697,7 +861,7 @@ class DownloaderPluginRepository(
             LoadedDownloaderPlugin(
                 packageName = packageInfo.packageName,
                 className = className,
-                name = downloader.resolveName(pluginContext, fallbackName),
+                name = downloader.resolveName(pluginContext, fallbackName).toDownloaderDisplayName(),
                 version = packageInfo.versionName ?: "0",
                 sourceId = sourceId,
                 getImpl = downloader.resolveGet(),
@@ -807,7 +971,8 @@ class DownloaderPluginRepository(
     }
 
     private suspend fun importSourceEntries(
-        importRequest: ImportRequest
+        importRequest: ImportRequest,
+        onProgress: ((RuntimeDownloadProgress) -> Unit)? = null
     ): List<DownloaderPluginSourceEntry> {
         val release = releaseForImport(importRequest)
         val apkAssets = release.assets.filter(::isSupportedDownloaderAsset)
@@ -850,7 +1015,7 @@ class DownloaderPluginRepository(
                 prerelease = release.prerelease,
                 versionKey = versionKey
             )
-            downloadAssetToEntry(entry, asset)
+            downloadAssetToEntry(entry, asset, onProgress)
 
             if (existingIndex >= 0) {
                 entries[existingIndex] = entry
@@ -866,9 +1031,12 @@ class DownloaderPluginRepository(
 
     private suspend fun updateEntry(
         entry: DownloaderPluginSourceEntry,
-        force: Boolean
+        force: Boolean,
+        selectedRelease: GitHubRelease? = null,
+        onProgress: ((RuntimeDownloadProgress) -> Unit)? = null
     ): DownloaderPluginSourceEntry {
-        val release = latestReleaseFor(
+        // Keep the downloaded APK and notification on the same checked release.
+        val release = selectedRelease ?: latestReleaseFor(
             repoUrl = entry.repoUrl,
             prerelease = if (entry.latest) null else entry.prerelease
         )
@@ -885,7 +1053,7 @@ class DownloaderPluginRepository(
             return entry
         }
 
-        downloadAssetToEntry(entry, asset)
+        downloadAssetToEntry(entry, asset, onProgress)
         return entry.copy(versionKey = versionKey)
     }
 
@@ -962,8 +1130,17 @@ class DownloaderPluginRepository(
 
     private suspend fun downloadAssetToEntry(
         entry: DownloaderPluginSourceEntry,
-        asset: GitHubAsset
+        asset: GitHubAsset,
+        onProgress: ((RuntimeDownloadProgress) -> Unit)? = null
     ) {
+        fun report(stage: RuntimeDownloadStage, bytes: Long = 0, total: Long? = null) {
+            onProgress?.invoke(RuntimeDownloadProgress(
+                catalogId = asset.downloadUrl,
+                name = entry.assetSelector.toReadableSourceName().toDownloaderMainName(),
+                stage = stage, bytesDownloaded = bytes, totalBytes = total
+            ))
+        }
+        report(RuntimeDownloadStage.PREPARING)
         val directory = managedSourceDirectory(entry.id)
         directory.mkdirs()
         val target = sourceFile(entry)
@@ -971,8 +1148,14 @@ class DownloaderPluginRepository(
         if (tempFile.exists()) tempFile.delete()
         val progressNotification = downloadProgressNotifier.begin(
             _sourceStates.value[entry.id]?.name?.let {
-                app.getString(R.string.downloader_download_title, it)
-            } ?: asset.name
+                app.getString(R.string.downloader_download_title, it.toDownloaderMainName())
+            } ?: app.getString(R.string.downloader_download_title, when {
+                asset.name.contains("apkcombo", true) -> "APKCombo"
+                asset.name.contains("apkmirror", true) -> "APKMirror"
+                asset.name.contains("apkpure", true) -> "APKPure"
+                asset.name.contains("play-store", true) -> "Play Store"
+                else -> entry.assetSelector.toReadableSourceName().toDownloaderMainName()
+            })
         )
 
         runCatching {
@@ -981,11 +1164,15 @@ class DownloaderPluginRepository(
                 builder = {
                     url(asset.downloadUrl)
                 },
-                onProgress = progressNotification::update
+                onProgress = { bytes, total ->
+                    progressNotification.update(bytes, total)
+                    report(RuntimeDownloadStage.DOWNLOADING, bytes, total)
+                }
             )
+            report(RuntimeDownloadStage.VERIFYING)
             val packageInfo = readArchivePackageInfo(tempFile)
             pm.getArchiveLabel(tempFile, packageInfo)?.let { name ->
-                progressNotification.updateTitle(app.getString(R.string.downloader_download_title, name))
+                progressNotification.updateTitle(app.getString(R.string.downloader_download_title, name.toDownloaderMainName()))
             }
             if (entry.trustedSignatureHex != null) {
                 when (val trust = verifyArchiveTrust(entry, packageInfo)) {
@@ -1016,6 +1203,7 @@ class DownloaderPluginRepository(
                     )
                 }
             }
+            report(RuntimeDownloadStage.FINISHING)
             if (target.exists()) target.delete()
             tempFile.copyTo(target, overwrite = true)
             ensureManagedSourceIsReadOnly(target)

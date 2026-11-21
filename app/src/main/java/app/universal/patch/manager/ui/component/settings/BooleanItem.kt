@@ -21,7 +21,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.universal.patch.manager.R
@@ -67,7 +66,7 @@ fun BooleanItem(
     enabled = enabled,
     trailingContent = {
         ExpressiveSettingsSwitch(
-            checked = value,
+            checked = enabled && value,
             onCheckedChange = onValueChange,
             enabled = enabled
         )
@@ -89,14 +88,13 @@ fun ExpandableBooleanItem(
 ) {
     val value by preference.getAsState()
     var expanded by rememberSaveable { mutableStateOf(expandForSearch) }
-    LaunchedEffect(expandForSearch) {
-        if (expandForSearch) expanded = true
+    LaunchedEffect(enabled, value, expandForSearch) {
+        if (!enabled || !value) expanded = false
+        else if (expandForSearch) expanded = true
     }
 
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .alpha(if (enabled) 1f else 0.38f)
+        modifier = modifier.fillMaxWidth()
     ) {
         ExpressiveSettingsItem(
             headlineContent = stringResource(headline),
@@ -107,7 +105,7 @@ fun ExpandableBooleanItem(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
                         onClick = { expanded = !expanded },
-                        enabled = enabled
+                        enabled = enabled && value
                     ) {
                         Icon(
                             imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
@@ -117,7 +115,7 @@ fun ExpandableBooleanItem(
                         )
                     }
                     ExpressiveSettingsSwitch(
-                        checked = value,
+                        checked = enabled && value,
                         onCheckedChange = { coroutineScope.launch { preference.update(it) } },
                         enabled = enabled
                     )
@@ -125,14 +123,13 @@ fun ExpandableBooleanItem(
             }
         )
 
-        AnimatedVisibility(visible = expanded) {
+        AnimatedVisibility(visible = expanded && enabled && value) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
-                    .alpha(if (enabled && !contentEnabled) 0.38f else 1f)
             ) {
-                expandableContent(enabled && contentEnabled)
+                expandableContent(enabled && value && contentEnabled)
             }
         }
     }
