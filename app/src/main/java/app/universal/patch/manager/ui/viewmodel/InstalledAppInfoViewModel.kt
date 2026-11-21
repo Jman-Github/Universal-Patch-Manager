@@ -71,6 +71,8 @@ import app.universal.patch.manager.util.supportsRootMount
 import app.universal.patch.manager.util.simpleMessage
 import app.universal.patch.manager.util.tag
 import app.universal.patch.manager.util.awaitUserConfirmation
+import app.universal.patch.manager.domain.installer.root.RootRestoreDowngradeTarget
+import app.universal.patch.manager.domain.storage.CacheCleanupGuard
 import app.universal.patch.manager.util.toast
 import app.universal.patch.manager.util.toastHandle
 import app.universal.patch.manager.util.versionCodeFor
@@ -1585,7 +1587,22 @@ class InstalledAppInfoViewModel(
         }
     }
 
-    fun repairRootMount() = viewModelScope.launch {
+    private var rootRestoreDowngradeTarget by mutableStateOf<RootRestoreDowngradeTarget?>(null)
+    val rootRestoreNeedsDowngradeConfirmation: Boolean get() = rootRestoreDowngradeTarget != null
+
+    fun dismissRootRestoreDowngrade() {
+        rootRestoreDowngradeTarget = null
+    }
+
+    fun confirmRootRestoreDowngrade() {
+        val target = rootRestoreDowngradeTarget ?: return
+        dismissRootRestoreDowngrade()
+        repairRootMount(confirmation = target)
+    }
+
+    fun repairRootMount() = repairRootMount(confirmation = null)
+
+    private fun repairRootMount(confirmation: RootRestoreDowngradeTarget?) = viewModelScope.launch {
         if (isRootMountBusy) return@launch
         val app = installedApp ?: return@launch
         mountOperation = MountOperation.REPAIRING
@@ -1601,20 +1618,36 @@ class InstalledAppInfoViewModel(
             }
             try {
                 val packageName = resolveDevicePackageName(app)
-                when (val recovery = rootMountCoordinator.execute(
-                    RootMountRequest(
-                        packageName,
-                        userId = android.os.Process.myUid() / 100_000,
-                        operation = RootMountOperation.RECOVER
-                    )
-                )) {
-                    is RootMountResult.Success,
-                    is RootMountResult.RecoveredToPreviousMount,
-                    is RootMountResult.RecoveredToStock -> Unit
+                val userId = android.os.Process.myUid() / 100_000
+                val recovery = rootMountCoordinator.execute(
+                    RootMountRequest(packageName, userId, RootMountOperation.RECOVER)
+                )
+                when (recovery) {
+                    is RootMountResult.RecoveredToPreviousMount -> {
+                        isMounted = true
+                        context.toast(context.getString(R.string.root_mount_repair_success))
+                        return@launch
+                    }
+                    is RootMountResult.Success, is RootMountResult.RecoveredToStock -> Unit
                     else -> recovery.requireSuccess()
                 }
-                check(mountSavedPayload(packageName, app)) {
-                    "No compatible saved payload is available"
+                val restored = CacheCleanupGuard.withCacheInUse {
+                    rootMountCoordinator.restoreCommittedPayload(
+                        packageName,
+                        userId,
+                        context.cacheDir,
+                        confirmation
+                    )
+                }
+                when (val result = restored?.result) {
+                    is RootMountResult.RequiresDowngradeConfirmation -> {
+                        rootRestoreDowngradeTarget = requireNotNull(restored.downgradeTarget)
+                        return@launch
+                    }
+                    null -> check(mountSavedPayload(packageName, app)) {
+                        "No compatible saved payload is available"
+                    }
+                    else -> result.requireSuccess()
                 }
                 isMounted = rootInstaller.isAppMounted(packageName)
                 check(isMounted) { "Root mount could not be verified" }

@@ -16,6 +16,27 @@ import kotlin.test.assertTrue
 
 class RootMountTransactionCoordinatorTest {
     @Test
+    fun `archive repair can reuse installed splits only when the full stock set matches`() = runBlocking {
+        val stock = splitState()
+        val fixture = Fixture(initial = stock)
+        fixture.store.committed = committed(stock).copy(active = false, status = "REPAIR_REQUIRED")
+        val cache = kotlin.io.path.createTempDirectory().toFile()
+        try {
+            fixture.coordinator.restoreCommittedPayload(PACKAGE, 0, cache)
+            assertEquals(
+                listOf(requireNotNull(stock.basePath)) + stock.splitPaths.sorted(),
+                fixture.module.installedStockPathsForRestore
+            )
+
+            fixture.reader.state = stock.copy(splitSha256 = stock.splitSha256.mapValues { testSha256("changed") })
+            fixture.coordinator.restoreCommittedPayload(PACKAGE, 0, cache)
+            assertEquals(emptyList<String>(), fixture.module.installedStockPathsForRestore)
+        } finally {
+            cache.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `same version split replacement cannot reuse the previous mount`() = runBlocking {
         val split = splitState()
         val fixture = Fixture(initial = split)
@@ -360,6 +381,31 @@ class RootMountTransactionCoordinatorTest {
         assertEquals(patched.second.sha256, fixture.store.committed?.patchedSha256)
         assertEquals(true, fixture.store.committed?.active)
         assertEquals("MOUNTED", fixture.store.committed?.status)
+    }
+
+    @Test
+    fun `fresh root install can replace an inactive module with a missing backup`() = runBlocking {
+        for (stockInstalled in listOf(true, false)) {
+            val fixture = Fixture()
+            fixture.store.committed = committed(fixture.initial).copy(active = false, status = "STOCK")
+            fixture.module.snapshotHash = null
+            if (!stockInstalled) {
+                fixture.reader.state = fixture.initial.copy(
+                    installed = false, basePath = null, baseSha256 = null
+                )
+            }
+            val (patched, artifact) = fixture.artifact("fresh-patched.apk", 3, "patched-3")
+            val (stock, _) = fixture.artifact("fresh-stock.apk", 3, "stock-3")
+            fixture.installer.onReplace = { _, _ -> fixture.reader.state = fixture.rawState(3, "stock-3") }
+
+            val result = fixture.coordinator.execute(
+                fixture.request(RootMountOperation.REPLACE_STOCK_AND_MOUNT, patched, stock)
+            )
+
+            assertIs<RootMountResult.Success>(result)
+            assertEquals(artifact.sha256, fixture.store.committed?.patchedSha256)
+            assertEquals("MOUNTED", fixture.store.committed?.status)
+        }
     }
 
     @Test
@@ -1830,6 +1876,46 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
+    fun `downgrade confirmation keeps the inactive mount when its archived payload is intact`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.rawState(1, "stock-1")).copy(active = false, status = "REPATCH_REQUIRED")
+        fixture.store.committed = previous
+        fixture.module.inactiveSnapshotHash = previous.patchedSha256
+        val stock = fixture.artifact("stock-v1.apk", 1, "stock-1")
+        val patched = fixture.artifact("patched-v1.apk", 1, "patched-1")
+        fixture.installer.replaceResults.add(
+            RootPackageReplaceResult.DowngradeRejected(IllegalStateException("downgrade rejected"))
+        )
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.REPLACE_STOCK_AND_MOUNT, patched.first, stock.first)
+        )
+
+        assertIs<RootMountResult.RequiresDowngradeConfirmation>(result)
+        assertEquals(previous.patchedSha256, fixture.store.committed?.patchedSha256)
+        assertEquals(0, fixture.module.disableCompetingCalls)
+        assertEquals(0, fixture.installer.uninstallCalls)
+    }
+
+    @Test
+    fun `confirmed archive downgrade cannot replace stock that changed after the prompt`() = runBlocking {
+        val fixture = Fixture()
+        val stock = fixture.artifact("stock-v1.apk", 1, "stock-1")
+        val patched = fixture.artifact("patched-v1.apk", 1, "patched-1")
+        val approvedStock = fixture.initial.copy(baseSha256 = testSha256("earlier-stock"))
+
+        val result = fixture.coordinator.execute(
+            fixture.request(
+                RootMountOperation.REPLACE_STOCK_AND_MOUNT, patched.first, stock.first, confirmed = true
+            ).copy(downgradeFallbackStock = approvedStock)
+        )
+
+        assertFalse(result is RootMountResult.Success)
+        assertTrue(fixture.installer.replaceCalls.isEmpty())
+        assertEquals(0, fixture.installer.uninstallCalls)
+    }
+
+    @Test
     fun `ordinary downgrade install failure never offers destructive fallback`() = runBlocking {
         val fixture = Fixture()
         val stock = fixture.artifact("stock-v1.apk", 1, "stock-1")
@@ -2145,6 +2231,56 @@ class RootMountTransactionCoordinatorTest {
         val recovered = fixture.coordinator.recoverIncompleteTransactions(0)
 
         assertIs<RootMountResult.Success>(recovered[PACKAGE])
+        assertFalse(fixture.store.activeExists(PACKAGE))
+    }
+
+    @Test
+    fun `new mount records its identity before discarding the previous archive`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        val patched = fixture.artifact("replacement.apk", 2, "replacement-patched")
+        val commitsAtCleanup = mutableListOf<RootCommittedState?>()
+        fixture.module.onCommitSnapshot = { commitsAtCleanup += fixture.store.committed }
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.SWITCH_PATCHED_BUILD, patched.first)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(listOf(patched.second.sha256), commitsAtCleanup.map { it?.patchedSha256 })
+        assertEquals(true, commitsAtCleanup.single()?.active)
+    }
+
+    @Test
+    fun `recovery retries archive cleanup for a durable mount`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        val patched = fixture.artifact("replacement.apk", 2, "replacement-patched")
+        var attempts = 0
+        fixture.module.onCommitSnapshot = {
+            assertEquals(RootMountPhase.COMPLETED, fixture.store.active?.phase)
+            if (++attempts == 1) error("Root storage temporarily unavailable")
+        }
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.SWITCH_PATCHED_BUILD, patched.first)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(patched.second.sha256, fixture.store.committed?.patchedSha256)
+        assertEquals(RootMountPhase.COMPLETED, fixture.store.active?.phase)
+        assertEquals(0, fixture.module.disableCompetingCalls)
+
+        val recovered = fixture.coordinator.recoverIncompleteTransactions(0)
+
+        assertIs<RootMountResult.Success>(recovered[PACKAGE])
+        assertEquals(2, attempts)
+        assertEquals(1, fixture.module.disableCompetingCalls)
+        assertEquals(0, fixture.module.restoreCalls)
         assertFalse(fixture.store.activeExists(PACKAGE))
     }
 
@@ -3846,6 +3982,8 @@ class RootMountTransactionCoordinatorTest {
         var spaceFailure: Throwable? = null
         var removeFailure: Throwable? = null
         var snapshotHash: String? = null
+        var inactiveSnapshotHash: String? = null
+        var disableCompetingCalls = 0
         var legacyPayload: RootBackupArtifact? = null
         var committedState: RootCommittedState? = null
         var readCommittedStateCalls = 0
@@ -3874,6 +4012,24 @@ class RootMountTransactionCoordinatorTest {
             preferredSnapshotPayload = preferredPayload
             return snapshotHash
         }
+        var installedStockPathsForRestore: List<String>? = null
+
+        override suspend fun copyCommittedPayloads(
+            state: RootCommittedState,
+            directory: File,
+            installedStockPaths: List<String>
+        ): List<File> {
+            installedStockPathsForRestore = installedStockPaths
+            return emptyList()
+        }
+
+        override suspend fun snapshotInactive(state: RootCommittedState): String? =
+            inactiveSnapshotHash ?: snapshot(state.packageName)
+
+        override suspend fun disableCompetingBootHooks(packageName: String) {
+            disableCompetingCalls++
+        }
+
         override suspend fun readLegacyPayload(packageName: String): RootBackupArtifact? = legacyPayload
         override suspend fun readCommittedState(packageName: String): RootCommittedState? {
             readCommittedStateCalls++
@@ -3887,7 +4043,11 @@ class RootMountTransactionCoordinatorTest {
                 RootBackupArtifact("/data/adb/urv/transactions/$packageName/backup/package/$index.apk", hash)
             }
         }
-        override suspend fun commitSnapshot(packageName: String) = Unit
+        var onCommitSnapshot: (() -> Unit)? = null
+
+        override suspend fun commitSnapshot(packageName: String) {
+            onCommitSnapshot?.invoke()
+        }
         override suspend fun cleanupCommittedSnapshot(packageName: String) {
             cleanupCommittedSnapshotCalls++
             onCleanupCommittedSnapshot?.invoke()
@@ -4005,7 +4165,8 @@ class RootMountTransactionCoordinatorTest {
         override suspend fun removeAllUrvMounts(
             packageName: String,
             extraTargets: Set<String>,
-            allowLazyRecovery: Boolean
+            allowLazyRecovery: Boolean,
+            includeCompeting: Boolean
         ): List<String> {
             removeCalls++
             lazyRecoveryCalls += allowLazyRecovery

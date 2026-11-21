@@ -283,12 +283,22 @@ class MountInstallerRoutingContractTest {
     fun `renamed packages cannot resolve to mount`() {
         val manager = source("domain/installer/InstallerManager.kt")
         assertTrue(manager.contains("buildSequence(target, sourceFile, allowMount)"))
-        assertTrue(
-            manager.contains(
-                "if (!allowMount && baseInstallerToken(token) == Token.AutoSaved)"
-            )
-        )
+        assertTrue(manager.contains("if (rejectMountToken(token, target, allowMount))"))
         assertTrue(manager.contains("allowMount = false"))
+        assertTrue(rejectMountToken(InstallerManager.Token.AutoSaved, InstallerManager.InstallTarget.PATCHER, false))
+        assertTrue(rejectMountToken(InstallerManager.Token.RootPlayStore, InstallerManager.InstallTarget.PATCHER, false))
+    }
+
+    @Test
+    fun `stock installs reject root mount tokens even when mounting is allowed by default`() {
+        val stock = InstallerManager.InstallTarget.UNPATCHED_APP
+        val patcher = InstallerManager.InstallTarget.PATCHER
+        for (token in listOf(InstallerManager.Token.AutoSaved, InstallerManager.Token.RootPlayStore)) {
+            assertTrue(rejectMountToken(token, stock, allowMount = true))
+            assertFalse(rejectMountToken(token, patcher, allowMount = true))
+        }
+        assertFalse(rejectMountToken(InstallerManager.Token.Internal, stock, allowMount = true))
+        assertFalse(rejectMountToken(InstallerManager.Token.PlayStore, stock, allowMount = true))
     }
 
     @Test
@@ -312,8 +322,7 @@ class MountInstallerRoutingContractTest {
             .substringBefore("private fun availabilityFor(")
             .replace(Regex("\\s+"), " ")
         val rejectedPrimary = sequence.indexOf(
-            "val rejectedPrimaryMount = " +
-                "!allowMount && baseInstallerToken(primary) == Token.AutoSaved"
+            "val rejectedPrimaryMount = rejectMountToken(primary, target, allowMount)"
         )
         val earlyFallback = sequence.indexOf(
             "if (rejectedPrimaryMount && fallback != primary) add(fallback)"

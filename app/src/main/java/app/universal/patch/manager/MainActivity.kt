@@ -40,6 +40,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavOptionsBuilder
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -391,6 +392,16 @@ private fun ReVancedManager(
     EventEffect(vm.downloaderUpdateDeepLinkFlow) {
         navController.navigate(Settings.Downloads) { launchSingleTop = true }
     }
+    EventEffect(vm.rootMountDeepLinkFlow) { packageName ->
+        val current = navController.currentBackStackEntry
+        if (current?.destination?.hasRoute<InstalledApplicationInfo>() == true &&
+            current.toRoute<InstalledApplicationInfo>().packageName == packageName
+        ) {
+            return@EventEffect
+        }
+        navController.navigate(InstalledApplicationInfo(packageName))
+    }
+
     EventEffect(vm.runtimeUpdateDeepLinkFlow) {
         navController.navigate(Settings.PatcherRuntimes) { launchSingleTop = true }
     }

@@ -308,9 +308,12 @@ class RootMountNamespaces(
     suspend fun removeOwned(
         packageName: String,
         targets: Set<String>,
-        allowLazyRecovery: Boolean = false
+        allowLazyRecovery: Boolean = false,
+        competingTargets: Set<String> = emptySet()
     ): List<String> {
         if (targets.isEmpty()) return emptyList()
+        require(competingTargets.all { it in targets }) { "Competing APK targets must be scoped to this cleanup" }
+        val competingPayloads = if (competingTargets.isEmpty()) emptyList() else RootPaths.competingPayloads(packageName)
         val allowedPaths = mountInfoAliases(
             listOf(
                 RootPaths.moduleApk(packageName),
@@ -322,108 +325,156 @@ class RootMountNamespaces(
                 "${RootPaths.legacyPackage(packageName)}/$packageName.apk"
             )
         )
-        val allowed = allowedPaths.joinToString(" ") { shellQuote(it) }
+        val competingPaths = mountInfoAliases(competingPayloads)
+        val competingSourceList = shellQuote(competingPaths.joinToString("\n"))
+        val allowed = allowedPaths.joinToString(" ", transform = ::shellQuote)
+        val allowedWithCompeting = (allowedPaths + competingPaths).distinct()
+        val allAllowed = allowedWithCompeting.joinToString(" ", transform = ::shellQuote)
         // Pass multiline sources through ENVIRON because Toybox awk rejects them in -v values.
         val allowedSourceList = shellQuote(allowedPaths.joinToString("\n"))
-        val targetWords = targets.joinToString(" ") { shellQuote(it) }
+        val allAllowedSourceList = shellQuote(allowedWithCompeting.joinToString("\n"))
+        val targetWords = targets.joinToString(" ", transform = ::shellQuote)
+        val competingTargetWords = competingTargets.joinToString(" ", transform = ::shellQuote)
         val cleanup = shell.runIsolatedBounded(
             discoveryHelpers() + """
                 set -eu
                 allowed_sources=$allowedSourceList
-                namespace_has_owned_layer() {
+                namespace_layer_counts() (
                   pid="${'$'}1"
                   target="${'$'}2"
                   URV_ALLOWED_SOURCES="${'$'}allowed_sources" nsenter --mount="/proc/${'$'}pid/ns/mnt" -- awk -v target="${'$'}target" '
                     BEGIN { count=split(ENVIRON["URV_ALLOWED_SOURCES"], candidates, "\n") }
                     ${'$'}5 == target {
+                      total++
                       separator=0
                       for (i=1; i<=NF; i++) if (${'$'}i == "-") { separator=i; break }
                       root=${'$'}4
                       source=(separator > 0 ? ${'$'}(separator+2) : "")
                       sub(/\\040\(deleted\)${'$'}/, "", root)
                       sub(/\\040\(deleted\)${'$'}/, "", source)
-                      sub(/ \(deleted\)${'$'}/, "", root)
-                      sub(/ \(deleted\)${'$'}/, "", source)
                       for (candidate=1; candidate<=count; candidate++) {
-                        if (root == candidates[candidate] || source == candidates[candidate]) owned=1
+                        if (root == candidates[candidate] || source == candidates[candidate]) {
+                          owned++
+                          break
+                        }
                       }
                     }
-                    END { exit !owned }
-                  ' /proc/self/mountinfo
-                }
+                    END { print total+0 ":" owned+0 }
+                  ' /proc/self/mountinfo && return 0
+                  # A process can disappear after enumeration. It has no mount left to remove.
+                  [ ! -r "/proc/${'$'}pid/ns/mnt" ] && { printf '%s\n' 0:0; return 0; }
+                  return 1
+                )
+                visible_layer_is_owned() (
+                  pid="${'$'}1"
+                  target="${'$'}2"
+                  counts="${'$'}3"
+                  # Exact mountinfo paths still identify all layers after their
+                  # source APKs have been deleted and can no longer be stat'ed.
+                  [ "${'$'}{counts%%:*}" = "${'$'}{counts##*:}" ] && return 0
+                  inode="${'$'}(nsenter --mount="/proc/${'$'}pid/ns/mnt" -- stat -c '%d:%i' "${'$'}target" 2>/dev/null)" ||
+                    return 1
+                  shift 3
+                  for candidate do
+                    [ -f "${'$'}candidate" ] || continue
+                    [ "${'$'}(stat -c '%d:%i' "${'$'}candidate" 2>/dev/null)" = "${'$'}inode" ] && return 0
+                  done
+                  return 1
+                )
                 cleanup_namespace() {
                   pid="${'$'}1"
                   namespace_label="${'$'}2"
+                  shift 2
+                  for target do
+                    cleanup_target_in_namespace "${'$'}pid" "${'$'}namespace_label" "${'$'}target"
+                  done
+                }
+                cleanup_target_in_namespace() (
+                  pid="${'$'}1"
+                  namespace_label="${'$'}2"
+                  target="${'$'}3"
                   self_namespace="${'$'}(readlink /proc/self/ns/mnt)" || {
                     echo "Failed to inspect the root mount namespace" >&2
                     exit 1
                   }
                   target_namespace="${'$'}(readlink /proc/${'$'}pid/ns/mnt)" || return 0
                   [ "${'$'}self_namespace" != "${'$'}target_namespace" ] || return 0
-                  for target in $targetWords; do
-                    attempts=0
-                    max_attempts=${if (allowLazyRecovery) "16" else "8"}
-                    while nsenter --mount="/proc/${'$'}pid/ns/mnt" -- awk -v target="${'$'}target" '${'$'}5 == target { found=1 } END { exit !found }' /proc/self/mountinfo; do
-                      target_inode="${'$'}(nsenter --mount="/proc/${'$'}pid/ns/mnt" -- stat -c '%d:%i' "${'$'}target" 2>/dev/null)" || {
-                        echo "Failed to inspect ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid" >&2
-                        exit 1
-                      }
-                      owned=0
-                      for candidate in $allowed; do
-                        [ -f "${'$'}candidate" ] || continue
-                        [ "${'$'}(stat -c '%d:%i' "${'$'}candidate" 2>/dev/null)" = "${'$'}target_inode" ] && owned=1 && break
-                      done
-                      if [ "${'$'}owned" != 1 ]; then
-                        if namespace_has_owned_layer "${'$'}pid" "${'$'}target"; then
-                          echo "Foreign ${'$'}namespace_label mount covers a UPM layer at ${'$'}target" >&2
-                          exit 1
-                        fi
-                        break
-                      fi
-                      [ "${'$'}attempts" -lt "${'$'}max_attempts" ] || {
-                        echo "Too many UPM mount layers remained at ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid" >&2
-                        exit 1
-                      }
-                      if ! nsenter --mount="/proc/${'$'}pid/ns/mnt" -- umount "${'$'}target"; then
-                        if [ ${if (allowLazyRecovery) "1" else "0"} = 1 ]; then
-                          if nsenter --mount="/proc/${'$'}pid/ns/mnt" -- awk -v target="${'$'}target" '${'$'}5 == target { found=1 } END { exit !found }' /proc/self/mountinfo; then
-                            # Re-prove visible ownership after the failed normal unmount. A
-                            # foreign layer can appear between the first check and lazy detach.
-                            target_inode="${'$'}(nsenter --mount="/proc/${'$'}pid/ns/mnt" -- stat -c '%d:%i' "${'$'}target" 2>/dev/null)" || {
-                              echo "Failed to re-inspect ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid" >&2
-                              exit 1
-                            }
-                            owned=0
-                            for candidate in $allowed; do
-                              [ -f "${'$'}candidate" ] || continue
-                              [ "${'$'}(stat -c '%d:%i' "${'$'}candidate" 2>/dev/null)" = "${'$'}target_inode" ] && owned=1 && break
-                            done
-                            [ "${'$'}owned" = 1 ] || {
-                              echo "${'$'}namespace_label mount ownership changed before lazy unmount at ${'$'}target" >&2
-                              exit 1
-                            }
-                            nsenter --mount="/proc/${'$'}pid/ns/mnt" -- umount -l "${'$'}target" || {
-                              echo "Failed to lazily unmount ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid" >&2
-                              exit 1
-                            }
-                            printf 'URV_LAZY_UNMOUNT:%s\n' "${'$'}target"
-                          fi
-                        else
-                          echo "Failed to unmount ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid" >&2
-                          exit 1
-                        fi
-                      fi
-                      attempts=${'$'}((attempts + 1))
-                    done
+                  set -- $allowed
+                  for competing_target in $competingTargetWords; do
+                    if [ "${'$'}target" = "${'$'}competing_target" ]; then
+                      allowed_sources=$allAllowedSourceList
+                      set -- $allAllowed
+                      break
+                    fi
                   done
-                }
+                  attempts=0
+                  max_attempts=${if (allowLazyRecovery) "16" else "8"}
+                  while :; do
+                    counts="${'$'}(namespace_layer_counts "${'$'}pid" "${'$'}target")" || exit 1
+                    [ "${'$'}{counts%%:*}" != 0 ] || break
+                    if ! visible_layer_is_owned "${'$'}pid" "${'$'}target" "${'$'}counts" "${'$'}@"; then
+                      if [ "${'$'}{counts##*:}" != 0 ]; then
+                        echo "Foreign ${'$'}namespace_label mount covers a UPM layer at ${'$'}target" >&2
+                        exit 1
+                      fi
+                      break
+                    fi
+                    [ "${'$'}attempts" -lt "${'$'}max_attempts" ] || {
+                      echo "Too many UPM mount layers remained at ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid" >&2
+                      exit 1
+                    }
+                    if ! nsenter --mount="/proc/${'$'}pid/ns/mnt" -- umount "${'$'}target"; then
+                      if [ ${if (allowLazyRecovery) "1" else "0"} = 1 ]; then
+                        counts="${'$'}(namespace_layer_counts "${'$'}pid" "${'$'}target")" || exit 1
+                        if [ "${'$'}{counts%%:*}" != 0 ]; then
+                          visible_layer_is_owned "${'$'}pid" "${'$'}target" "${'$'}counts" "${'$'}@" || {
+                            echo "${'$'}namespace_label mount ownership changed before lazy unmount at ${'$'}target" >&2
+                            exit 1
+                          }
+                          nsenter --mount="/proc/${'$'}pid/ns/mnt" -- umount -l "${'$'}target" || {
+                            echo "Failed to lazily unmount ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid" >&2
+                            exit 1
+                          }
+                          printf 'URV_LAZY_UNMOUNT:%s\n' "${'$'}target"
+                        fi
+                      else
+                        echo "Failed to unmount ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid" >&2
+                        exit 1
+                      fi
+                    fi
+                    attempts=${'$'}((attempts + 1))
+                  done
+                )
                 ${managerPid?.let { pid ->
-                    "if [ -r /proc/$pid/ns/mnt ]; then cleanup_namespace $pid Manager; fi"
+                    "if [ -r /proc/$pid/ns/mnt ]; then cleanup_namespace $pid Manager $targetWords; fi"
                 }.orEmpty()}
                 for pid in ${'$'}(zygote_pids); do
                   validate_zygote "${'$'}pid" || continue
-                  cleanup_namespace "${'$'}pid" Zygote
+                  cleanup_namespace "${'$'}pid" Zygote $targetWords
                 done
+                # Earlier installs can leave a stale APK in long-lived processes, even
+                # after root and Zygote have a clear view of the same stock target.
+                if [ ${if (competingTargets.isNotEmpty()) "1" else "0"} = 1 ]; then
+                  for target in $competingTargetWords; do
+                    competing_pids="${'$'}(
+                      URV_COMPETING_SOURCES=$competingSourceList awk -v target="${'$'}target" '
+                        BEGIN { count=split(ENVIRON["URV_COMPETING_SOURCES"], candidates, "\n") }
+                        ${'$'}5 == target {
+                          root=${'$'}4
+                          sub(/\\040\(deleted\)${'$'}/, "", root)
+                          for (i=1; i<=count; i++) if (root == candidates[i]) {
+                            split(FILENAME, path, "/")
+                            if (path[3] ~ /^[0-9]+$/) print path[3]
+                            break
+                          }
+                        }
+                      ' /proc/[0-9]*/mountinfo 2>/dev/null | sort -u
+                    )"
+                    for pid in ${'$'}competing_pids; do
+                      cleanup_namespace "${'$'}pid" "Legacy ReVanced process" "${'$'}target"
+                    done
+                  done
+                fi
             """.trimIndent(),
             REMOVE_TIMEOUT_SECONDS,
             "Zygote namespace cleanup"

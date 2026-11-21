@@ -142,6 +142,18 @@ import java.nio.file.Files
 import java.nio.file.Path
 import app.universal.patch.manager.ui.component.CenteredDialogTitle
 
+@Composable
+internal fun RootRestoreDowngradeDialog(viewModel: InstalledAppInfoViewModel) {
+    if (!viewModel.rootRestoreNeedsDowngradeConfirmation) return
+    ConfirmDialog(
+        title = stringResource(R.string.root_mount_downgrade_title),
+        description = stringResource(R.string.root_mount_downgrade_confirmation),
+        icon = Icons.Outlined.SettingsBackupRestore,
+        onDismiss = viewModel::dismissRootRestoreDowngrade,
+        onConfirm = viewModel::confirmRootRestoreDowngrade
+    )
+}
+
 @OptIn(
     ExperimentalMaterial3Api::class,
     ExperimentalLayoutApi::class
@@ -1490,6 +1502,8 @@ fun InstalledAppInfoScreen(
                 else -> if (viewModel.hasSavedCopy) showSavedEntryDeleteDialog = true
             }
         }
+
+        RootRestoreDowngradeDialog(viewModel)
 
         LaunchedEffect(pendingAction, installedApp.currentPackageName, appliedSelection) {
             val action = pendingAction ?: return@LaunchedEffect

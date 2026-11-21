@@ -102,6 +102,7 @@ class RootMountReconcileWorker(
         const val KEY_PACKAGE = "package"
         const val KEY_ACTION = "action"
         const val KEY_USER_ID = "user_id"
+        internal const val ACTION_OPEN_ROOT_MOUNT = "app.universal.patch.manager.action.OPEN_ROOT_MOUNT"
         private const val CHANNEL_ID = "root-mount-reconciliation"
         private const val NOTIFICATION_BASE = 9200
 
@@ -121,6 +122,8 @@ class RootMountReconcileWorker(
             )
             if (!context.hasNotificationPermission()) return
             val intent = Intent(context, MainActivity::class.java).apply {
+                action = ACTION_OPEN_ROOT_MOUNT
+                data = android.net.Uri.fromParts("package", packageName, null)
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
             val pendingIntent = PendingIntent.getActivity(

@@ -2,9 +2,11 @@ package app.universal.patch.manager.domain.installer
 
 import app.universal.patch.manager.patcher.split.SplitApkFiles
 import app.universal.patch.manager.patcher.split.SplitApkPreparer
+import app.universal.patch.manager.patcher.split.SplitManifestInspector
 import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 
@@ -17,11 +19,12 @@ internal suspend fun <T> withInstallApkFiles(
     if (!SplitApkPreparer.isSplitArchive(source)) return@withContext install(listOf(source))
     val directory = Files.createTempDirectory(cacheDirectory.toPath(), "split-install-").toFile()
     try {
+        val checkCancelled = { coroutineContext.ensureActive() }
         val files = runInterruptible {
-            SplitApkFiles.extract(source, directory, SplitApkPreparer.splitApkEntryNames(source))
-                .sortedWith(compareBy<File> { !it.name.equals("base.apk", true) }.thenBy { it.name })
+            val entries = SplitApkPreparer.splitApkEntryNames(source, checkCancelled = checkCancelled)
+            SplitApkFiles.extract(source, directory, entries)
+            SplitManifestInspector.directoryOrder(directory, checkCancelled).map(directory::resolve)
         }
-        require(files.first().name.equals("base.apk", true)) { "Split package is missing base.apk." }
         install(files)
     } finally {
         directory.deleteRecursively()

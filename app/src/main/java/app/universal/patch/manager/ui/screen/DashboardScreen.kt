@@ -1621,6 +1621,8 @@ fun DashboardScreen(
         }
     }
 
+    quickActionViewModel?.let { RootRestoreDowngradeDialog(it) }
+
     val firstLaunch by vm.prefs.firstLaunch.getAsState()
     if (firstLaunch) AutoUpdatesDialog(vm::applyAutoUpdatePrefs)
 

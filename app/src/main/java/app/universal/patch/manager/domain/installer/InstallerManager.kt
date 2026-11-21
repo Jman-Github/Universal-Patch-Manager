@@ -116,6 +116,13 @@ internal fun installerTokenSelectableForPatchedOutput(
         (token == InstallerManager.Token.AutoSaved ||
             token == InstallerManager.Token.RootPlayStore))
 
+internal fun rejectMountToken(
+    token: InstallerManager.Token,
+    target: InstallerManager.InstallTarget,
+    allowMount: Boolean
+): Boolean = installerTokenMatchesPatchMode(token, useMount = true) &&
+    (!allowMount || target == InstallerManager.InstallTarget.UNPATCHED_APP)
+
 class InstallerManager(
     private val app: Application,
     private val prefs: PreferencesManager,
@@ -159,8 +166,10 @@ class InstallerManager(
         // https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
         if (componentMimeCandidates == listOf(APK_MIME_CANDIDATE)) {
             entryFor(Token.PlayStore, target, checkRoot = false)?.let(entries::add)
-            entryFor(Token.RootPlayStore, target, checkRoot = false)?.let(entries::add)
-            entryFor(Token.AutoSaved, target, checkRoot = false)?.let(entries::add)
+            if (target != InstallTarget.UNPATCHED_APP) {
+                entryFor(Token.RootPlayStore, target, checkRoot = false)?.let(entries::add)
+                entryFor(Token.AutoSaved, target, checkRoot = false)?.let(entries::add)
+            }
         }
         entryFor(Token.Shizuku, target, checkRoot = false)?.let(entries::add)
         entryFor(Token.ShizukuGooglePlay, target, checkRoot = false)?.let(entries::add)
@@ -467,7 +476,7 @@ class InstallerManager(
     ): InstallPlan? {
         // Code adapted from Morphe, see third-party/NOTICE for more information
         // https://github.com/MorpheApp/morphe-manager/pull/779
-        if (!allowMount && baseInstallerToken(token) == Token.AutoSaved) {
+        if (rejectMountToken(token, target, allowMount)) {
             return resolvePlan(
                 target = target,
                 sourceFile = sourceFile,
@@ -612,6 +621,7 @@ class InstallerManager(
             // https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
             Token.PlayStore -> if (
                 sourceFile.extension.equals("apk", ignoreCase = true) &&
+                !SplitApkPreparer.isSplitArchive(sourceFile) &&
                 availabilityFor(Token.PlayStore, target).available
             ) {
                 createPackageInstallerPlan(
@@ -834,7 +844,7 @@ class InstallerManager(
             if (token == Token.None) return
             // Code adapted from Morphe, see third-party/NOTICE for more information
             // https://github.com/MorpheApp/morphe-manager/pull/779
-            if (!allowMount && baseInstallerToken(token) == Token.AutoSaved) return
+            if (rejectMountToken(token, target, allowMount)) return
             if (token in tokens) return
             if (!availabilityFor(
                     token,
@@ -849,8 +859,7 @@ class InstallerManager(
 
         add(primary)
 
-        val rejectedPrimaryMount =
-            !allowMount && baseInstallerToken(primary) == Token.AutoSaved
+        val rejectedPrimaryMount = rejectMountToken(primary, target, allowMount)
         if (rejectedPrimaryMount && fallback != primary) add(fallback)
 
         if (Token.Internal !in tokens) add(Token.Internal)
@@ -1120,6 +1129,7 @@ class InstallerManager(
     enum class InstallTarget(val supportsRoot: Boolean) {
         PATCHER(true),
         SAVED_APP(true),
+        UNPATCHED_APP(false),
         MANAGER_UPDATE(false),
         LSPOSED_MODULE(false),
         DOWNLOADER_HELPER(false)

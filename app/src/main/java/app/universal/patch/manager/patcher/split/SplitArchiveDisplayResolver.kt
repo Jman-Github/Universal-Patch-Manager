@@ -36,6 +36,7 @@ object SplitArchiveDisplayResolver {
             maxExtractedBytes = SplitApkPreparer.MAX_EXTRACTED_ENTRY_BYTES,
             maxArchiveEntries = SplitApkPreparer.MAX_ARCHIVE_ENTRIES,
             validateEntryName = SplitApkPreparer::requireSafeArchiveEntryName,
+            requireBase = true,
             checkCancelled = checkCancelled,
             validateEntry = { entry ->
                 if (!entry.isDirectory && entry.name.endsWith(".apk", ignoreCase = true)) {

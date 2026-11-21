@@ -23,24 +23,18 @@ import app.universal.patch.manager.domain.installer.InstallerManager
 import app.universal.patch.manager.domain.installer.RootInstaller
 import app.universal.patch.manager.domain.installer.SessionDeadException
 import app.universal.patch.manager.domain.installer.SessionInstaller
-import app.universal.patch.manager.domain.installer.root.RootMountOperation
-import app.universal.patch.manager.domain.installer.root.RootMountRequest
-import app.universal.patch.manager.domain.installer.root.RootMountSuspension
+import app.universal.patch.manager.domain.installer.root.RootExternalInstallActivityRegistry
 import app.universal.patch.manager.domain.installer.root.RootMountTransactionCoordinator
-import app.universal.patch.manager.domain.installer.root.installAsPlayStoreWithMountRollback
+import app.universal.patch.manager.domain.installer.root.retire
+import app.universal.patch.manager.domain.installer.root.restore
 import app.universal.patch.manager.domain.installer.root.launchExternalInstallerWithMountFinalization
-import app.universal.patch.manager.domain.installer.root.reinstallMountedStockAsPlayStore
-import app.universal.patch.manager.domain.installer.root.requireSuccess
 import app.universal.patch.manager.domain.installer.root.suspendRootMountForPackageInstall
 import app.universal.patch.manager.domain.installer.ShizukuInstaller
-import app.universal.patch.manager.domain.manager.KeystoreManager
-import app.universal.patch.manager.domain.manager.PreferencesManager
 import app.universal.patch.manager.domain.repository.DownloadedAppFiles
 import app.universal.patch.manager.domain.repository.DownloadedAppRepository
 import app.universal.patch.manager.domain.storage.CacheCleanupGuard
 import app.universal.patch.manager.patcher.split.SplitArchiveDisplayResolver
 import app.universal.patch.manager.patcher.split.SplitApkPreparer
-import app.universal.patch.manager.patcher.split.SplitMergeRuntime
 import app.universal.patch.manager.domain.repository.DownloaderPluginRepository
 import app.universal.patch.manager.network.downloader.ApkDownloadHelperContract
 import app.universal.patch.manager.network.downloader.DownloaderPluginSourceState
@@ -49,7 +43,6 @@ import app.universal.patch.manager.util.simpleMessage
 import app.universal.patch.manager.util.mutableStateSetOf
 
 import app.universal.patch.manager.util.toast
-import app.universal.patch.manager.util.withRepeatingToast
 import app.universal.patch.manager.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -59,12 +52,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
-import java.io.IOException
 import ru.solrudev.ackpine.session.Session
 import ru.solrudev.ackpine.uninstaller.UninstallFailure
 import java.nio.file.Files
@@ -77,8 +69,6 @@ class DownloadsViewModel(
     private val rootInstaller: RootInstaller,
     private val rootMountCoordinator: RootMountTransactionCoordinator,
     private val shizukuInstaller: ShizukuInstaller,
-    private val keystoreManager: KeystoreManager,
-    private val prefs: PreferencesManager,
     private val sessionInstaller: SessionInstaller,
     val pm: PM
 ) : ViewModel() {
@@ -125,14 +115,10 @@ class DownloadsViewModel(
     var installingApp by mutableStateOf<DownloadedApp?>(null)
         private set
     private val appContext = pm.application
-    private val splitMergeRuntime = SplitMergeRuntime(appContext)
-    private val installWorkspaceRoot =
-        appContext.managerStorageContext.cacheDir.resolve("download-install").apply { mkdirs() }
     private val displayWorkspaceRoot =
         appContext.managerStorageContext.cacheDir.resolve("downloaded-app-display").apply { mkdirs() }
-    private val installProgressFlow = MutableStateFlow<DownloadInstallProgress?>(null)
+    private val installProgressFlow = MutableStateFlow<String?>(null)
     val installProgress = installProgressFlow.asStateFlow()
-    private var activeInstallWorkspace: File? = null
     private var installJob: Job? = null
     private var installCancellationRequested = false
 
@@ -251,152 +237,96 @@ class DownloadsViewModel(
         }
     }
 
+    suspend fun installerEntriesFor(downloadedApp: DownloadedApp): List<InstallerManager.Entry> =
+        withContext(Dispatchers.IO) {
+            val source = downloadedAppRepository.getApkFileForApp(downloadedApp)
+            installerManager.listEntriesForFile(
+                InstallerManager.InstallTarget.UNPATCHED_APP, includeNone = false, sourceFile = source
+            )
+        }
+
     fun installApp(
         downloadedApp: DownloadedApp,
         installerToken: InstallerManager.Token? = null
     ) {
-        if (installJob?.isActive == true || installingApp != null) return
+        if (installJob?.isCompleted == false || installingApp != null) return
         installingApp = downloadedApp
         installCancellationRequested = false
         installJob = viewModelScope.launch {
             val ownerJob = coroutineContext[Job]
             val cacheUseToken = CacheCleanupGuard.begin()
-        var installWorkspace: File? = null
-
-        try {
-            val source = withContext(Dispatchers.IO) {
-                downloadedAppRepository.getApkFileForApp(downloadedApp)
-            }
-            val isSplitArchive = withContext(Dispatchers.IO) {
-                SplitApkPreparer.isSplitArchive(source)
-            }
-            installProgressFlow.value = DownloadInstallProgress(
-                status = appContext.getString(
-                    if (isSplitArchive) {
-                        R.string.downloaded_app_install_merging
-                    } else {
-                        R.string.downloaded_app_install_installing
-                    }
-                ),
-                showMergeLog = isSplitArchive
-            )
-            val apk = if (isSplitArchive) {
-                installWorkspace = installWorkspaceRoot
-                    .resolve("run-${System.currentTimeMillis()}")
-                    .apply { mkdirs() }
-                activeInstallWorkspace = installWorkspace
-
-                val unsignedApk = splitMergeRuntime.execute(
-                    inputFile = source,
-                    workspace = installWorkspace,
-                    stripNativeLibs = prefs.stripUnusedNativeLibs.getBlocking(),
-                    skipUnneededSplits = prefs.skipUnneededSplitApks.getBlocking(),
-
-                    onProgress = ::updateInstallProgress,
-                    onSubSteps = {},
-                    onLog = ::appendMergeLog
-                )
-                updateInstallProgress(
-                    appContext.getString(R.string.downloaded_app_install_signing)
-                )
-                val signedApk = installWorkspace.resolve("merged-for-install.apk")
-                withContext(Dispatchers.IO) {
-                    keystoreManager.sign(unsignedApk, signedApk)
-                    unsignedApk.delete()
+            var pendingExternalPlan: InstallerManager.InstallPlan.External? = null
+            try {
+                val source = withContext(Dispatchers.IO) {
+                    downloadedAppRepository.getApkFileForApp(downloadedApp)
                 }
-                signedApk
-            } else {
-                source
-            }
-
-            val packageInfo = withContext(Dispatchers.IO) {
-                pm.getPackageInfo(apk)
-                    ?: error(appContext.getString(R.string.failed_to_load_apk))
-            }
-            val packageName = packageInfo.packageName
-            val sourceLabel = with(pm) { packageInfo.label() }
-            updateInstallProgress(
-                appContext.getString(R.string.downloaded_app_install_installing)
-            )
-            val plan = withContext(Dispatchers.IO) {
-                installerToken?.let { token ->
-                    installerManager.resolvePlanForToken(
-                        token = token,
-                        target = InstallerManager.InstallTarget.SAVED_APP,
-                        sourceFile = apk,
+                val isSplitArchive = withContext(Dispatchers.IO) { SplitApkPreparer.isSplitArchive(source) }
+                installProgressFlow.value = appContext.getString(R.string.downloaded_app_install_installing)
+                val packageInfo = SplitArchiveDisplayResolver.resolvePackageInfo(
+                    source, displayWorkspaceRoot, pm
+                ) { ownerJob?.ensureActive() } ?: error(appContext.getString(R.string.failed_to_load_apk))
+                val packageName = packageInfo.packageName
+                val sourceLabel = if (isSplitArchive) packageName else with(pm) { packageInfo.label() }
+                val plan = withContext(Dispatchers.IO) {
+                    val resolved = installerToken?.let { token ->
+                        installerManager.resolvePlanForToken(
+                            token = token,
+                            target = InstallerManager.InstallTarget.UNPATCHED_APP,
+                            sourceFile = source,
+                            expectedPackage = packageName,
+                            sourceLabel = sourceLabel,
+                            allowMount = false
+                        ) ?: error(appContext.getString(R.string.installer_status_not_supported))
+                    } ?: installerManager.resolvePlan(
+                        target = InstallerManager.InstallTarget.UNPATCHED_APP,
+                        sourceFile = source,
                         expectedPackage = packageName,
-                        sourceLabel = sourceLabel
-                    ) ?: error(appContext.getString(R.string.installer_status_not_supported))
-                } ?: installerManager.resolvePlan(
-                    target = InstallerManager.InstallTarget.SAVED_APP,
-                    sourceFile = apk,
-                    expectedPackage = packageName,
-                    sourceLabel = sourceLabel
-                )
-            }
+                        sourceLabel = sourceLabel,
+                        allowMount = false
+                    )
+                    pendingExternalPlan = resolved as? InstallerManager.InstallPlan.External
+                    resolved
+                }
 
-            when (plan) {
-                is InstallerManager.InstallPlan.Internal -> installInternally(apk)
-                is InstallerManager.InstallPlan.Mount -> {
-                    appContext.withRepeatingToast(R.string.mounting_ellipsis) {
-                        installWithRootMount(
-                            apk = apk,
-                            packageInfo = packageInfo,
-                            label = sourceLabel,
-                            installAsPlayStore = plan.installAsPlayStore
-                        )
+                when (plan) {
+                    is InstallerManager.InstallPlan.Internal ->
+                        installInternally(source, packageName, sourceLabel, isSplitArchive)
+                    is InstallerManager.InstallPlan.Mount,
+                    is InstallerManager.InstallPlan.RootPlayStore -> error(
+                        appContext.getString(R.string.installer_status_not_supported)
+                    )
+                    is InstallerManager.InstallPlan.Shizuku -> {
+                        installStockWithMountSuspended(packageName, succeeded = { true }) {
+                            shizukuInstaller.install(source, packageName, plan.installerPackageNameOverride)
+                        }
+                        showInstallSuccess()
+                    }
+                    is InstallerManager.InstallPlan.External -> {
+                        pendingExternalPlan = null
+                        launchExternalInstaller(plan)
                     }
                 }
-                // Code adapted from Morphe, see third-party/NOTICE for more information
-                // https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
-                is InstallerManager.InstallPlan.RootPlayStore -> {
-                    installAsPlayStoreWithMountRollback(
-                        rootInstaller = rootInstaller,
-                        rootMountCoordinator = rootMountCoordinator,
-                        apkFile = apk,
-                        packageName = packageName,
-                        userId = android.os.Process.myUid() / 100_000
+            } catch (error: CancellationException) {
+                Log.i(TAG, "Downloaded app install cancelled")
+                throw error
+            } catch (error: Exception) {
+                if (installCancellationRequested) {
+                    Log.i(TAG, "Downloaded app install cancelled", error)
+                } else {
+                    Log.e(TAG, "Failed to install downloaded app", error)
+                    appContext.toast(
+                        appContext.getString(R.string.install_app_fail, error.simpleMessage().orEmpty())
                     )
-                    showInstallSuccess()
                 }
-                is InstallerManager.InstallPlan.Shizuku -> {
-                    shizukuInstaller.install(
-                        apk,
-                        packageName,
-                        plan.installerPackageNameOverride
-                    )
-                    showInstallSuccess()
-                }
-                is InstallerManager.InstallPlan.External -> launchExternalInstaller(plan)
-            }
-        } catch (error: CancellationException) {
-            Log.i(TAG, "Downloaded app install cancelled")
-            throw error
-        } catch (error: Exception) {
-            if (installCancellationRequested) {
-                Log.i(TAG, "Downloaded app install cancelled", error)
-            } else {
-                Log.e(TAG, "Failed to install downloaded app", error)
-                appContext.toast(
-                    appContext.getString(
-                        R.string.install_app_fail,
-                        error.simpleMessage().orEmpty()
-                    )
-                )
-            }
-        } finally {
-            withContext(NonCancellable + Dispatchers.IO) {
-                installWorkspace?.deleteRecursively()
+            } finally {
+                runCatching { pendingExternalPlan?.let(::cleanupExternalInstall) }
+                    .onFailure { Log.w(TAG, "Failed to clean up an unused install plan", it) }
                 runCatching { cacheUseToken.close() }
+                installProgressFlow.value = null
+                installingApp = null
+                installCancellationRequested = false
+                if (installJob === ownerJob) installJob = null
             }
-            if (activeInstallWorkspace == installWorkspace) {
-                activeInstallWorkspace = null
-            }
-            installProgressFlow.value = null
-            installingApp = null
-            installCancellationRequested = false
-            if (installJob === ownerJob) installJob = null
-        }
         }
     }
 
@@ -404,30 +334,49 @@ class DownloadsViewModel(
         val job = installJob?.takeIf(Job::isActive) ?: return
         installCancellationRequested = true
         installProgressFlow.value = null
-        installingApp = null
         job.cancel(CancellationException("Downloaded app install cancelled"))
     }
 
-    private fun updateInstallProgress(message: String) {
-        installProgressFlow.update { current ->
-            current?.copy(status = message) ?: current
+    private suspend fun <T> installStockWithMountSuspended(
+        packageName: String,
+        succeeded: (T) -> Boolean,
+        install: suspend () -> T
+    ): T {
+        val mount = suspendRootMountForPackageInstall(
+            rootInstaller = rootInstaller,
+            rootMountCoordinator = rootMountCoordinator,
+            packageName = packageName,
+            userId = android.os.Process.myUid() / 100_000,
+            recoveryContext = appContext
+        )
+        val recoveryRequestId = mount?.processDeathRecoveryId()
+        recoveryRequestId?.let(RootExternalInstallActivityRegistry::register)
+        try {
+            val result = try {
+                install()
+            } catch (error: Throwable) {
+                withContext(NonCancellable) {
+                    runCatching { mount?.restore() }.exceptionOrNull()?.let(error::addSuppressed)
+                }
+                throw error
+            }
+            if (mount != null) {
+                withContext(NonCancellable) {
+                    if (succeeded(result)) mount.retire() else mount.restore()
+                }
+            }
+            return result
+        } finally {
+            recoveryRequestId?.let(RootExternalInstallActivityRegistry::unregister)
         }
     }
 
-    private fun appendMergeLog(message: String) {
-        val lines = message.lineSequence()
-            .map(String::trimEnd)
-            .filter(String::isNotBlank)
-            .toList()
-        if (lines.isEmpty()) return
-        installProgressFlow.update { current ->
-            current?.copy(
-                logLines = (current.logLines + lines).takeLast(MAX_INSTALL_LOG_LINES)
-            ) ?: current
-        }
-    }
-
-    private suspend fun installInternally(apk: File) {
+    private suspend fun installInternally(
+        apk: File,
+        packageName: String,
+        sourceLabel: String,
+        isSplitArchive: Boolean
+    ) {
         if (!pm.requestInstallPackagesPermission()) {
             appContext.toast(
                 appContext.getString(R.string.downloaded_app_install_permission_required)
@@ -435,21 +384,18 @@ class DownloadsViewModel(
             return
         }
 
-        val packageInfo = withContext(Dispatchers.IO) {
-            pm.getPackageInfo(apk)
-                ?: throw IOException(appContext.getString(R.string.installer_hint_generic))
-        }
-        val packageName = packageInfo.packageName
-        val sourceLabel = with(pm) { packageInfo.label() }
         val result = try {
-            sessionInstaller.install(apk, packageName)
+            installStockWithMountSuspended(packageName, succeeded = { it == InstallResult.Success }) {
+                sessionInstaller.install(apk, packageName)
+            }
         } catch (_: InstallCancelledException) {
             return
         } catch (error: SessionDeadException) {
+            if (isSplitArchive) throw error
             Log.w(TAG, "PackageInstaller session died; using intent fallback", error)
             launchExternalInstaller(
                 installerManager.createSystemFallbackPlan(
-                    target = InstallerManager.InstallTarget.SAVED_APP,
+                    target = InstallerManager.InstallTarget.UNPATCHED_APP,
                     sourceFile = apk,
                     expectedPackage = packageName,
                     sourceLabel = sourceLabel
@@ -475,68 +421,6 @@ class DownloadsViewModel(
             )
         }
     }
-
-    private suspend fun installWithRootMount(
-        apk: File,
-        packageInfo: PackageInfo,
-        label: String,
-        installAsPlayStore: Boolean = false
-    ) {
-        val installed = pm.getPackageInfo(packageInfo.packageName)
-            ?: error(appContext.getString(R.string.root_mount_requires_installed_stock))
-        val installedVersionCode = pm.getVersionCode(installed)
-        check(
-            installed.versionName == packageInfo.versionName &&
-                installedVersionCode == pm.getVersionCode(packageInfo)
-        ) {
-            appContext.getString(R.string.root_mount_download_version_mismatch)
-        }
-        val alreadyMounted = rootInstaller.isAppMounted(packageInfo.packageName)
-        val stockApks = if (alreadyMounted) {
-            emptyList()
-        } else {
-            val stockPath = installed.applicationInfo?.sourceDir
-                ?: error(appContext.getString(R.string.install_app_fail_missing_stock))
-            val stockApk = File(stockPath)
-            check(stockApk.isFile) {
-                appContext.getString(R.string.install_app_fail_missing_stock)
-            }
-            listOf(stockApk)
-        }
-        rootMountCoordinator.execute(
-            RootMountRequest(
-                packageName = packageInfo.packageName,
-                userId = android.os.Process.myUid() / 100_000,
-                operation = RootMountOperation.SWITCH_PATCHED_BUILD,
-                patchedApk = apk,
-                stockApks = stockApks,
-                expectedVersionName = packageInfo.versionName,
-                expectedVersionCode = pm.getVersionCode(packageInfo),
-                expectedStockVersionCode = installedVersionCode,
-                label = label
-            )
-        ).requireSuccess()
-        val sourceAttributionError = if (installAsPlayStore) {
-            reinstallMountedStockAsPlayStore(
-                context = appContext,
-                rootInstaller = rootInstaller,
-                rootMountCoordinator = rootMountCoordinator,
-                packageName = packageInfo.packageName,
-                userId = android.os.Process.myUid() / 100_000
-            )
-        } else null
-        showInstallSuccess()
-        sourceAttributionError?.let { error ->
-            Log.w(TAG, "Failed to record Play Store as the installation source", error)
-            appContext.toast(
-                appContext.getString(
-                    R.string.installer_play_store_attribution_failed,
-                    error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
-                )
-            )
-        }
-    }
-
     private fun showInstallSuccess() {
         appContext.toast(appContext.getString(R.string.downloaded_app_install_success))
     }
@@ -545,14 +429,17 @@ class DownloadsViewModel(
         plan: InstallerManager.InstallPlan.External,
         successMessage: String = appContext.getString(R.string.downloaded_app_install_success)
     ) {
-        val baseline = pm.getPackageInfo(plan.expectedPackage)?.let { packageInfo ->
-            ExternalInstallBaseline(
-                versionCode = pm.getVersionCode(packageInfo),
-                lastUpdateTime = packageInfo.lastUpdateTime
-            )
-        }
-        var suspendedMount: RootMountSuspension? =
-            if (plan.token == InstallerManager.Token.PlayStore) {
+        var cleanupRequired = true
+        try {
+            val baseline = pm.getPackageInfo(plan.expectedPackage)?.let { packageInfo ->
+                ExternalInstallBaseline(
+                    versionCode = pm.getVersionCode(packageInfo),
+                    lastUpdateTime = packageInfo.lastUpdateTime
+                )
+            }
+            val mount = if (plan.target == InstallerManager.InstallTarget.UNPATCHED_APP ||
+                plan.token == InstallerManager.Token.PlayStore
+            ) {
                 suspendRootMountForPackageInstall(
                     rootInstaller = rootInstaller,
                     rootMountCoordinator = rootMountCoordinator,
@@ -563,12 +450,7 @@ class DownloadsViewModel(
             } else {
                 null
             }
-
-        var cleanupRequired = true
-        try {
-            val mount = suspendedMount
             if (mount != null) {
-                suspendedMount = null
                 cleanupRequired = false
                 val installed = launchExternalInstallerWithMountFinalization(
                     context = appContext,
@@ -1060,7 +942,6 @@ class DownloadsViewModel(
         private const val MAX_DISPLAY_INFO_CACHE_SIZE_KIB = 16 * 1024
         private const val EXTERNAL_INSTALL_TIMEOUT_MS = 120_000L
         private const val EXTERNAL_INSTALL_POLL_INTERVAL_MS = 1_000L
-        private const val MAX_INSTALL_LOG_LINES = 800
     }
 
     private suspend fun reloadPlugins() {
@@ -1082,10 +963,4 @@ class DownloadsViewModel(
 private data class ExternalInstallBaseline(
     val versionCode: Long,
     val lastUpdateTime: Long
-)
-
-data class DownloadInstallProgress(
-    val status: String,
-    val logLines: List<String> = emptyList(),
-    val showMergeLog: Boolean = false
 )

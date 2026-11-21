@@ -1,7 +1,10 @@
 package app.universal.patch.manager.domain.installer
 
 import app.universal.patch.manager.patcher.split.SplitApkFiles
+import com.reandroid.arsc.chunk.xml.AndroidManifestBlock
 import java.io.File
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
@@ -14,10 +17,46 @@ class InstallApkFilesTest {
 
     private fun splits(): File = temporary.newFile("output.apk").also { source ->
         val directory = temporary.newFolder()
-        val files = listOf("config.en.apk", "base.apk").map { name ->
-            directory.resolve(name).apply { writeBytes(name.toByteArray()) }
-        }
+        val files = listOf(
+            writeApk(directory.resolve("config.en.apk"), "config.en"),
+            writeApk(directory.resolve("base.apk"))
+        )
         SplitApkFiles.pack(files, source)
+    }
+
+    private fun writeApk(file: File, splitName: String? = null): File {
+        val manifest = AndroidManifestBlock().apply {
+            getOrCreateElement("manifest")
+            packageName = "test.splits"
+            versionCode = 1
+            if (splitName != null) setSplit(splitName, true)
+            refreshFull()
+        }
+        ZipOutputStream(file.outputStream()).use { zip ->
+            zip.putNextEntry(ZipEntry("AndroidManifest.xml"))
+            zip.write(manifest.bytes)
+            zip.closeEntry()
+        }
+        return file
+    }
+
+    @Test fun downloadsWithPackageNamedBaseInstallBaseFirst() = runBlocking {
+        val directory = temporary.newFolder()
+        val config = writeApk(directory.resolve("config.en.apk"), "config.en")
+        val base = writeApk(directory.resolve("test.splits.apk"))
+        val source = temporary.newFile("download.xapk")
+        ZipOutputStream(source.outputStream()).use { zip ->
+            for (apk in listOf(config, base)) {
+                zip.putNextEntry(ZipEntry(apk.name))
+                apk.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+            }
+        }
+
+        withInstallApkFiles(source, temporary.newFolder()) { files ->
+            assertEquals(listOf(base.name, config.name), files.map { it.name })
+            assertArrayEquals(base.readBytes(), files.first().readBytes())
+        }
     }
 
     @Test fun splitComponentsLiveUntilInstallationCompletesAndAreCleanedAfterwards() = runBlocking {

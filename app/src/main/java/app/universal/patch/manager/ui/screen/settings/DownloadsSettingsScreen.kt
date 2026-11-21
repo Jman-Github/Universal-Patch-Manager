@@ -67,6 +67,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -348,31 +349,37 @@ fun DownloadsSettingsScreen(
         )
     }
     appPendingInstallerChoice?.let { app ->
-        InstallerPickerDialog(
-            title = stringResource(R.string.installer_choose_for_this_install_title),
-            options = installerManager.listEntries(
-                target = InstallerManager.InstallTarget.SAVED_APP,
-                includeNone = false
-            ),
-            onDismiss = { appPendingInstallerChoice = null },
-            onConfirm = { token -> viewModel.installApp(app, token) },
-            onOpenShizuku = installerManager::openShizukuApp
-        )
+        val entries by key(app) {
+            produceState<List<InstallerManager.Entry>?>(null) {
+                value = try {
+                    viewModel.installerEntriesFor(app)
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    if (appPendingInstallerChoice == app) {
+                        context.toast(context.getString(R.string.failed_to_load_apk))
+                        appPendingInstallerChoice = null
+                    }
+                    null
+                }
+            }
+        }
+        entries?.let { options ->
+            InstallerPickerDialog(
+                title = stringResource(R.string.installer_choose_for_this_install_title),
+                options = options,
+                onDismiss = { appPendingInstallerChoice = null },
+                onConfirm = { token -> viewModel.installApp(app, token) },
+                onOpenShizuku = installerManager::openShizukuApp
+            )
+        }
     }
     when {
         installProgress != null -> {
-            val progress = requireNotNull(installProgress)
             TransparentLoadingDialog(
-                message = progress.status,
+                message = requireNotNull(installProgress),
                 cancelButtonText = stringResource(R.string.cancel),
-                onCancel = viewModel::cancelInstall,
-                logTitle = if (progress.showMergeLog) {
-                    stringResource(R.string.downloaded_app_install_merge_log)
-                } else {
-                    null
-                },
-                logLines = progress.logLines,
-                emptyLogMessage = stringResource(R.string.downloaded_app_install_merge_log_waiting)
+                onCancel = viewModel::cancelInstall
             )
         }
         remoteSourceBusyState != null -> TransparentLoadingDialog()

@@ -20,6 +20,7 @@ object SplitApkInspector {
         maxArchiveEntries: Int = Int.MAX_VALUE,
         validateEntryName: (String) -> Unit = {},
         validateEntry: (ZipEntry) -> Unit = {},
+        requireBase: Boolean = false,
         checkCancelled: () -> Unit = {}
     ): ExtractedApk? {
         require(maxExtractedBytes >= 0L) { "Invalid extracted APK size limit." }
@@ -47,6 +48,7 @@ object SplitApkInspector {
                     maxArchiveEntries = maxArchiveEntries,
                     checkCancelled = checkCancelled
                 )
+                var verifiedBaseEntry: String? = null
                 try {
                     ZipFile(source).use { zip ->
                         validateArchiveEntries(
@@ -56,8 +58,14 @@ object SplitApkInspector {
                             validateEntry = validateEntry,
                             checkCancelled = checkCancelled
                         )
-                        val entry = selectBestEntry(zip, selectedEntries)
-                            ?: throw IOException("Split archive does not contain any APK entries.")
+                        val entry = if (requireBase) {
+                            val baseName = SplitManifestInspector.archiveOrder(zip, selectedEntries, checkCancelled).first()
+                            val entryName = selectedEntries.single { it.substringAfterLast('/') == baseName }
+                            verifiedBaseEntry = entryName
+                            zip.getEntry(entryName)
+                        } else {
+                            selectBestEntry(zip, selectedEntries)
+                        } ?: throw IOException("Split archive does not contain any APK entries.")
                         zip.getInputStream(entry).use { input ->
                             Files.newOutputStream(temp.toPath()).use { output ->
                                 input.copyToBounded(
@@ -70,13 +78,15 @@ object SplitApkInspector {
                     }
                 } catch (error: IOException) {
                     val message = error.message?.lowercase(Locale.ROOT).orEmpty()
-                    if (!message.contains("no such device") && !message.contains("enodev")) {
+                    if ((requireBase && verifiedBaseEntry == null) ||
+                        (!message.contains("no such device") && !message.contains("enodev"))
+                    ) {
                         throw error
                     }
                     extractWithStream(
                         source = source,
                         temp = temp,
-                        selectedEntries = selectedEntries,
+                        selectedEntries = verifiedBaseEntry?.let { setOf(it) } ?: selectedEntries,
                         maxExtractedBytes = maxExtractedBytes,
                         maxArchiveEntries = maxArchiveEntries,
                         validateEntryName = validateEntryName,

@@ -21,6 +21,12 @@ internal object RootPaths {
     fun canonicalStock(packageName: String) = "${canonicalPayload(packageName)}/stock"
     fun legacyPackage(packageName: String) = "$LEGACY/$packageName"
     fun legacyService(packageName: String) = "$LEGACY_SERVICE/urv-$packageName.sh"
+    fun competingService(packageName: String) = "$LEGACY_SERVICE/$packageName.sh"
+    fun competingModule(packageName: String) = "$MODULES/$packageName-ReVanced"
+    fun competingPayloads(packageName: String) = listOf(
+        "${legacyPackage(packageName)}/$packageName.apk",
+        "${competingModule(packageName)}/$packageName.apk"
+    )
     fun module(packageName: String) = "$MODULES/$packageName-revanced"
     fun moduleApk(packageName: String) = "${module(packageName)}/$packageName.apk"
     fun moduleStockApk(packageName: String) = "${module(packageName)}/$packageName-stock.apk"

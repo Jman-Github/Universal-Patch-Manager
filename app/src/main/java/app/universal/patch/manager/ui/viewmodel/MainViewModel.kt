@@ -26,6 +26,7 @@ import app.universal.patch.manager.ui.model.navigation.SelectedApplicationInfo
 import app.universal.patch.manager.ui.theme.Theme
 import app.universal.patch.manager.util.PatchSelection
 import app.universal.patch.manager.util.AnnouncementDeepLinkIntent
+import app.universal.patch.manager.worker.RootMountReconcileWorker
 import app.universal.patch.manager.util.BatchPatchIntents
 import app.universal.patch.manager.util.BundleDeepLink
 import app.universal.patch.manager.util.BundleDeepLinkIntent
@@ -208,7 +209,16 @@ class MainViewModel(
 
     private val downloaderUpdateDeepLinkChannel = Channel<Unit>(Channel.BUFFERED)
     val downloaderUpdateDeepLinkFlow = downloaderUpdateDeepLinkChannel.receiveAsFlow()
+    private val rootMountDeepLinkChannel = Channel<String>(Channel.BUFFERED)
+    val rootMountDeepLinkFlow = rootMountDeepLinkChannel.receiveAsFlow()
+
     fun handleIntent(intent: Intent?) {
+        if (intent?.action == RootMountReconcileWorker.ACTION_OPEN_ROOT_MOUNT) {
+            intent.data?.takeIf { it.scheme == "package" }?.schemeSpecificPart
+                ?.takeIf { it.matches(Regex("[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)+")) }
+                ?.let { rootMountDeepLinkChannel.trySend(it) }
+            return
+        }
         if (intent?.getBooleanExtra("open_downloaders", false) == true) {
             downloaderUpdateDeepLinkChannel.trySend(Unit)
             return
