@@ -40,7 +40,16 @@ with tempfile.TemporaryDirectory(prefix="catalog-errors-", dir=ROOT / "build") a
     work = Path(temporary)
     (work / "Context.kt").write_text("""package android.content
 open class Context {
-    fun getString(id: Int) = when(id) { 1 -> "localized fallback"; 2 -> "localized history"; else -> "localized catalog" }
+    fun getString(id: Int, vararg args: Any) = when(id) {
+        1 -> "localized fallback"
+        2 -> "localized history"
+        4 -> "localized DNS"
+        5 -> "localized timeout"
+        6 -> "localized connection"
+        7 -> "localized rate limit"
+        8 -> "localized HTTP ${args.single()}"
+        else -> "localized catalog"
+    }
 }
 """)
     (work / "R.kt").write_text("""package app.universal.patch.manager
@@ -48,16 +57,48 @@ object R { object string {
 const val patch_bundle_discovery_error=1
 const val catalog_changed_history=2
 const val catalog_changed_refresh=3
+const val warning_network_dns=4
+const val warning_network_timeout=5
+const val warning_network_connection=6
+const val warning_network_rate_limit=7
+const val warning_network_http_error=8
 } }
+""")
+    (work / "ApiError.kt").write_text("""package app.universal.patch.manager.network.utils
+class Status(val value: Int)
+class APIError(val code: Status, body: String) : Exception(body)
+""")
+    (work / "HttpService.kt").write_text("""package app.universal.patch.manager.network.service
+import app.universal.patch.manager.network.utils.Status
+class HttpService {
+    class HttpException(val status: Status) : Exception()
+    class TooManyRequestsException(val retryAfterMillis: Long?) : Exception()
+}
+""")
+    (work / "KtorTimeout.kt").write_text("""package io.ktor.client.plugins
+class HttpRequestTimeoutException : Exception()
 """)
     (work / "Main.kt").write_text("""import android.content.Context
 import app.universal.patch.manager.util.catalogErrorMessage
+import app.universal.patch.manager.util.networkWarningMessage
+import app.universal.patch.manager.network.utils.APIError
+import app.universal.patch.manager.network.utils.Status
+import app.universal.patch.manager.network.service.HttpService
 fun main() {
     val context=Context()
     check(context.catalogErrorMessage(null) == "localized fallback")
     check(context.catalogErrorMessage("Catalog changed; refresh release history") == "localized history")
     check(context.catalogErrorMessage("Catalog changed; refresh the catalog") == "localized catalog")
     check(context.catalogErrorMessage("Server detail") == "Server detail")
+    check(context.networkWarningMessage(Exception(java.net.UnknownHostException("example.org"))) == "localized DNS")
+    check(context.networkWarningMessage(java.net.ConnectException("connection abort")) == "localized connection")
+    check(context.networkWarningMessage(java.net.SocketTimeoutException()) == "localized timeout")
+    check(context.networkWarningMessage(APIError(Status(403), "API rate limit exceeded")) == "localized rate limit")
+    check(context.networkWarningMessage(APIError(Status(503), "raw details")) == "localized HTTP 503")
+    check(context.networkWarningMessage(HttpService.HttpException(Status(429))) == "localized rate limit")
+    check(context.networkWarningMessage(Exception(HttpService.TooManyRequestsException(1000L))) == "localized rate limit")
+    check(context.networkWarningMessage(HttpService.HttpException(Status(503))) == "localized HTTP 503")
+    check(context.networkWarningMessage(IllegalStateException("application error")) == null)
     println("PASS: version code survives restart, existing codes/version boundaries/selections protected, localized errors preserve remote details")
 }
 """)

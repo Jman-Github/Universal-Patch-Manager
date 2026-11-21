@@ -50,6 +50,7 @@ import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
+import app.universal.patch.manager.ui.component.CollectionDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -526,7 +527,7 @@ private fun BatchOrderDialog(
         workingOrder.add(to.index, workingOrder.removeAt(from.index))
     }
 
-    AlertDialog(
+    CollectionDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {
             TextButton(onClick = { onConfirm(workingOrder.toList()) }) {
@@ -551,7 +552,8 @@ private fun BatchOrderDialog(
                 LazyColumnWithScrollbar(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 320.dp),
+                        .weight(1f, fill = false),
+                    reserveScrollbarSpace = true,
                     state = lazyListState
                 ) {
                     itemsIndexed(

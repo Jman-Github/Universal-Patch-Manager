@@ -2,6 +2,7 @@ package app.universal.patch.manager.network.api
 
 import android.app.Application
 import app.universal.patch.manager.R
+import app.universal.patch.manager.util.networkWarningMessage
 import app.universal.patch.manager.network.dto.*
 import app.universal.patch.manager.network.service.HttpService
 import app.universal.patch.manager.network.utils.APIFailure
@@ -209,7 +210,7 @@ class ExternalBundlesApi(private val client: HttpService, private val app: Appli
                 } catch (cancel: CancellationException) {
                     throw cancel
                 } catch (error: Exception) {
-                    failure(error.message ?: app.getString(R.string.catalog_search_failed))
+                    failure(app.networkWarningMessage(error) ?: error.message ?: app.getString(R.string.catalog_search_failed))
                 }
             }
         }
@@ -543,7 +544,7 @@ class ExternalBundlesApi(private val client: HttpService, private val app: Appli
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (error: Exception) {
-                failure(error.message ?: app.getString(R.string.catalog_request_failed))
+                failure(app.networkWarningMessage(error) ?: error.message ?: app.getString(R.string.catalog_request_failed))
             }
         }
 
@@ -737,7 +738,7 @@ class ExternalBundlesApi(private val client: HttpService, private val app: Appli
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (error: Exception) {
-                val message = error.message ?: app.getString(R.string.catalog_request_failed)
+                val message = app.networkWarningMessage(error) ?: error.message ?: app.getString(R.string.catalog_request_failed)
                 recordFailure(key, message)
                 failure(message)
             }

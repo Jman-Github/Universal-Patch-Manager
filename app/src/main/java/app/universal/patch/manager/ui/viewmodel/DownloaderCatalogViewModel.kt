@@ -72,11 +72,8 @@ class DownloaderCatalogViewModel(
             val unavailableProviders = mutableSetOf<String>()
             val refreshed = repository.catalogAssets { unavailableProviders.add(it) }.distinctBy { it.id }
             // A temporary provider failure must not remove its choices or selections.
-            val previousOrder = catalog.map { it.id }
             val retained = catalog.filter { it.repoUrl in unavailableProviders }
-            catalog = (refreshed + retained).distinctBy { it.id }.sortedBy {
-                previousOrder.indexOf(it.id).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE
-            }
+            catalog = (refreshed + retained).distinctBy { it.id }.sortedBy { it.name.lowercase() }
             if (unavailableProviders.isNotEmpty()) {
                 warning = context.getString(R.string.downloader_catalog_partial)
             }

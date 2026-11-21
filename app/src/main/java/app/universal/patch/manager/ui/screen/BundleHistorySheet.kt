@@ -22,6 +22,7 @@ import app.universal.patch.manager.network.dto.HistoricalRelease
 import app.universal.patch.manager.ui.component.LazyColumnWithScrollbar
 import app.universal.patch.manager.ui.component.Markdown
 import app.universal.patch.manager.ui.viewmodel.BundleDiscoveryViewModel
+import app.universal.patch.manager.ui.screen.settings.CatalogMessage
 import app.universal.patch.manager.util.openUrl
 import kotlinx.coroutines.CancellationException
 
@@ -145,7 +146,7 @@ internal fun BundleHistorySheet(
                             CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
                         } else if (error != null) {
                             Column(Modifier.fillMaxWidth()) {
-                                Text(error.orEmpty(), color = MaterialTheme.colorScheme.error)
+                                CatalogMessage(error.orEmpty(), error = true, modifier = Modifier)
                                 TextButton(onClick = { force = true; loading = true; request++ }) {
                                     Text(stringResource(R.string.bundle_changelog_retry))
                                 }
@@ -189,7 +190,7 @@ private fun HistoricalReleaseCard(
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (failure: Exception) {
-            notesError = failure.message
+            notesError = context.catalogErrorMessage(failure.message)
         } finally {
             notesLoading = false
         }
@@ -267,7 +268,7 @@ private fun HistoricalReleaseCard(
             if (showNotes) {
                 if (notesLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
                 notesError?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error)
+                    CatalogMessage(it, error = true, modifier = Modifier)
                     TextButton(onClick = { notesRequest++ }) {
                         Text(stringResource(R.string.bundle_changelog_retry))
                     }
@@ -282,7 +283,7 @@ private fun HistoricalReleaseCard(
             if (showBundles) {
                 if (bundlesLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
                 bundlesError?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error)
+                    CatalogMessage(it, error = true, modifier = Modifier)
                     TextButton(onClick = { bundlesRequest++ }) {
                         Text(stringResource(R.string.bundle_changelog_retry))
                     }

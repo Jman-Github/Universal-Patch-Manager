@@ -21,13 +21,15 @@ fun ColumnWithScrollbar(
     verticalArrangement: Arrangement.Vertical = Arrangement.Top,
     horizontalAlignment: Alignment.Horizontal = Alignment.Start,
     thumbLength: Dp? = DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+    contentModifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Box(modifier) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(state),
+                .verticalScroll(state)
+                .then(contentModifier),
             verticalArrangement = verticalArrangement,
             horizontalAlignment = horizontalAlignment,
             content = content

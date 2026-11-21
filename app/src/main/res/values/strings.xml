@@ -2771,4 +2771,34 @@ Details: %2$s</string>
     <string name="tools_keystore_creator_algorithm">Key algorithm</string>
     <string name="tools_keystore_converter_keep_algorithm">Keep existing key</string>
     <string name="tools_keystore_converter_new_identity_warning">Selecting RSA or ECDSA generates a new key and certificate. It cannot update apps signed with the original key. Choose Keep existing key to change only the file format.</string>
+    <string name="app_selector_version">Version: %1$s</string>
+    <string name="patch_bundle_download_title">Patch bundle</string>
+    <string name="warning_network_dns">Could not resolve the server address. Check your connection and try again.</string>
+    <string name="warning_network_timeout">The request timed out. Try again.</string>
+    <string name="warning_network_connection">Could not connect to the server. Check your connection and try again.</string>
+    <string name="warning_network_rate_limit">The server rate limit was reached. Wait a moment and try again.</string>
+    <string name="warning_network_http_error">The server returned HTTP %1$d. Try again.</string>
+    <string name="runtime_catalog_saved_release_failed">Could not load the saved runtime release.</string>
+    <string name="runtime_catalog_releases_failed">Could not load runtime releases.</string>
+    <string name="runtime_catalog_metadata_failed">Could not load runtime compatibility information.</string>
+    <string name="runtime_catalog_open_file_failed">Could not open the runtime file.</string>
+    <string name="runtime_catalog_replacement_load_failed">The verified %1$s replacement could not be loaded. Try setup again.</string>
+    <string name="runtime_catalog_not_runtime_file">This file is not a runtime from the catalog.</string>
+    <string name="runtime_manager_signer_unreadable">Could not read the manager signing identity.</string>
+    <string name="runtime_catalog_downgrade">This release would downgrade an installed runtime.</string>
+    <string name="runtime_archive_unreadable">Could not read the runtime APK %1$s.</string>
+    <string name="runtime_archive_verification_failed">Runtime APK signature verification failed.</string>
+    <string name="runtime_archive_official_signer_mismatch">The official runtime must be signed with the manager’s signing key.</string>
+    <string name="runtime_archive_package_mismatch">The runtime APK contains an unexpected package.</string>
+    <string name="runtime_archive_kind_mismatch">The runtime APK has an unexpected runtime type.</string>
+    <string name="runtime_archive_protocol_mismatch">The runtime protocol is incompatible.</string>
+    <string name="runtime_archive_version_mismatch">The runtime APK contains an unexpected version.</string>
+    <string name="runtime_archive_checksum_mismatch">The runtime download checksum does not match.</string>
+    <string name="runtime_archive_incomplete">The runtime download is incomplete.</string>
+    <string name="runtime_archive_signer_mismatch">Signer mismatch for %1$s.</string>
+    <string name="runtime_archive_trust_expected">Expected a trusted runtime source for %1$s.</string>
+    <plurals name="incompatible_patches_quantity">
+        <item quantity="one">Incompatible patch</item>
+        <item quantity="other">Incompatible patches</item>
+    </plurals>
 </resources>

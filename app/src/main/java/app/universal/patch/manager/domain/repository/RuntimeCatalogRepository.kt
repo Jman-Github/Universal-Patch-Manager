@@ -5,7 +5,9 @@ import app.universal.patch.manager.R
 import android.os.Build
 import android.os.Process
 import app.universal.patch.manager.network.api.UpmAPI
-import app.universal.patch.manager.network.api.successOrThrow
+import app.universal.patch.manager.network.utils.APIResponse
+import app.universal.patch.manager.network.utils.getOrThrow
+import app.universal.patch.manager.util.networkWarningMessage
 import app.universal.patch.manager.network.dto.GitHubAsset
 import app.universal.patch.manager.network.dto.GitHubRelease
 import app.universal.patch.manager.network.runtime.*
@@ -45,7 +47,7 @@ class RuntimeCatalogRepository(
     }
 
     suspend fun refresh(): RuntimeCatalog = withContext(Dispatchers.IO) {
-        val raw = http.request<String> { url(CATALOG_URL) }.successOrThrow("runtime catalog")
+        val raw = http.request<String> { url(CATALOG_URL) }.runtimeResult(R.string.runtime_catalog_refresh_failed)
         val catalog = json.decodeFromString<RuntimeCatalog>(raw).validated()
         writeRuntimeCatalogCache(cache, raw)
         catalog
@@ -58,11 +60,11 @@ class RuntimeCatalogRepository(
     ): CatalogRuntimeRelease {
         // Filter while paginating, so frequent releases of one engine cannot hide another.
         val releases = if (tag != null) {
-            listOf(api.getRepositoryReleaseByTag(item.repoUrl, tag).successOrThrow("saved runtime release"))
+            listOf(api.getRepositoryReleaseByTag(item.repoUrl, tag).runtimeResult(R.string.runtime_catalog_saved_release_failed))
                 .filter { !it.draft }
         } else api.getRepositoryReleaseHistory(
             item.repoUrl, prerelease, limit = 30, tagPrefix = item.id + "-v"
-        ).successOrThrow("runtime releases")
+        ).runtimeResult(R.string.runtime_catalog_releases_failed)
         var firstFailure: Throwable? = null
         for (release in releases) {
             val metadata = release.assets.firstOrNull { it.name == "runtime-release.json" } ?: continue
@@ -70,7 +72,7 @@ class RuntimeCatalogRepository(
             try {
                 val manifest = http.request<RuntimeReleaseManifest> {
                     url(metadata.downloadUrl)
-                }.successOrThrow("runtime compatibility metadata")
+                }.runtimeResult(R.string.runtime_catalog_metadata_failed)
                 if (manifest.isCompatible(item, Build.VERSION.SDK_INT, processAbis)) {
                     return CatalogRuntimeRelease(item, manifest, release, asset)
                 }
@@ -79,7 +81,19 @@ class RuntimeCatalogRepository(
                 if (firstFailure == null) firstFailure = error
             }
         }
-        throw IllegalStateException(app.getString(R.string.runtime_catalog_no_compatible_release, item.name), firstFailure)
+        firstFailure?.let { throw it }
+        val name = if (item.runtimeKind == PatcherRuntimeKind.SHARED_SUPPORT) {
+            app.getString(R.string.runtime_shared_support_name)
+        } else item.name
+        throw IllegalStateException(app.getString(R.string.runtime_catalog_no_compatible_release, name))
+    }
+
+    private fun <T> APIResponse<T>.runtimeResult(@androidx.annotation.StringRes fallback: Int): T = try {
+        getOrThrow()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        throw IllegalStateException(app.networkWarningMessage(error) ?: app.getString(fallback), error)
     }
 
     companion object {

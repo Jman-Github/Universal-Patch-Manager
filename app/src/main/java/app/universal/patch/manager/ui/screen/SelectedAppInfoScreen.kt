@@ -502,6 +502,7 @@ fun SelectedAppInfoScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
+                val concreteVersion = version?.takeUnless { bundleTargetsAllVersions && selectedBundleUid != null }
                 val versionLabel = when {
                     bundleTargetsAllVersions && selectedBundleUid != null ->
                         stringResource(R.string.bundle_version_all_versions)
@@ -511,7 +512,9 @@ fun SelectedAppInfoScreen(
                 AppVersion(
                     appInfo = vm.selectedAppInfo,
                     versionName = versionLabel,
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
+                    prefixVersion = concreteVersion != null,
+                    copyVersionOnLongPress = concreteVersion != null
                 )
             }
 

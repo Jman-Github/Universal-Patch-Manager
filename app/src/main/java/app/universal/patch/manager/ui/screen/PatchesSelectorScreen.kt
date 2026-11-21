@@ -1229,7 +1229,7 @@ fun PatchesSelectorScreen(
                 suggestedVersion = suggestedVersion
             ) {
                 ListHeader(
-                    title = stringResource(R.string.incompatible_patches),
+                    title = pluralStringResource(R.plurals.incompatible_patches_quantity, incompatibleVisible.size),
                     onHelpClick = { showIncompatiblePatchesDialog = true }
                 )
             }
@@ -1272,7 +1272,7 @@ fun PatchesSelectorScreen(
                 suggestedVersion = suggestedVersion
             ) {
                 ListHeader(
-                    title = stringResource(R.string.incompatible_patches),
+                    title = pluralStringResource(R.plurals.incompatible_patches_quantity, incompatibleVisible.size),
                     onHelpClick = { showIncompatiblePatchesDialog = true }
                 )
             }

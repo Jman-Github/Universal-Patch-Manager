@@ -35,5 +35,6 @@ fun String.toDownloaderMainName(): String {
         .replace("Apkmirror", "APKMirror", ignoreCase = true)
         .replace("Apkcombo", "APKCombo", ignoreCase = true)
         .replace("Apkpure", "APKPure", ignoreCase = true)
+        .let { if (it.equals("APK Download Helper", ignoreCase = true)) "Morphe Helper" else it }
         .ifBlank { this }
 }

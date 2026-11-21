@@ -203,7 +203,7 @@ internal fun AppEntryArchiveSelection(
             HorizontalDivider()
             FlowRow(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }

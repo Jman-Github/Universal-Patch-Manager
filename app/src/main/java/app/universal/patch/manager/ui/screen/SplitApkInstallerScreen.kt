@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import app.universal.patch.manager.ui.component.Scrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.Storage
@@ -396,8 +397,8 @@ fun SplitApkInstallerScreen(
             state = contentScrollState,
             modifier = Modifier
                 .padding(paddingValues)
-                .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .fillMaxSize(),
+            contentModifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Card(
@@ -597,7 +598,8 @@ private fun SplitInstallerRawLog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 96.dp, max = 220.dp)
-                                .verticalScroll(scrollState),
+                                .verticalScroll(scrollState)
+                                .padding(end = 8.dp),
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 11.sp,
@@ -605,6 +607,9 @@ private fun SplitInstallerRawLog(
                             ),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                    Box(Modifier.matchParentSize()) {
+                        Scrollbar(scrollState, Modifier.align(Alignment.CenterEnd))
                     }
                     if (showJumpToLatest) {
                         SmallFloatingActionButton(

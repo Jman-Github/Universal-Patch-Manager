@@ -1276,18 +1276,15 @@ private fun BundleSuggestionCard(
                 text = if (suggestion.supportsAllVersions) {
                     stringResource(R.string.other_supported_versions_all)
                 } else if (suggestion.recommendedVersionExperimental) {
-                    stringResource(R.string.bundle_version_dialog_recommended, versionLabel) +
+                    stringResource(R.string.app_selector_version, versionLabel) +
                         " • " + stringResource(R.string.patch_bundle_experimental_version_label)
                 } else {
-                    stringResource(R.string.bundle_version_dialog_recommended, versionLabel)
+                    stringResource(R.string.app_selector_version, versionLabel)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            val showOtherVersionsButton = !suggestion.supportsAllVersions ||
-                suggestion.recommendedVersion != null ||
-                suggestion.otherSupportedVersions.isNotEmpty()
-            if (showOtherVersionsButton) {
+            if (suggestion.otherSupportedVersions.isNotEmpty()) {
                 TextButton(
                     onClick = onShowOtherVersions,
                     enabled = enabled,

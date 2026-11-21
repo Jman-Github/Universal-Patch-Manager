@@ -36,11 +36,12 @@ class Resolver {
         return "plugin".byteInputStream()
     }
 }
-object R { object string { const val runtime_progress_importing = 1 } }
+object R { object string { const val runtime_progress_importing = 1; const val runtime_catalog_open_file_failed = 2 } }
 class App(val cacheDir: File) {
     val contentResolver = Resolver()
     fun getString(id: Int) = "Importing runtime APK"
 }
+fun App.networkWarningMessage(error: Throwable): String? = null
 class Repository {
     var calls = 0
     var waitForCancellation = false

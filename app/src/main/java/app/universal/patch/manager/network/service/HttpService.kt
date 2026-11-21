@@ -244,7 +244,7 @@ class HttpService(
         }
     }
 
-    class HttpException(status: HttpStatusCode) : Exception("Failed to fetch: http status: $status")
+    class HttpException(val status: HttpStatusCode) : Exception("Failed to fetch: http status: $status")
     class TooManyRequestsException(val retryAfterMillis: Long?) : Exception("HTTP 429 Too Many Requests")
 
     @PublishedApi

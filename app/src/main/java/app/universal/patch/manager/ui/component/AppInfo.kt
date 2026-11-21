@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.component
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.pm.PackageInfo
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.background
@@ -17,11 +19,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import app.universal.patch.manager.R
 import app.universal.patch.manager.domain.repository.appNamePackagePattern
+import app.universal.patch.manager.util.longPressOnly
+import app.universal.patch.manager.util.toast
 import app.universal.patch.manager.util.versionCodeFor
 
 @Composable
@@ -169,20 +174,33 @@ fun AppVersion(
     modifier: Modifier = Modifier,
     style: TextStyle? = null,
     prefixVersion: Boolean = false,
-    versionCodeOverride: Long? = null
+    versionCodeOverride: Long? = null,
+    copyVersionOnLongPress: Boolean = false
 ) {
-    val displayVersion = versionName?.takeIf { it.isNotBlank() } ?: return
+    val rawVersion = versionName?.takeIf { it.isNotBlank() } ?: return
+    val displayVersion = if (prefixVersion) "v${rawVersion.removePrefix("v").removePrefix("V")}" else rawVersion
 
+    val clipboardModifier = if (copyVersionOnLongPress) {
+        val context = LocalContext.current
+        val copyLabel = stringResource(R.string.copy_to_clipboard)
+        val copiedMessage = stringResource(R.string.toast_copied_to_clipboard)
+        Modifier.longPressOnly(label = copyLabel, onLongPress = {
+            context.getSystemService(ClipboardManager::class.java)?.let { clipboard ->
+                clipboard.setPrimaryClip(ClipData.newPlainText(copyLabel, displayVersion))
+                context.toast(copiedMessage)
+            }
+        })
+    } else {
+        Modifier
+    }
     ExpandableText(
         text = appVersionLabel(
-            versionName = displayVersion,
+            versionName = rawVersion,
             appInfo = appInfo,
             displayVersion = displayVersion,
             versionCodeOverride = versionCodeOverride
-        ).let { label ->
-            if (prefixVersion) "v${label.removePrefix("v").removePrefix("V")}" else label
-        },
-        modifier = modifier,
+        ),
+        modifier = modifier.then(clipboardModifier),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = style ?: MaterialTheme.typography.bodySmall
     )

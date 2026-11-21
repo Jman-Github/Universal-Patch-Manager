@@ -1995,7 +1995,7 @@ private enum class ExportPicker(val defaultName: String) {
     PatchBundles("upm_patch_bundles.json"),
     PatchProfiles("upm_patch_profiles.json"),
     ManagerSettings("upm_settings.json"),
-    AppEntries("UPM-app-entries.zip"),
+    AppEntries("upm_app_entries.zip"),
     PatchSelection("upm_patch_selection_all.json")
 }
 

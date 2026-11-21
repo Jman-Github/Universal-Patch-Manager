@@ -34,7 +34,28 @@ class Assets { fun open(name: String): java.io.InputStream = error("Unexpected a
 """,
     "R.kt": """
 package app.universal.patch.manager
-object R { object string { const val runtime_catalog_no_compatible_release = 1 } }
+object R { object string {
+    const val runtime_catalog_no_compatible_release = 1
+    const val runtime_catalog_refresh_failed = 2
+    const val runtime_catalog_saved_release_failed = 3
+    const val runtime_catalog_releases_failed = 4
+    const val runtime_catalog_metadata_failed = 5
+    const val runtime_shared_support_name = 6
+} }
+""",
+    "AndroidAnnotation.kt": """
+package androidx.annotation
+annotation class StringRes
+""",
+    "Warning.kt": """
+package app.universal.patch.manager.util
+import android.app.Application
+fun Application.networkWarningMessage(error: Throwable): String? = null
+""",
+    "Response.kt": """
+package app.universal.patch.manager.network.utils
+class APIResponse<T>(val data: T)
+fun <T> APIResponse<T>.getOrThrow(): T = data
 """,
     "Device.kt": """
 package android.os
@@ -57,14 +78,13 @@ class LoadedPatcherRuntimePlugin(val packageName: String, val kind: PatcherRunti
     "API.kt": """
 package app.universal.patch.manager.network.api
 import app.universal.patch.manager.network.dto.GitHubRelease
-class Response<T>(val data: T)
-fun <T> Response<T>.successOrThrow(label: String): T = data
+import app.universal.patch.manager.network.utils.APIResponse
 class UpmAPI(var releases: List<GitHubRelease>) {
-    suspend fun getRepositoryReleaseByTag(repoUrl: String, tag: String): Response<GitHubRelease> =
-        Response(releases.first { it.tagName == tag })
+    suspend fun getRepositoryReleaseByTag(repoUrl: String, tag: String): APIResponse<GitHubRelease> =
+        APIResponse(releases.first { it.tagName == tag })
     suspend fun getRepositoryReleaseHistory(repoUrl: String, prerelease: Boolean? = null,
-        limit: Int = 20, tagPrefix: String? = null): Response<List<GitHubRelease>> =
-        Response(releases.filter {
+        limit: Int = 20, tagPrefix: String? = null): APIResponse<List<GitHubRelease>> =
+        APIResponse(releases.filter {
             !it.draft && (prerelease == null || it.prerelease == prerelease) &&
                 (tagPrefix == null || it.tagName.startsWith(tagPrefix))
         }.take(limit))
@@ -72,14 +92,14 @@ class UpmAPI(var releases: List<GitHubRelease>) {
 """,
     "Http.kt": """
 package app.universal.patch.manager.network.service
-import app.universal.patch.manager.network.api.Response
+import app.universal.patch.manager.network.utils.APIResponse
 import app.universal.patch.manager.network.runtime.RuntimeReleaseManifest
 import io.ktor.client.request.HttpRequestBuilder
 class HttpService(val metadata: MutableMap<String, RuntimeReleaseManifest>) {
-    suspend inline fun <reified T> request(builder: HttpRequestBuilder.() -> Unit): Response<T> {
+    suspend inline fun <reified T> request(builder: HttpRequestBuilder.() -> Unit): APIResponse<T> {
         val url = HttpRequestBuilder().apply(builder).location
         @Suppress("UNCHECKED_CAST")
-        return Response(metadata.getValue(url) as T)
+        return APIResponse(metadata.getValue(url) as T)
     }
 }
 """,

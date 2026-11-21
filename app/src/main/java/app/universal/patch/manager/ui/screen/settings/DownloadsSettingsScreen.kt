@@ -697,7 +697,8 @@ fun DownloadsSettingsScreen(
                         }
                     }
                 }
-                sourceStates.forEach { (sourceId, source) ->
+                sourceStates.entries.sortedBy { it.value.name.toDownloaderMainName().lowercase() }
+                    .forEach { (sourceId, source) ->
                     item(key = "source:$sourceId") {
                         var showExceptionViewer by remember { mutableStateOf(false) }
                         var showTrustDialog by remember { mutableStateOf(false) }
@@ -707,8 +708,10 @@ fun DownloadsSettingsScreen(
                         val sourceIsHelper = helperSource != null || untrustedSource?.helperApp == true
                         val helperPackageName = helperSource?.packageName
                             ?: untrustedSource?.packageName?.takeIf { untrustedSource.helperApp }
-                        val helperInstalled = helperPackageName != null &&
-                            apkDownloadHelpers.any { it.packageName == helperPackageName }
+                        val helperInstalled = helperSource?.installed == true || (helperPackageName != null &&
+                            apkDownloadHelpers.any { it.packageName == helperPackageName })
+                        val installedRemoteHelper = sourceIsHelper && helperInstalled && source.repoUrl.isNotBlank()
+                        val canUpdateHelper = sourceIsHelper && helperInstalled
                         val installingHelper =
                             remoteSourceBusyState == DownloadsViewModel.RemoteSourceBusyState.InstallingHelper(sourceId)
                         val uninstallingHelper = helperPackageName != null &&
@@ -785,7 +788,7 @@ fun DownloadsSettingsScreen(
                                             source.state.installedVersion != null &&
                                             source.version != source.state.installedVersion ->
                                             R.string.downloader_helper_source_update_downloaded
-                                        else -> R.string.installed
+                                        else -> R.string.downloader_source_state_loaded
                                     }
 
                                     is DownloaderPluginSourceState.State.Missing ->
@@ -797,9 +800,10 @@ fun DownloadsSettingsScreen(
                                     is DownloaderPluginSourceState.State.Failed ->
                                         R.string.downloader_source_state_failed
                                 }
-                            ),
+                            ) + if (helperSource != null && !helperInstalled && !installingHelper) {
+                                "\n" + stringResource(R.string.downloader_source_state_loaded)
+                            } else "",
                             type = when {
-                                sourceIsHelper -> DownloaderPluginType.Helper
                                 source.repoUrl.isBlank() -> DownloaderPluginType.Local
                                 else -> DownloaderPluginType.Remote
                             },
@@ -807,20 +811,20 @@ fun DownloadsSettingsScreen(
                                 ?: source.entry.assetSelector,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                             secondaryActionLabel = stringResource(
-                                if (sourceIsHelper && source.repoUrl.isNotBlank()) R.string.settings else R.string.delete
+                                if (installedRemoteHelper) R.string.settings else R.string.delete
                             ),
                             onSecondaryAction = {
-                                if (sourceIsHelper && source.repoUrl.isNotBlank()) {
+                                if (installedRemoteHelper) {
                                     sourceIdInSettings = sourceId
                                 } else {
                                     sourceIdPendingDeletion = sourceId
                                 }
                             },
                             middleActionLabel = stringResource(
-                                if (sourceIsHelper) R.string.update else R.string.settings
+                                if (canUpdateHelper) R.string.update else R.string.settings
                             ),
                             onMiddleAction = {
-                                if (sourceIsHelper) {
+                                if (canUpdateHelper) {
                                     viewModel.updatePluginSource(sourceId)
                                 } else {
                                     sourceIdInSettings = sourceId
@@ -853,7 +857,7 @@ fun DownloadsSettingsScreen(
                             primaryActionEnabled = remoteSourceBusyState == null &&
                                 (sourceIsHelper || untrustedSource != null || source.repoUrl.isNotBlank()),
                             middleActionEnabled = remoteSourceBusyState == null &&
-                                (!sourceIsHelper || source.repoUrl.isNotBlank()),
+                                (!canUpdateHelper || source.repoUrl.isNotBlank()),
                             secondaryActionEnabled = remoteSourceBusyState == null,
                             footerActionLabel = when {
                                 sourceIsHelper && helperInstalled -> stringResource(R.string.uninstall)
@@ -890,6 +894,7 @@ fun DownloadsSettingsScreen(
                 apkDownloadHelpers
                     .filterNot { it.packageName in managedHelperPackages }
                     .distinctBy { it.packageName }
+                    .sortedBy { it.label.toDownloaderMainName().lowercase() }
                     .forEach { helper ->
                         item(key = "helper:${helper.packageName}") {
                             var showTrustDialog by remember { mutableStateOf(false) }
@@ -978,10 +983,10 @@ fun DownloadsSettingsScreen(
                                 },
                                 version = helper.version,
                                 status = stringResource(
-                                    if (trusted) R.string.installed
+                                    if (trusted) R.string.downloader_source_state_loaded
                                     else R.string.downloader_plugin_state_untrusted
                                 ),
-                                type = DownloaderPluginType.Helper,
+                                type = DownloaderPluginType.Local,
                                 detail = helper.packageName,
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                                 primaryActionLabel = stringResource(
@@ -1483,8 +1488,7 @@ private data class PendingDownloadedAppsExportConfirmation(
 
 private enum class DownloaderPluginType(@StringRes val labelRes: Int) {
     Local(R.string.downloader_plugin_type_legacy),
-    Remote(R.string.downloader_plugin_type_modern),
-    Helper(R.string.downloader_plugin_type_helper)
+    Remote(R.string.downloader_plugin_type_modern)
 }
 
 private enum class DownloaderActionStyle {
@@ -1684,7 +1688,6 @@ private fun DownloaderPluginLeadingIcon(
     val icon = when (type) {
         DownloaderPluginType.Local -> Icons.Outlined.Folder
         DownloaderPluginType.Remote -> Icons.Outlined.Link
-        DownloaderPluginType.Helper -> Icons.Outlined.Download
     }
     Card(
         shape = RoundedCornerShape(18.dp),

@@ -96,9 +96,13 @@ internal fun CatalogTransferProgress(
 }
 
 @Composable
-internal fun CatalogMessage(message: String, error: Boolean) {
+internal fun CatalogMessage(
+    message: String,
+    error: Boolean,
+    modifier: Modifier = Modifier.padding(horizontal = 16.dp)
+) {
     ExpressiveSettingsCard(
-        modifier = Modifier.padding(horizontal = 16.dp),
+        modifier = modifier,
         containerColor = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
         contentPadding = PaddingValues(16.dp)
     ) {

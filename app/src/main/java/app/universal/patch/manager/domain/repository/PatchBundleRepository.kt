@@ -2275,7 +2275,11 @@ class PatchBundleRepository(
 
         val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
         val progressNotification = downloadProgressNotifier.begin(
-            importLabel ?: bundleImportLabel(normalizedUrl)
+            importLabel ?: bundleImportLabel(normalizedUrl).let { label ->
+                if (label.equals("patches patch bundle", ignoreCase = true) ||
+                    label.equals("patch patch bundle", ignoreCase = true)
+                ) app.getString(R.string.patch_bundle_download_title) else label
+            }
         )
         val updated = try {
             updateNow(

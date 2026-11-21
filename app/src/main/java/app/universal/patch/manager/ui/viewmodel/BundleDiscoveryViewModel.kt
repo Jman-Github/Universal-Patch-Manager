@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.patch.manager.util.catalogErrorMessage
+import app.universal.patch.manager.util.networkWarningMessage
 import app.universal.patch.manager.R
 import app.universal.patch.manager.domain.bundles.BundleDiscoveryStateStore
 import app.universal.patch.manager.domain.bundles.DiscoveryScrollPosition
@@ -278,7 +279,8 @@ class BundleDiscoveryViewModel(
             } catch (error: Exception) {
                 if (token == refreshToken) {
                     errorMessage = app.getString(R.string.patch_bundle_discovery_error) +
-                        error.message?.let { "\n" + app.catalogErrorMessage(it) }.orEmpty()
+                        (app.networkWarningMessage(error) ?: error.message?.let { app.catalogErrorMessage(it) })
+                            ?.let { "\n$it" }.orEmpty()
                     canLoadMore = cached?.canLoadMore ?: false
                 }
             } finally {

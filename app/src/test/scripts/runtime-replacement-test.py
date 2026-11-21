@@ -35,7 +35,7 @@ class PatcherRuntimePluginSourceState(val state: State) {
 }
 class Value<T>(var value: T)
 object Session { enum class State { Succeeded, Aborted } }
-object R { object string { const val runtime_catalog_remove_old_failed = 1 } }
+object R { object string { const val runtime_catalog_remove_old_failed = 1; const val runtime_catalog_replacement_load_failed = 2 } }
 class App { fun getString(id: Int, name: String) = "Allow uninstall of $name" }
 class PM(val events: MutableList<String>) {
     var installed = true

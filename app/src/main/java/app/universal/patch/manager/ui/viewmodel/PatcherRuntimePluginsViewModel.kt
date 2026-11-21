@@ -10,6 +10,7 @@ import app.universal.patch.manager.R
 import app.universal.patch.manager.domain.repository.PatcherRuntimePluginRepository
 import app.universal.patch.manager.util.PM
 import app.universal.patch.manager.util.simpleMessage
+import app.universal.patch.manager.util.networkWarningMessage
 import app.universal.patch.manager.util.toast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -66,7 +67,7 @@ class PatcherRuntimePluginsViewModel(
                 catalog = catalogRepository.refresh()
             } catch (error: Throwable) {
                 if (error is kotlinx.coroutines.CancellationException) throw error
-                catalogWarning = error.simpleMessage() ?: appContext.getString(R.string.runtime_catalog_refresh_failed)
+                catalogWarning = appContext.networkWarningMessage(error) ?: error.simpleMessage() ?: appContext.getString(R.string.runtime_catalog_refresh_failed)
             }
             val validIds = catalog.plugins.filter { it.isEngine }.map { it.id }.toSet()
             selectedCatalogIds = catalog.engineSelection(selectedCatalogIds)
@@ -86,14 +87,14 @@ class PatcherRuntimePluginsViewModel(
                     releases[item.id] = catalogRepository.resolve(item)
                 } catch (error: Throwable) {
                     if (error is kotlinx.coroutines.CancellationException) throw error
-                    errors[item.id] = error.simpleMessage().orEmpty()
+                    errors[item.id] = appContext.networkWarningMessage(error) ?: error.simpleMessage().orEmpty()
                 }
             }
             catalogReleases = releases
             catalogErrors = errors
         } catch (error: Throwable) {
             if (error is kotlinx.coroutines.CancellationException) throw error
-            catalogWarning = error.simpleMessage().orEmpty()
+            catalogWarning = appContext.networkWarningMessage(error) ?: error.simpleMessage().orEmpty()
         } finally { catalogLoading = false }
         if (prefs.runtimeSetupDownloading.get()) downloadSelected()
     }
@@ -108,7 +109,7 @@ class PatcherRuntimePluginsViewModel(
             runtimePluginRepository.importCatalogRuntimes(selectedCatalogIds) { currentDownload = it }
         } catch (error: Throwable) {
             if (error is kotlinx.coroutines.CancellationException) throw error
-            downloadError = error.simpleMessage()
+            downloadError = appContext.networkWarningMessage(error) ?: error.simpleMessage()
         } finally {
             currentDownload = null
             if (kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]?.isActive != false) prefs.runtimeSetupDownloading.update(false)
@@ -124,7 +125,7 @@ class PatcherRuntimePluginsViewModel(
             }
         } catch (error: Throwable) {
             if (error is kotlinx.coroutines.CancellationException) throw error
-            downloadError = error.simpleMessage()
+            downloadError = appContext.networkWarningMessage(error) ?: error.simpleMessage()
         }
     }
 
@@ -139,7 +140,7 @@ class PatcherRuntimePluginsViewModel(
             withContext(Dispatchers.IO) {
                 appContext.contentResolver.openInputStream(uri)?.use { input ->
                     file.outputStream().use { input.copyTo(it) }
-                } ?: error("Cannot open runtime file")
+                } ?: error(appContext.getString(R.string.runtime_catalog_open_file_failed))
             }
             val id = runtimePluginRepository.importCatalogFile(file)
             if (catalog.plugins.firstOrNull { it.id == id }?.isEngine == true) {
@@ -147,7 +148,7 @@ class PatcherRuntimePluginsViewModel(
             }
         } catch (error: Throwable) {
             if (error is kotlinx.coroutines.CancellationException) throw error
-            downloadError = error.simpleMessage()
+            downloadError = appContext.networkWarningMessage(error) ?: error.simpleMessage()
         } finally {
             temporary?.delete()
             currentDownload = null
