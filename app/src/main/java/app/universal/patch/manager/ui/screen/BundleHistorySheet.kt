@@ -63,7 +63,6 @@ internal fun BundleHistorySheet(
     }
 
     LaunchedEffect(bundle.sourceUrl, request) {
-        if (!append) listState.scrollToItem(0)
         val requestedCursor = if (append) nextCursor else null
         loading = true
         error = null
@@ -85,6 +84,9 @@ internal fun BundleHistorySheet(
                 page = viewModel.releaseHistory(bundle.sourceUrl, null, true)
             }
             releases = (if (append) releases + page.data else page.data).distinctBy { it.id }
+            // Reset on the layout that receives the new first page. Otherwise the
+            // loading row's stable key can anchor the list after the releases.
+            if (!append) listState.requestScrollToItem(0)
             generation = page.generation
             // Do not loop indefinitely if the server repeats the cursor we just used.
             nextCursor = page.nextCursor.takeUnless { append && it == requestedCursor }

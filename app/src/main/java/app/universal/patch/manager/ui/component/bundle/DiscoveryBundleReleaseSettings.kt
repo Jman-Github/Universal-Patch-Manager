@@ -29,6 +29,7 @@ import org.koin.androidx.compose.koinViewModel
 import java.net.URLEncoder
 
 private data class DiscoveryReleaseState(
+    val endpoint: String,
     val sourceUrl: String,
     val settings: RepositoryBundleSettings,
     val version: String?,
@@ -41,9 +42,13 @@ internal fun DiscoveryBundleReleaseSettings(source: RemotePatchBundle) {
     val api = koinInject<ExternalBundlesApi>()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var selection by remember(source.uid, source.endpoint) { mutableStateOf<DiscoveryReleaseState?>(null) }
+    // Keep the rows in the scroll layout while the replacement endpoint loads.
+    var selection by remember(source.uid) { mutableStateOf<DiscoveryReleaseState?>(null) }
     var busy by remember(source.uid) { mutableStateOf(false) }
-    var history by remember(source.uid) { mutableStateOf<ExternalBundleSnapshot?>(null) }
+    // Discard the picker and any pending result if the bundle source changes.
+    var history by remember(source.uid, source.endpoint) {
+        mutableStateOf<ExternalBundleSnapshot?>(null)
+    }
 
     LaunchedEffect(source.uid, source.endpoint) {
         selection = withContext(Dispatchers.IO) {
@@ -58,13 +63,15 @@ internal fun DiscoveryBundleReleaseSettings(source: RemotePatchBundle) {
             val settings = if (version != null) stored.copy(useSpecificVersion = true)
                 else stored.copy(usePrereleases = registry.prerelease ?: stored.usePrereleases,
                     useLatest = registry.prerelease == null, useSpecificVersion = false)
-            DiscoveryReleaseState(registry.sourceUrl, settings, version, metadata)
+            DiscoveryReleaseState(source.endpoint, registry.sourceUrl, settings, version, metadata)
         }
     }
     val state = selection ?: return
+    val isCurrent = state.endpoint == source.endpoint
+    val canEdit = isCurrent && !busy
 
     fun apply(settings: RepositoryBundleSettings, version: String? = null) {
-        if (busy) return
+        if (!isCurrent || busy) return
         busy = true
         scope.launch {
             try {
@@ -87,7 +94,7 @@ internal fun DiscoveryBundleReleaseSettings(source: RemotePatchBundle) {
     }
 
     fun openHistory() {
-        if (busy) return
+        if (!isCurrent || busy) return
         busy = true
         scope.launch {
             try {
@@ -110,12 +117,13 @@ internal fun DiscoveryBundleReleaseSettings(source: RemotePatchBundle) {
 
     val settings = state.settings
     @Composable fun Toggle(title: Int, description: Int, checked: Boolean, enabled: Boolean, change: () -> Unit) {
+        val interactive = enabled && canEdit
         BundleListItem(headlineText = stringResource(title), supportingText = stringResource(description),
             trailingContent = {
-                ExpressiveSettingsSwitch(checked = checked, enabled = enabled && !busy,
+                ExpressiveSettingsSwitch(checked = checked, enabled = interactive,
                     onCheckedChange = { change() })
-            }, modifier = Modifier.alpha(if (enabled && !busy) 1f else 0.38f)
-                .clickable(enabled = enabled && !busy, onClick = change))
+            }, modifier = Modifier.alpha(if (enabled) 1f else 0.38f)
+                .clickable(enabled = interactive, onClick = change))
     }
     Toggle(R.string.repository_bundle_prereleases, R.string.repository_bundle_prereleases_description,
         settings.usePrereleases && !settings.useLatest && !settings.useSpecificVersion, !settings.useSpecificVersion && !settings.useLatest) {
@@ -131,8 +139,8 @@ internal fun DiscoveryBundleReleaseSettings(source: RemotePatchBundle) {
     }
     BundleListItem(headlineText = stringResource(R.string.bundle_select_version),
         supportingText = state.version ?: stringResource(R.string.field_not_set),
-        modifier = Modifier.alpha(if (settings.useSpecificVersion && !busy) 1f else 0.38f)
-            .clickable(enabled = settings.useSpecificVersion && !busy) { openHistory() })
+        modifier = Modifier.alpha(if (settings.useSpecificVersion) 1f else 0.38f)
+            .clickable(enabled = settings.useSpecificVersion && canEdit) { openHistory() })
 
     history?.let { bundle ->
         val viewModel: BundleDiscoveryViewModel = koinViewModel()
