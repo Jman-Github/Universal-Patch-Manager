@@ -316,9 +316,8 @@ fun SelectedAppInfoScreen(
         patches.entries.mapNotNull { (bundleUid, patchNames) ->
             if (patchNames.isEmpty()) return@mapNotNull null
             val bundle = bundles.firstOrNull { it.uid == bundleUid }
-            val patchInfos = bundle?.patches
+            val patchInfos = bundle?.forSelection()?.patches
                 ?.filter { it.name in patchNames }
-                ?.distinctBy { it.name }
                 ?.sortedBy { it.name }
                 ?: emptyList()
             val missingNames = patchNames

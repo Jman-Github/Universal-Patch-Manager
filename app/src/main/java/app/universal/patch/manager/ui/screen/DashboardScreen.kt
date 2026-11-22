@@ -3676,11 +3676,12 @@ private fun MergeSplitInstalledAppsDialog(
                 )
             }
         ) { paddingValues ->
-            LazyColumn(
+            app.universal.patch.manager.ui.component.LazyColumnWithScrollbar(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                contentPadding = PaddingValues(start = 16.dp, top = 12.dp, bottom = 12.dp),
+                reserveScrollbarSpace = true,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 persistentControls(key = "merge-installed-controls") {

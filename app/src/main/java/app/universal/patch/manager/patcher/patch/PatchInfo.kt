@@ -20,6 +20,7 @@ data class PatchInfo(
     val availability: ImmutableMap<PatchInstallerType, PatchAvailabilityState>? = null,
     // Selection and option keys use name; runtimes may supply a separate readable title.
     val displayName: String = name,
+    val category: String? = null,
 ) {
 
     // Code adapted from Morphe, see third-party/NOTICE for more information.
@@ -135,7 +136,8 @@ data class PatchInfo(
                 compatiblePackages,
                 options,
                 availability,
-                displayName = (metadata["displayName"] as? String)?.takeIf { it.isNotBlank() } ?: name
+                displayName = (metadata["displayName"] as? String)?.takeIf { it.isNotBlank() } ?: name,
+                category = (metadata["category"] as? String)?.trim()?.takeIf { it.isNotEmpty() }
             )
         }
 

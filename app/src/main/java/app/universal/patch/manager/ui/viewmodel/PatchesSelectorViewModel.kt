@@ -145,8 +145,22 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         }.flatMapLatest { (version, versionCode) ->
             patchBundleRepository.scopedBundleInfoFlow(packageName, version, versionCode)
         }.combine(allowUniversalPatchesFlow) { bundles, allowUniversal ->
-            if (allowUniversal) bundles else bundles.map(PatchBundleInfo.Scoped::withoutUniversalPatches)
+            bundles.map { bundle ->
+                (if (allowUniversal) bundle else bundle.withoutUniversalPatches()).forSelection()
+            }
         }
+    fun setPatchSectionsVisible(visible: Boolean) = viewModelScope.launch {
+        prefs.patchSelectionShowCustomSections.update(visible)
+    }
+
+    fun togglePatchSection(sectionId: String) = viewModelScope.launch {
+        prefs.edit {
+            val overrides = prefs.patchSelectionSectionOverrides.value
+            prefs.patchSelectionSectionOverrides.value =
+                if (sectionId in overrides) overrides - sectionId else overrides + sectionId
+        }
+    }
+
     val bundleDisplayNames =
         patchBundleRepository.sources.map { sources ->
             sources.associate { source ->

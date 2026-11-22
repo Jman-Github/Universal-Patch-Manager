@@ -397,6 +397,8 @@ class PreferencesManager(
     val collapsePatchActionsOnSelection = booleanPreference("collapse_patch_actions_on_selection", true)
     val patchSelectionFilterFlags = intPreference("patch_selection_filter_flags", -1)
     val patchSelectionShowNewPatches = booleanPreference("patch_selection_show_new_patches", true)
+    val patchSelectionShowCustomSections = booleanPreference("patch_selection_show_custom_sections", true)
+    val patchSelectionSectionOverrides = stringSetPreference("patch_selection_section_overrides", emptySet())
     val patchSelectionSortAlphabetical = booleanPreference("patch_selection_sort_alphabetical", false)
     val patchSelectionSortDescending = booleanPreference("patch_selection_sort_descending", false)
     val patchSelectionSortSettingsMode = stringPreference("patch_selection_sort_settings_mode", "None")
@@ -782,6 +784,7 @@ class PreferencesManager(
         val patchSelectionHiddenActions: Set<String>? = null,
         val patchSelectionShowVersionTags: Boolean? = null,
         val patchSelectionShowOptionPreviews: Boolean? = null,
+        val patchSelectionShowCustomSections: Boolean? = null,
         val patchSelectionDisplayRestoreFlags: Int? = null,
         val patchBundleActionOrder: String? = null,
         val patchBundleHiddenActions: Set<String>? = null,
@@ -1057,6 +1060,7 @@ class PreferencesManager(
             patchSelectionHiddenActions = patchSelectionHiddenActions.value,
             patchSelectionShowVersionTags = patchSelectionShowVersionTags.value,
             patchSelectionShowOptionPreviews = patchSelectionShowOptionPreviews.value,
+            patchSelectionShowCustomSections = patchSelectionShowCustomSections.value,
             patchSelectionDisplayRestoreFlags = patchSelectionDisplayRestoreFlags.value,
             patchBundleActionOrder = patchBundleActionOrder.value,
             patchBundleHiddenActions = patchBundleHiddenActions.value,
@@ -1345,6 +1349,7 @@ class PreferencesManager(
                 snapshot.patchSelectionDisplayRestoreFlags?.takeIf { it in 0..3 } ?: 0
         }
         snapshot.patchSelectionShowVersionTags?.let { patchSelectionShowVersionTags.value = it }
+        snapshot.patchSelectionShowCustomSections?.let { patchSelectionShowCustomSections.value = it }
         snapshot.patchSelectionShowOptionPreviews?.let {
             patchSelectionShowOptionPreviews.value = it
         }

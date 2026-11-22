@@ -496,7 +496,7 @@ class PatcherViewModel(
         val allowIncompatible = prefs.disablePatchVersionCompatCheck.get() ||
             bundles.any { (uid, bundle) ->
                 val selected = appliedSelection[uid].orEmpty()
-                bundle.incompatible.any { it.name in selected }
+                bundle.forSelection().incompatible.any { it.name in selected }
             }
         val patchesByBundle = bundles.mapValues { (_, bundle) ->
             bundle.patchSequence(allowIncompatible).associateBy { it.name }
@@ -5872,7 +5872,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val allowIncompatible = prefs.disablePatchVersionCompatCheck.get() ||
             bundles.any { (uid, bundle) ->
                 val selected = selection[uid].orEmpty()
-                bundle.incompatible.any { it.name in selected }
+                bundle.forSelection().incompatible.any { it.name in selected }
             }
         val availabilityEnabled = prefs.patchAvailabilityEnabled.get()
         val removeGmsCore = usingMountInstall &&
@@ -5895,11 +5895,16 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     ): Options = buildMap {
         options.forEach { (uid, patchOptions) ->
             val bundle = bundles[uid] ?: return@forEach
-            val patches = bundle.patches.associateBy { it.name }
+            val patches = when (bundle) {
+                is PatchBundleInfo.Scoped -> bundle.forSelection().patches
+                is PatchBundleInfo.Global -> bundle.patches
+            }.groupBy { it.name }
             val filtered = buildMap<String, Map<String, Any?>> {
                 patchOptions.forEach { (patchName, values) ->
-                    val patch = patches[patchName] ?: return@forEach
-                    val validKeys = patch.options?.map { it.key }?.toSet() ?: emptySet()
+                    val matchingPatches = patches[patchName] ?: return@forEach
+                    val validKeys = matchingPatches.flatMapTo(mutableSetOf()) { patch ->
+                        patch.options.orEmpty().map { it.key }
+                    }
                     val kept = if (validKeys.isEmpty()) values else values.filterKeys { it in validKeys }
                     if (kept.isNotEmpty()) put(patchName, kept)
                 }

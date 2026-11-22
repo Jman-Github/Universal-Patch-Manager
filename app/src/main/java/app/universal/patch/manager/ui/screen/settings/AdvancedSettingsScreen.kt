@@ -1812,6 +1812,7 @@ fun AdvancedSettingsScreen(
             val minimalPatchSelectionView =
                 !showPatchSelectionVersionTags && !showPatchSelectionOptionPreviews
 
+            val showCustomPatchSections by viewModel.prefs.patchSelectionShowCustomSections.getAsState()
             SettingsSearchHighlight(
                 targetKey = R.string.patch_list_display_section,
                 activeKey = highlightTarget,
@@ -1882,6 +1883,24 @@ fun AdvancedSettingsScreen(
                         headline = R.string.patch_selection_option_previews_title,
                         description = R.string.patch_selection_option_previews_description,
                         enabled = !minimalPatchSelectionView
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.patch_selection_show_custom_sections_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = showCustomPatchSections,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.patchSelectionShowCustomSections.update(value)
+                            }
+                        },
+                        headline = R.string.patch_selection_show_custom_sections_title,
+                        description = R.string.patch_selection_show_custom_sections_description
                     )
                 }
             }
@@ -2827,26 +2846,16 @@ internal fun ActionButtonSettings(
                                     }
                             }
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                TextButton(
-                                    onClick = { viewModel.setPatchSelectionHiddenActions(emptySet()) }
-                                ) {
-                                    Text(stringResource(R.string.patch_selection_action_visibility_reset))
+                            ActionOrderResetButtons(
+                                showAllLabel = R.string.patch_selection_action_visibility_reset,
+                                resetOrderLabel = R.string.patch_selection_action_order_reset,
+                                onShowAll = { viewModel.setPatchSelectionHiddenActions(emptySet()) },
+                                onResetOrder = {
+                                    workingOrder.clear()
+                                    workingOrder.addAll(PatchSelectionActionKey.DefaultOrder)
+                                    viewModel.setPatchSelectionActionOrder(PatchSelectionActionKey.DefaultOrder)
                                 }
-                                TextButton(
-                                    onClick = {
-                                        workingOrder.clear()
-                                        workingOrder.addAll(PatchSelectionActionKey.DefaultOrder)
-                                        viewModel.setPatchSelectionActionOrder(PatchSelectionActionKey.DefaultOrder)
-                                    }
-                                ) {
-                                    Text(stringResource(R.string.patch_selection_action_order_reset))
-                                }
-                            }
+                            )
                     }
                 }
             ExpressiveSettingsDivider()
@@ -2945,26 +2954,16 @@ internal fun ActionButtonSettings(
                                 }
                         }
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            TextButton(
-                                onClick = { viewModel.setPatchBundleHiddenActions(emptySet()) }
-                            ) {
-                                Text(stringResource(R.string.patch_bundle_action_visibility_reset))
+                        ActionOrderResetButtons(
+                            showAllLabel = R.string.patch_bundle_action_visibility_reset,
+                            resetOrderLabel = R.string.patch_bundle_action_order_reset,
+                            onShowAll = { viewModel.setPatchBundleHiddenActions(emptySet()) },
+                            onResetOrder = {
+                                bundleWorkingOrder.clear()
+                                bundleWorkingOrder.addAll(PatchBundleActionKey.DefaultOrder)
+                                viewModel.setPatchBundleActionOrder(PatchBundleActionKey.DefaultOrder)
                             }
-                            TextButton(
-                                onClick = {
-                                    bundleWorkingOrder.clear()
-                                    bundleWorkingOrder.addAll(PatchBundleActionKey.DefaultOrder)
-                                    viewModel.setPatchBundleActionOrder(PatchBundleActionKey.DefaultOrder)
-                                }
-                            ) {
-                                Text(stringResource(R.string.patch_bundle_action_order_reset))
-                            }
-                        }
+                        )
                     }
                 }
 
@@ -3074,26 +3073,16 @@ internal fun ActionButtonSettings(
                         }
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { viewModel.setBatchResultHiddenActions(emptySet()) }
-                        ) {
-                            Text(stringResource(R.string.batch_result_action_visibility_reset))
+                    ActionOrderResetButtons(
+                        showAllLabel = R.string.batch_result_action_visibility_reset,
+                        resetOrderLabel = R.string.batch_result_action_order_reset,
+                        onShowAll = { viewModel.setBatchResultHiddenActions(emptySet()) },
+                        onResetOrder = {
+                            batchResultWorkingOrder.clear()
+                            batchResultWorkingOrder.addAll(BatchResultActionKey.DefaultOrder)
+                            viewModel.setBatchResultActionOrder(BatchResultActionKey.DefaultOrder)
                         }
-                        TextButton(
-                            onClick = {
-                                batchResultWorkingOrder.clear()
-                                batchResultWorkingOrder.addAll(BatchResultActionKey.DefaultOrder)
-                                viewModel.setBatchResultActionOrder(BatchResultActionKey.DefaultOrder)
-                            }
-                        ) {
-                            Text(stringResource(R.string.batch_result_action_order_reset))
-                        }
-                    }
+                    )
                 }
             }
 
@@ -3193,26 +3182,16 @@ internal fun ActionButtonSettings(
                             }
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { viewModel.setSavedAppHiddenActions(emptySet()) }
-                        ) {
-                            Text(stringResource(R.string.saved_app_action_visibility_reset))
+                    ActionOrderResetButtons(
+                        showAllLabel = R.string.saved_app_action_visibility_reset,
+                        resetOrderLabel = R.string.saved_app_action_order_reset,
+                        onShowAll = { viewModel.setSavedAppHiddenActions(emptySet()) },
+                        onResetOrder = {
+                            savedWorkingOrder.clear()
+                            savedWorkingOrder.addAll(SavedAppActionKey.DefaultOrder)
+                            viewModel.setSavedAppActionOrder(SavedAppActionKey.DefaultOrder)
                         }
-                        TextButton(
-                            onClick = {
-                                savedWorkingOrder.clear()
-                                savedWorkingOrder.addAll(SavedAppActionKey.DefaultOrder)
-                                viewModel.setSavedAppActionOrder(SavedAppActionKey.DefaultOrder)
-                            }
-                        ) {
-                            Text(stringResource(R.string.saved_app_action_order_reset))
-                        }
-                    }
+                    )
                 }
             }
             ExpressiveSettingsDivider()
@@ -3311,26 +3290,16 @@ internal fun ActionButtonSettings(
                             }
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { viewModel.setPatchProfileHiddenActions(emptySet()) }
-                        ) {
-                            Text(stringResource(R.string.patch_profile_action_visibility_reset))
+                    ActionOrderResetButtons(
+                        showAllLabel = R.string.patch_profile_action_visibility_reset,
+                        resetOrderLabel = R.string.patch_profile_action_order_reset,
+                        onShowAll = { viewModel.setPatchProfileHiddenActions(emptySet()) },
+                        onResetOrder = {
+                            profileWorkingOrder.clear()
+                            profileWorkingOrder.addAll(PatchProfileActionKey.DefaultOrder)
+                            viewModel.setPatchProfileActionOrder(PatchProfileActionKey.DefaultOrder)
                         }
-                        TextButton(
-                            onClick = {
-                                profileWorkingOrder.clear()
-                                profileWorkingOrder.addAll(PatchProfileActionKey.DefaultOrder)
-                                viewModel.setPatchProfileActionOrder(PatchProfileActionKey.DefaultOrder)
-                            }
-                        ) {
-                            Text(stringResource(R.string.patch_profile_action_order_reset))
-                        }
-                    }
+                    )
                 }
             }
 
@@ -3436,31 +3405,53 @@ internal fun ActionButtonSettings(
                         }
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { viewModel.setLsposedModuleHiddenActions(emptySet()) }
-                        ) {
-                            Text(stringResource(R.string.lsposed_module_action_visibility_reset))
+                    ActionOrderResetButtons(
+                        showAllLabel = R.string.lsposed_module_action_visibility_reset,
+                        resetOrderLabel = R.string.lsposed_module_action_order_reset,
+                        onShowAll = { viewModel.setLsposedModuleHiddenActions(emptySet()) },
+                        onResetOrder = {
+                            lsposedWorkingOrder.clear()
+                            lsposedWorkingOrder.addAll(LsposedModuleActionKey.DefaultOrder)
+                            viewModel.setLsposedModuleActionOrder(
+                                LsposedModuleActionKey.DefaultOrder
+                            )
                         }
-                        TextButton(
-                            onClick = {
-                                lsposedWorkingOrder.clear()
-                                lsposedWorkingOrder.addAll(LsposedModuleActionKey.DefaultOrder)
-                                viewModel.setLsposedModuleActionOrder(
-                                    LsposedModuleActionKey.DefaultOrder
-                                )
-                            }
-                        ) {
-                            Text(stringResource(R.string.lsposed_module_action_order_reset))
-                        }
-                    }
+                    )
                 }
             }
 
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun ActionOrderResetButtons(
+    @StringRes showAllLabel: Int,
+    @StringRes resetOrderLabel: Int,
+    onShowAll: () -> Unit,
+    onResetOrder: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    FlowRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        itemVerticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(onClick = onShowAll) {
+            Text(
+                text = stringResource(showAllLabel),
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        TextButton(onClick = onResetOrder, modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(resetOrderLabel),
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.End
+            )
+        }
     }
 }
 

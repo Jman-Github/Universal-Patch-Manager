@@ -621,6 +621,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.minimal_patch_selection_view_title, R.string.minimal_patch_selection_view_description, R.string.patch_list_display_section, Settings.Patcher),
             SearchEntry(R.string.patch_selection_version_tags_title, R.string.patch_selection_version_tags_description, R.string.patch_list_display_section, Settings.Patcher),
             SearchEntry(R.string.patch_selection_option_previews_title, R.string.patch_selection_option_previews_description, R.string.patch_list_display_section, Settings.Patcher),
+            SearchEntry(R.string.patch_selection_show_custom_sections_title, R.string.patch_selection_show_custom_sections_description, R.string.patch_list_display_section, Settings.Patcher),
             SearchEntry(R.string.patch_bundle_action_order_title, R.string.patch_bundle_action_order_description, R.string.action_buttons_section, Settings.General),
             SearchEntry(R.string.patch_bundle_action_visibility_title, R.string.patch_bundle_action_visibility_description, R.string.action_buttons_section, Settings.General),
             SearchEntry(R.string.batch_result_action_order_title, R.string.batch_result_action_order_description, R.string.action_buttons_section, Settings.General),

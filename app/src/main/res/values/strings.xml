@@ -2801,4 +2801,9 @@ Details: %2$s</string>
         <item quantity="one">Incompatible patch</item>
         <item quantity="other">Incompatible patches</item>
     </plurals>
+    <string name="patch_selection_show_custom_sections_title">Show custom sections</string>
+    <string name="patch_selection_show_custom_sections_description">Group patches by categories supplied by the bundle.</string>
+    <string name="patch_selection_custom_sections">Custom sections</string>
+    <string name="patch_section_expanded">Expanded</string>
+    <string name="patch_section_collapsed">Collapsed</string>
 </resources>

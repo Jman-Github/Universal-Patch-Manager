@@ -46,6 +46,8 @@ import androidx.compose.foundation.pager.PagerSnapDistance
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.ClearAll
@@ -120,6 +122,9 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
@@ -258,8 +263,12 @@ fun PatchesSelectorScreen(
         }
     }
     fun List<PatchInfo>.searched(searchQuery: String): List<PatchInfo> =
-        if (searchQuery.isBlank()) this else filter { it.name.contains(searchQuery, true) }
+        if (searchQuery.isBlank()) this else filter {
+            it.displayName.contains(searchQuery, ignoreCase = true) ||
+                it.name.contains(searchQuery, ignoreCase = true)
+        }
     var showBottomSheet by rememberSaveable { mutableStateOf(false) }
+    var searchCollapsedSections by remember(query) { mutableStateOf(emptySet<String>()) }
     val actionOrderPref by viewModel.prefs.patchSelectionActionOrder.getAsState()
     val hiddenActionsPref by viewModel.prefs.patchSelectionHiddenActions.getAsState()
     val sortAlphabeticallyPref by viewModel.prefs.patchSelectionSortAlphabetical.getAsState()
@@ -269,6 +278,8 @@ fun PatchesSelectorScreen(
     val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
     val showVersionTags by viewModel.prefs.patchSelectionShowVersionTags.getAsState()
     val showOptionPreviews by viewModel.prefs.patchSelectionShowOptionPreviews.getAsState()
+    val showCustomSections by viewModel.prefs.patchSelectionShowCustomSections.getAsState()
+    val sectionOverrides by viewModel.prefs.patchSelectionSectionOverrides.getAsState()
     var patchVersionsDialogState by remember { mutableStateOf<PatchVersionsDialogState?>(null) }
     val disablePatchSelectionTabSwipe by viewModel.prefs.disablePatchSelectionTabSwipe.getAsState()
     val preventAccidentalTouching by viewModel.prefs.preventAccidentalTouching.getAsState()
@@ -571,6 +582,16 @@ fun PatchesSelectorScreen(
                         colors = filterChipColors,
                         label = { Text(stringResource(R.string.patch_selector_sheet_filter_new_patches)) }
                     )
+                    val hasCategories = bundles.getOrNull(settledPageIndex)
+                        ?.patches?.any { it.category != null } == true
+                    if (hasCategories) {
+                        CheckedFilterChip(
+                            selected = showCustomSections,
+                            onClick = { viewModel.setPatchSectionsVisible(!showCustomSections) },
+                            colors = filterChipColors,
+                            label = { Text(stringResource(R.string.patch_selection_custom_sections)) }
+                        )
+                    }
                     CheckedFilterChip(
                         selected = typeFilterActive && viewModel.filter and SHOW_NON_UNIVERSAL != 0,
                         onClick = { viewModel.toggleTypeFlag(SHOW_NON_UNIVERSAL) },
@@ -1049,20 +1070,11 @@ fun PatchesSelectorScreen(
     fun LazyListScope.patchList(
         uid: Int,
         patches: List<PatchInfo>,
-        visible: Boolean,
         compatible: Boolean,
-        suggestedVersion: String?,
-        header: (@Composable () -> Unit)? = null
+        suggestedVersion: String?
     ) {
-        if (patches.isNotEmpty() && visible) {
-            fun PatchInfo.sortNameKey(): String = name.lowercase(Locale.ROOT)
-            fun PatchInfo.hasSettings(): Boolean = options?.isNotEmpty() == true
-
-            val filteredPatches = when (resolvedSortSettingsMode) {
-                PatchSortSettingsMode.HasSettings -> patches.filter { it.hasSettings() }
-                PatchSortSettingsMode.NoSettings -> patches.filterNot { it.hasSettings() }
-                PatchSortSettingsMode.None -> patches
-            }
+        if (patches.isNotEmpty()) {
+            fun PatchInfo.sortNameKey(): String = displayName.lowercase(Locale.ROOT)
 
             fun PatchInfo.selectionSortRank(): Int = when (resolvedSortSelectionMode) {
                 PatchSortSelectionMode.EnabledFirst -> if (viewModel.isSelected(uid, this)) 0 else 1
@@ -1070,7 +1082,7 @@ fun PatchesSelectorScreen(
                 PatchSortSelectionMode.None -> 0
             }
 
-            val sortedPatches = filteredPatches
+            val sortedPatches = patches
                 .withIndex()
                 .sortedWith { left, right ->
                     val selectionComparison =
@@ -1089,12 +1101,6 @@ fun PatchesSelectorScreen(
                     left.index.compareTo(right.index)
                 }
                 .map { it.value }
-
-            header?.let {
-                item(contentType = 0) {
-                    it()
-                }
-            }
 
             items(
                 items = sortedPatches,
@@ -1147,133 +1153,108 @@ fun PatchesSelectorScreen(
         universalPatches: List<PatchInfo>,
         suggestedVersion: String?
     ) {
-        val newPatchNames = if (viewModel.showNewPatchesSection) {
-            newPatchNamesByBundle[uid].orEmpty()
-        } else {
-            emptySet()
+        fun List<PatchInfo>.withSettingsFilter() = when (resolvedSortSettingsMode) {
+            PatchSortSettingsMode.HasSettings -> filter { !it.options.isNullOrEmpty() }
+            PatchSortSettingsMode.NoSettings -> filter { it.options.isNullOrEmpty() }
+            PatchSortSettingsMode.None -> this
         }
-        val showNewSection = newPatchNames.isNotEmpty()
-        val newCompatiblePatches = if (showNewSection) {
-            (regularPatches + universalPatches).filter { it.name in newPatchNames }
+        val regular = regularPatches.withSettingsFilter()
+        val universal = universalPatches.withSettingsFilter()
+        val incompatible = if (viewModel.filter and SHOW_INCOMPATIBLE != 0) {
+            incompatiblePatches.withSettingsFilter()
         } else {
             emptyList()
         }
-        val newIncompatiblePatches = if (
-            showNewSection &&
-            viewModel.filter and SHOW_INCOMPATIBLE != 0
+        val compatible = regular + universal
+        val newNames = if (viewModel.showNewPatchesSection) newPatchNamesByBundle[uid].orEmpty() else emptySet()
+        fun PatchInfo.hasCustomSection() = showCustomSections && category != null
+        fun PatchInfo.isUngroupedRemainder() = name !in newNames && !hasCustomSection()
+
+        fun addSection(
+            id: String,
+            compatibleRows: List<PatchInfo>,
+            incompatibleRows: List<PatchInfo> = emptyList(),
+            categoryTitle: String? = null,
+            quantityRes: Int = R.plurals.new_patches_quantity,
+            onHelpClick: (() -> Unit)? = null
         ) {
-            incompatiblePatches.filter { it.name in newPatchNames }
-        } else {
-            emptyList()
-        }
-        var newHeaderShown = false
-        fun newPatchHeader(): (@Composable () -> Unit)? {
-            if (newHeaderShown) return null
-            newHeaderShown = true
-            return {
-                ListHeader(title = pluralStringResource(R.plurals.new_patches_quantity, newCompatiblePatches.size + newIncompatiblePatches.size))
+            val count = compatibleRows.size + incompatibleRows.size
+            if (count == 0) return
+            val sectionKey = "${viewModel.appPackageName}:$uid:$id"
+            val searching = query.isNotBlank()
+            val expanded = if (searching) {
+                sectionKey !in searchCollapsedSections
+            } else {
+                (sectionKey in sectionOverrides) == (categoryTitle != null)
             }
-        }
-
-        patchList(
-            uid = uid,
-            patches = newCompatiblePatches,
-            visible = showNewSection,
-            compatible = true,
-            suggestedVersion = suggestedVersion,
-            header = if (newCompatiblePatches.isNotEmpty()) newPatchHeader() else null
-        )
-        patchList(
-            uid = uid,
-            patches = newIncompatiblePatches,
-            visible = showNewSection,
-            compatible = viewModel.allowIncompatiblePatches,
-            suggestedVersion = suggestedVersion,
-            header = if (newIncompatiblePatches.isNotEmpty()) newPatchHeader() else null
-        )
-
-        val regularVisible = if (showNewSection) {
-            regularPatches.filterNot { it.name in newPatchNames }
-        } else {
-            regularPatches
-        }
-        val incompatibleVisible = if (showNewSection) {
-            incompatiblePatches.filterNot { it.name in newPatchNames }
-        } else {
-            incompatiblePatches
-        }
-        val universalVisible = if (showNewSection) {
-            universalPatches.filterNot { it.name in newPatchNames }
-        } else {
-            universalPatches
-        }
-
-        if (nonUniversalSelected) {
-            if (regularVisible.isNotEmpty()) {
-                item(contentType = 0) {
-                    ListHeader(title = pluralStringResource(R.plurals.regular_patches_quantity, regularVisible.size))
-                }
-            }
-            patchList(
-                uid = uid,
-                patches = regularVisible,
-                visible = true,
-                compatible = true,
-                suggestedVersion = suggestedVersion
-            )
-            patchList(
-                uid = uid,
-                patches = incompatibleVisible,
-                visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
-                compatible = viewModel.allowIncompatiblePatches,
-                suggestedVersion = suggestedVersion
-            ) {
-                ListHeader(
-                    title = pluralStringResource(R.plurals.incompatible_patches_quantity, incompatibleVisible.size),
-                    onHelpClick = { showIncompatiblePatchesDialog = true }
+            item(key = "section:$uid:$id", contentType = 0) {
+                PatchSectionHeader(
+                    title = categoryTitle ?: pluralStringResource(quantityRes, count),
+                    expanded = expanded,
+                    onToggle = {
+                        if (searching) {
+                            searchCollapsedSections = if (sectionKey in searchCollapsedSections) {
+                                searchCollapsedSections - sectionKey
+                            } else {
+                                searchCollapsedSections + sectionKey
+                            }
+                        } else {
+                            viewModel.togglePatchSection(sectionKey)
+                        }
+                    },
+                    onHelpClick = onHelpClick
                 )
             }
-            patchList(
-                uid = uid,
-                patches = universalVisible,
-                visible = true,
-                compatible = true,
-                suggestedVersion = suggestedVersion
-            ) {
-                ListHeader(title = pluralStringResource(R.plurals.universal_patches_quantity, universalVisible.size))
+            if (expanded) {
+                patchList(uid, compatibleRows, compatible = true, suggestedVersion = suggestedVersion)
+                patchList(uid, incompatibleRows, viewModel.allowIncompatiblePatches, suggestedVersion)
             }
+        }
+
+        addSection(
+            id = "new",
+            compatibleRows = compatible.filter { it.name in newNames },
+            incompatibleRows = incompatible.filter { it.name in newNames }
+        )
+        fun addRegular() = addSection(
+            id = "regular",
+            compatibleRows = regular.filter { it.isUngroupedRemainder() },
+            quantityRes = R.plurals.regular_patches_quantity
+        )
+        fun addIncompatible() = addSection(
+            id = "incompatible",
+            compatibleRows = emptyList(),
+            incompatibleRows = incompatible.filter { it.isUngroupedRemainder() },
+            quantityRes = R.plurals.incompatible_patches_quantity,
+            onHelpClick = { showIncompatiblePatchesDialog = true }
+        )
+        fun addUniversal() = addSection(
+            id = "universal",
+            compatibleRows = universal.filter { it.isUngroupedRemainder() },
+            quantityRes = R.plurals.universal_patches_quantity
+        )
+        if (nonUniversalSelected) {
+            addRegular()
+            addIncompatible()
+            addUniversal()
         } else {
-            patchList(
-                uid = uid,
-                patches = universalVisible,
-                visible = true,
-                compatible = true,
-                suggestedVersion = suggestedVersion
-            ) {
-                ListHeader(title = pluralStringResource(R.plurals.universal_patches_quantity, universalVisible.size))
-            }
-            if (regularVisible.isNotEmpty()) {
-                item(contentType = 0) {
-                    ListHeader(title = pluralStringResource(R.plurals.regular_patches_quantity, regularVisible.size))
-                }
-            }
-            patchList(
-                uid = uid,
-                patches = regularVisible,
-                visible = true,
-                compatible = true,
-                suggestedVersion = suggestedVersion
-            )
-            patchList(
-                uid = uid,
-                patches = incompatibleVisible,
-                visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
-                compatible = viewModel.allowIncompatiblePatches,
-                suggestedVersion = suggestedVersion
-            ) {
-                ListHeader(
-                    title = pluralStringResource(R.plurals.incompatible_patches_quantity, incompatibleVisible.size),
-                    onHelpClick = { showIncompatiblePatchesDialog = true }
+            addUniversal()
+            addRegular()
+            addIncompatible()
+        }
+
+        if (showCustomSections) {
+            val compatibleByCategory = compatible.filterNot { it.name in newNames }.groupBy(PatchInfo::category)
+            val incompatibleByCategory = incompatible.filterNot { it.name in newNames }.groupBy(PatchInfo::category)
+            val categories = (compatibleByCategory.keys + incompatibleByCategory.keys)
+                .filterNotNull()
+                .sortedWith(compareBy({ it.lowercase(Locale.ROOT) }, { it }))
+            for (category in categories) {
+                addSection(
+                    id = "category:$category",
+                    compatibleRows = compatibleByCategory[category].orEmpty(),
+                    incompatibleRows = incompatibleByCategory[category].orEmpty(),
+                    categoryTitle = category
                 )
             }
         }
@@ -3144,6 +3125,52 @@ private enum class PatchSortSelectionMode {
     None,
     EnabledFirst,
     DisabledFirst
+}
+
+@Composable
+private fun PatchSectionHeader(
+    title: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onHelpClick: (() -> Unit)?
+) {
+    val state = stringResource(
+        if (expanded) R.string.patch_section_expanded else R.string.patch_section_collapsed
+    )
+    val label: @Composable () -> Unit = {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .clickable(role = Role.Button, onClick = onToggle)
+                .semantics { stateDescription = state }
+                .heightIn(min = 48.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                title,
+                modifier = Modifier.weight(1f, fill = false),
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge
+            )
+            Icon(
+                if (expanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+                contentDescription = null
+            )
+        }
+    }
+    if (onHelpClick == null) {
+        label()
+    } else {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { label() }
+            IconButton(onClick = onHelpClick) {
+                Icon(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.help))
+            }
+        }
+    }
 }
 
 @Composable

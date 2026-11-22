@@ -470,9 +470,7 @@ class BatchPlanResolver(
         val savedOptions = validSavedConfiguration?.second
             ?: patchOptionsRepository.getOptions(
                 resolvedPackageName,
-                bundles.associate { bundle ->
-                    bundle.uid to bundle.patches.associateBy { it.name }
-                }
+                patchesByBundle
             )
         val options = savedOptions.mapNotNull { (uid, patchOptions) ->
             val selectedPatches = selection[uid].orEmpty()
@@ -685,7 +683,7 @@ class BatchPlanResolver(
             installerTypeFor(item.useMount),
             bundles.associate { bundle ->
                 val selectable = selectableByBundle[bundle.uid].orEmpty()
-                bundle.uid to bundle.patches
+                bundle.uid to bundle.forSelection().patches
                     .filter { it.name in selectable }
                     .associateBy(PatchInfo::name)
             },

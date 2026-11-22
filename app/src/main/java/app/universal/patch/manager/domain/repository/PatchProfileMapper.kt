@@ -214,7 +214,7 @@ fun PatchProfilePayload.toConfiguration(
             missingBundles += bundle.bundleUid
             return@forEach
         }
-        val patchMetadata = info.patches.associateBy { it.name }
+        val patchMetadata = info.forSelection().patches.associateBy { it.name }
 
         val selectedPatches = bundle.patches
             .filter { patchMetadata.containsKey(it) }

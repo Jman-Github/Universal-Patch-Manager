@@ -1,7 +1,11 @@
 package app.universal.patch.manager.domain.repository
 
+import app.universal.patch.manager.data.room.options.Option
 import app.universal.patch.manager.data.room.profile.PatchProfilePayload
 import app.universal.patch.manager.domain.bundles.JsonPatchBundle
+import app.universal.patch.manager.patcher.patch.PatchBundleInfo
+import app.universal.patch.manager.patcher.patch.PatchBundleType
+import app.universal.patch.manager.patcher.patch.PatchInfo
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -68,6 +72,30 @@ class PatchProfileMapperTest {
             mapOf(20 to setOf("One", "Stored only", "Payload only")),
             merged
         )
+    }
+
+    @Test
+    fun `profile options use the compatible row for a duplicate patch key`() {
+        val compatible = PatchInfo.fromMorpheMetadata(
+            mapOf("name" to "One", "options" to listOf(mapOf("key" to "label", "type" to "kotlin.String")))
+        )
+        val incompatible = compatible.copy(options = null)
+        val info = PatchBundleInfo.Scoped(
+            "Bundle", null, 10, PatchBundleType.MORPHE, true,
+            listOf(compatible, incompatible), listOf(compatible), listOf(incompatible), emptyList()
+        )
+        val payload = PatchProfilePayload(
+            bundles = listOf(
+                bundle(uid = 10, patches = listOf("One")).copy(
+                    options = mapOf("One" to mapOf("label" to Option.SerializedValue.fromValue("Saved")))
+                )
+            )
+        )
+
+        val config = payload.toConfiguration(mapOf(10 to info), emptyMap())
+
+        assertEquals(mapOf(10 to mapOf("One" to mapOf("label" to "Saved"))), config.options)
+        assertEquals(emptySet(), config.changedBundles)
     }
 
     private fun bundle(

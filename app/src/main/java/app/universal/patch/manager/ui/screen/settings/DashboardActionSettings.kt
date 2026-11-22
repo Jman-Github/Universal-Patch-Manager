@@ -187,29 +187,24 @@ internal fun DashboardActionSettings(
                 }
             )
         }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(modifier = Modifier.weight(1f), onClick = {
+        ActionOrderResetButtons(
+            showAllLabel = R.string.patch_selection_action_visibility_reset,
+            resetOrderLabel = R.string.patch_selection_action_order_reset,
+            modifier = Modifier.padding(horizontal = 16.dp),
+            onShowAll = {
                 scope.launch {
                     prefs.edit {
                         prefs.dashboardHiddenActions.value = prefs.dashboardHiddenActions.value
                             .filterNot { it.startsWith("$group:") }.toSet()
                     }
                 }
-            }) {
-                Text(stringResource(R.string.patch_selection_action_visibility_reset))
-            }
-            TextButton(modifier = Modifier.weight(1f), onClick = {
+            },
+            onResetOrder = {
                 workingOrder.clear()
                 workingOrder.addAll(defaults)
                 saveOrder()
-            }) {
-                Text(stringResource(R.string.patch_selection_action_order_reset))
             }
-        }
+        )
     }
     ExpressiveSettingsDivider()
 }

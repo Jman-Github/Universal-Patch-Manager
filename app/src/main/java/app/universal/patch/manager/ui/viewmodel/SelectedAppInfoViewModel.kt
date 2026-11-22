@@ -270,11 +270,9 @@ class SelectedAppInfoViewModel(
         selectedAppState.map { it.packageName },
         bundleRepository.sources
     ) { scopedBundles, selectedPatchNames, activePackageName, sources ->
-        val displayNames = sources.associate { source ->
-            source.uid to source.displayTitle
-        }
-
-        scopedBundles.mapNotNull { scoped ->
+        val bundlesByUid = scopedBundles.associateBy { it.uid }
+        sources.mapNotNull { source ->
+            val scoped = bundlesByUid[source.uid] ?: return@mapNotNull null
             val selected = selectedPatchNames[scoped.uid]?.takeIf { it.isNotEmpty() }
             val support = scoped.collectBundleSupport(activePackageName, selected)
             if (!support.hasSupport) return@mapNotNull null
@@ -302,16 +300,14 @@ class SelectedAppInfoViewModel(
 
             BundleRecommendationDetail(
                 bundleUid = scoped.uid,
-                name = displayNames[scoped.uid]
-                    ?.takeIf { it.isNotBlank() }
-                    ?: scoped.name,
+                name = source.displayTitle.takeIf { it.isNotBlank() } ?: scoped.name,
                 recommendedVersion = recommended,
                 recommendedVersionCodes = recommended?.let(support.versionCodes::get).orEmpty(),
                 recommendedVersionExperimental = recommendedExperimental,
                 otherSupportedVersions = otherVersions,
                 supportsAllVersions = support.supportsAllVersions
             )
-        }.sortedBy { it.name.lowercase(Locale.ROOT) }
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val hasRoot = rootInstaller.hasRootAccess()
@@ -383,18 +379,17 @@ class SelectedAppInfoViewModel(
     private fun loadOptionsFromRepository() {
         if (optionsLoadJob?.isActive == true) return
         optionsLoadJob = viewModelScope.launch {
-            val bundlePatches = withContext(Dispatchers.Default) {
-                bundleRepository
-                    .scopedBundleInfoFlow(packageName, desiredVersion)
+            val target = selectedAppState.value
+            val restoredOptions = withContext(Dispatchers.Default) {
+                val bundlePatches = bundleRepository
+                    .scopedBundleInfoFlow(target.packageName, target.version, target.versionCode)
                     .first()
-                    .associate { scoped -> scoped.uid to scoped.patches.associateBy { it.name } }
+                    .associate { scoped ->
+                        scoped.uid to scoped.forSelection().patches.associateBy(PatchInfo::name)
+                    }
+                optionsRepository.getOptions(target.packageName, bundlePatches)
             }
-
-            replaceOptions(
-                withContext(Dispatchers.Default) {
-                    optionsRepository.getOptions(packageName, bundlePatches)
-                }
-            )
+            replaceOptions(restoredOptions)
         }
     }
 
@@ -2165,7 +2160,7 @@ class SelectedAppInfoViewModel(
                 bundles.forEach bundles@{ bundle ->
                     val bundleOptions = this@filtered[bundle.uid] ?: return@bundles
 
-                    val patches = bundle.patches.associateBy { it.name }
+                    val patches = bundle.forSelection().patches.associateBy { it.name }
 
                     this@options[bundle.uid] = buildMap bundleOptions@{
                         bundleOptions.forEach patch@{ (patchName, values) ->
