@@ -101,11 +101,6 @@
             android:theme="@style/Theme.ReVancedManager">
 
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
-            <intent-filter>
                 <action android:name="app.universal.patch.manager.action.PATCH_APP" />
                 <action android:name="app.universal.patch.manager.action.CHECK_PATCH_UPDATES" />
                 <action android:name="app.universal.patch.manager.action.SHOW_BATCH_RESULT" />

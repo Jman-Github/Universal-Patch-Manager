@@ -40,19 +40,41 @@ with tempfile.TemporaryDirectory(prefix="notification-ui-", dir=ROOT / "build") 
     work = Path(directory)
     resources = work / "res"
     for rel in ("values/notification_colors.xml", "values-night/notification_colors.xml",
-                "drawable/ic_notification_status.png", "drawable/ic_notification_artwork.xml"):
+                "drawable/ic_notification_status.png", "drawable/ic_notification_artwork.xml",
+                "drawable/ic_manager_notification_status.xml", "drawable/ic_manager_gradient_foreground.xml"):
         dst = resources / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(BASE / "res" / rel, dst)
     (resources / "values/probe_strings.xml").write_text("<resources><string name='download_progress_notification_channel'>Downloads</string><string name='download_progress_indeterminate'>Downloading</string></resources>")
     manifest = work / "AndroidManifest.xml"
-    manifest.write_text(f'<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="{PACKAGE}"><uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36"/><uses-permission android:name="android.permission.POST_NOTIFICATIONS"/><application android:label="UPM notification probe" android:supportsRtl="true" /><instrumentation android:name="probe.Probe" android:targetPackage="{PACKAGE}"/></manifest>')
+    manifest.write_text(f'<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="{PACKAGE}"><uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36"/><uses-permission android:name="android.permission.POST_NOTIFICATIONS"/><application android:name="app.universal.patch.manager.ManagerApplication" android:label="UPM notification probe" android:supportsRtl="true" /><instrumentation android:name="probe.Probe" android:targetPackage="{PACKAGE}"/></manifest>')
     run(TOOLS / "aapt2.exe", "compile", "--dir", resources, "-o", work / "resources.zip")
     run(TOOLS / "aapt2.exe", "link", "-I", ANDROID, "--manifest", manifest,
         "--custom-package", "app.universal.patch.manager", "--java", work / "java",
         "-o", work / "probe.apk", work / "resources.zip")
     activity = work / "MainActivity.kt"
     activity.write_text("package app.universal.patch.manager\nclass MainActivity : android.app.Activity()")
+    # The standalone probe compiles only the notification sources. Supply an application
+    # that can choose an icon without starting UPM's database, workers, or launcher setup.
+    application = work / "ManagerApplication.kt"
+    application.write_text("""
+package app.universal.patch.manager
+import app.universal.patch.manager.util.ManagerAppIcon
+class ManagerApplication : android.app.Application() {
+    var icon = ManagerAppIcon.DEFAULT
+    fun notificationAppIcon() = icon
+}
+""")
+    icon_catalog = work / "ManagerAppIcon.kt"
+    icon_catalog.write_text("""
+package app.universal.patch.manager.util
+import app.universal.patch.manager.R
+enum class ManagerIconForeground { ORIGINAL }
+enum class ManagerAppIcon(val icon: Int, val foreground: ManagerIconForeground?) {
+    DEFAULT(R.drawable.ic_notification_artwork, null),
+    CUSTOM(R.drawable.ic_manager_gradient_foreground, null)
+}
+""")
     permission = work / "Permission.kt"
     permission.write_text("package app.universal.patch.manager.util.permission\nfun android.content.Context.hasNotificationPermission() = checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED")
     classes = work / "classes"
@@ -68,6 +90,9 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.view.View
 import android.view.ViewGroup
+import app.universal.patch.manager.ManagerApplication
+import app.universal.patch.manager.R
+import app.universal.patch.manager.util.ManagerAppIcon
 import app.universal.patch.manager.util.applyProgressNotification
 import app.universal.patch.manager.util.applyManagerNotificationIcon
 import app.universal.patch.manager.util.DownloadProgressNotifier
@@ -137,7 +162,9 @@ private fun verify() {
                 .applyManagerNotificationIcon(context)
                 .applyProgressNotification("Patching", "Applying patches", max, current, unknown != 0)
             val notification = builder.build()
-            check(notification.getLargeIcon() != null) { "Minimal artwork is missing" }
+            check(notification.getLargeIcon()?.resId == R.drawable.ic_notification_artwork) {
+                "Default artwork must use the compact drawable"
+            }
             check(notification.contentView == null && notification.bigContentView == null &&
                 notification.headsUpContentView == null) { "System UI must own the progress layouts" }
             val title = if (expected < 0) "Patching" else "$expected% · Patching"
@@ -160,6 +187,15 @@ private fun verify() {
                 .any { it.text.toString() == "Applying patches" })
         }
     }
+    val application = app.applicationContext as ManagerApplication
+    application.icon = ManagerAppIcon.CUSTOM
+    try {
+        val notification = Notification.Builder(app, "probe").applyManagerNotificationIcon(app).build()
+        check(notification.getLargeIcon()?.resId == ManagerAppIcon.CUSTOM.icon)
+        check(notification.smallIcon.resId == R.drawable.ic_manager_notification_status)
+    } finally {
+        application.icon = ManagerAppIcon.DEFAULT
+    }
 }
 
 private fun View.visibleViews(): Sequence<View> = sequence {
@@ -173,7 +209,7 @@ private fun View.visibleViews(): Sequence<View> = sequence {
 """, encoding="utf-8")
     run(JAVA_BIN / "java.exe", "-cp", cp(compiler), "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
         "-no-stdlib", "-no-reflect", "-jvm-target", "17", "-classpath", cp([ANDROID, classes, stdlib]),
-        "-d", classes, source, activity, permission,
+        "-d", classes, source, activity, application, icon_catalog, permission,
         *[BASE / "java/app/universal/patch/manager/util" / name for name in
           ("ProgressNotification.kt", "ManagerNotificationIcon.kt", "DownloadProgressNotifier.kt")])
     jar = work / "probe.jar"

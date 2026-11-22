@@ -66,12 +66,17 @@ fun AppIcon(
         return
     }
 
+    val context = LocalContext.current
+    if (packageName == context.packageName) {
+        ManagerIconImage(contentDescription, iconModifier)
+        return
+    }
+
     if (packageInfo == null) {
         RemoteAppIcon(packageName, contentDescription, iconModifier)
         return
     }
 
-    val context = LocalContext.current
     val appContext = context.applicationContext ?: context
     val iconKey = remember(packageInfo, appContext, cacheKey) {
         cacheKey ?: runCatching { AppIconLoader.getIconKey(packageInfo, appContext) }

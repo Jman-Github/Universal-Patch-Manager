@@ -1,5 +1,6 @@
 package app.universal.patch.manager
 
+import android.app.ActivityManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.graphics.BitmapFactory
@@ -33,6 +34,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.graphics.drawable.toBitmap
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.compose.ui.platform.LocalContext
@@ -117,7 +120,9 @@ import app.universal.patch.manager.ui.viewmodel.SelectedAppInfoViewModel
 import app.universal.patch.manager.ui.viewmodel.ThemePreset
 import app.universal.patch.manager.util.EventEffect
 import app.universal.patch.manager.util.AppForeground
+import app.universal.patch.manager.util.ManagerAppIcon
 import app.universal.patch.manager.util.PatchBundleFileIntent
+import app.universal.patch.manager.util.managerAppIcons
 import app.universal.patch.manager.R
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
@@ -132,11 +137,28 @@ import java.io.File
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
+    @Suppress("DEPRECATION")
+    private fun updateTaskIcon(icon: ManagerAppIcon) {
+        val label = getString(R.string.app_name)
+        val description = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ActivityManager.TaskDescription.Builder().setLabel(label).setIcon(icon.icon).build()
+        } else {
+            val size = (48 * resources.displayMetrics.density).toInt().coerceAtLeast(1)
+            val bitmap = AppCompatResources.getDrawable(this, icon.icon)?.toBitmap(size, size)
+            ActivityManager.TaskDescription(label, bitmap)
+        }
+        setTaskDescription(description)
+    }
+
     @ExperimentalAnimationApi
     override fun onCreate(savedInstanceState: Bundle?) {
         // Apply the normal app theme before AppCompat initializes or restores the activity.
         installSplashScreen()
         super.onCreate(savedInstanceState)
+
+        lifecycleScope.launch {
+            managerAppIcons.selected.collect(::updateTaskIcon)
+        }
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         enableEdgeToEdge()

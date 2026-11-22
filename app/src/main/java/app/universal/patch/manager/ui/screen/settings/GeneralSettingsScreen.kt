@@ -81,6 +81,8 @@ import app.universal.patch.manager.ui.component.AlertDialogExtended
 import app.universal.patch.manager.ui.component.AppTopBar
 import app.universal.patch.manager.ui.component.ColumnWithScrollbar
 import app.universal.patch.manager.ui.component.GroupHeader
+import app.universal.patch.manager.ui.component.ManagerIconImage
+import app.universal.patch.manager.ui.component.rememberSelectedManagerIcon
 import app.universal.patch.manager.ui.component.SettingsSectionIcons
 import app.universal.patch.manager.ui.component.patches.PathSelectorDialog
 import app.universal.patch.manager.ui.component.RememberedGetContent
@@ -125,6 +127,11 @@ fun GeneralSettingsScreen(
     val prefs = viewModel.prefs
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
+    var showAppIconPicker by rememberSaveable { mutableStateOf(false) }
+    val managerIcon = rememberSelectedManagerIcon()
+    if (showAppIconPicker) {
+        ManagerAppIconDialog(onDismiss = { showAppIconPicker = false })
+    }
     var showAccentPicker by rememberSaveable { mutableStateOf(false) }
     var showThemeColorPicker by rememberSaveable { mutableStateOf(false) }
 
@@ -842,6 +849,29 @@ fun GeneralSettingsScreen(
                         .fillMaxWidth()
                 ) {
                     Text(stringResource(R.string.theme_reset))
+                }
+            }
+
+            GroupHeader(
+                title = stringResource(R.string.manager_app_icons_section),
+                icon = SettingsSectionIcons.AppIcons
+            )
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.manager_app_icon,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        headlineContent = stringResource(R.string.manager_app_icon),
+                        supportingContent = stringResource(managerIcon.titleRes),
+                        leadingContent = { ManagerIconImage(null, Modifier.size(32.dp), managerIcon) },
+                        modifier = highlightModifier,
+                        onClick = { showAppIconPicker = true }
+                    )
                 }
             }
 

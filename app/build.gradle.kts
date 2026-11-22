@@ -444,8 +444,17 @@ val glibcLoaderTasks = mapOf(
     }
 }
 
+val generateManagerIcons = tasks.register<GenerateManagerAppIcons>("generateManagerIcons") {
+    resourcesDir.set(layout.buildDirectory.dir("generated/manager-icons/res"))
+    sourcesDir.set(layout.buildDirectory.dir("generated/manager-icons/kotlin"))
+    manifestFile.set(layout.buildDirectory.file("generated/manager-icons/AndroidManifest.xml"))
+}
+
 androidComponents {
     onVariants { variant ->
+        variant.sources.res?.addGeneratedSourceDirectory(generateManagerIcons, GenerateManagerAppIcons::resourcesDir)
+        variant.sources.kotlin?.addGeneratedSourceDirectory(generateManagerIcons, GenerateManagerAppIcons::sourcesDir)
+        variant.sources.manifests.addGeneratedManifestFile(generateManagerIcons, GenerateManagerAppIcons::manifestFile)
         glibcLoaderTasks.forEach { task ->
             variant.sources.jniLibs?.addGeneratedSourceDirectory(task, PrepareGlibcTask::nativeLibraries)
         }

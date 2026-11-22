@@ -11,7 +11,6 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.text.format.Formatter
-import androidx.appcompat.content.res.AppCompatResources
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -2442,9 +2441,6 @@ fun DashboardScreen(
                     val managerUpdateViewed =
                         !vm.updatedManagerVersion.isNullOrEmpty() &&
                             vm.updatedManagerVersion == viewedManagerUpdateVersion
-                    val appIcon = remember {
-                        AppCompatResources.getDrawable(androidContext, R.mipmap.ic_launcher)
-                    }
                     val titleScrollState = rememberScrollState()
                     AppTopBar(
                         title = {
@@ -2457,7 +2453,7 @@ fun DashboardScreen(
                                     packageInfo = null,
                                     contentDescription = stringResource(R.string.app_name),
                                     modifier = Modifier.size(28.dp),
-                                    iconOverride = appIcon
+                                    packageName = androidContext.packageName
                                 )
                                 Box(
                                     modifier = Modifier

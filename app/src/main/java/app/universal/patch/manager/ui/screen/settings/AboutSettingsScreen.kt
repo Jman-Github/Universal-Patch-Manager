@@ -72,6 +72,7 @@ import app.universal.patch.manager.util.toast
 import app.universal.patch.manager.util.withHapticFeedback
 import app.universal.patch.manager.BuildConfig
 import app.universal.patch.manager.R
+import app.universal.patch.manager.ui.component.ManagerIconImage
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -91,10 +92,6 @@ fun AboutSettingsScreen(
     val managerVersionLabel = remember(managerVersion) {
         "v${managerVersion.removePrefix("v").removePrefix("V")}"
     }
-    // painterResource() is broken on release builds for some reason.
-    val icon = rememberDrawablePainter(drawable = remember {
-        AppCompatResources.getDrawable(context, R.drawable.ic_launcher_foreground)
-    })
 
     val githubButtons = remember(context) {
         listOf(
@@ -194,9 +191,8 @@ fun AboutSettingsScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Image(
+                        ManagerIconImage(
                             modifier = Modifier.size(92.dp),
-                            painter = icon,
                             contentDescription = stringResource(R.string.app_name)
                         )
                         Text(

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.dp
 object SettingsSectionIcons {
     val NavigationTabs: ImageVector = Icons.Outlined.Apps
     val Theme: ImageVector = Icons.Outlined.Palette
+    val AppIcons: ImageVector = Icons.Outlined.Widgets
     val Background: ImageVector = Icons.Outlined.Image
     val AppBehavior: ImageVector = Icons.Outlined.Tune
     val NetworkIntegrations: ImageVector = Icons.Outlined.Api

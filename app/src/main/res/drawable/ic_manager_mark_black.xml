@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Artwork by @xASAHIx, from https://github.com/Jman-Github/Universal-Patch-Manager/issues/810 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="1024" android:viewportHeight="1024">
+    <!-- Match the default launcher foreground's visible bounds in the adaptive layer. -->
+    <group android:pivotX="512" android:pivotY="512" android:scaleX="0.664" android:scaleY="0.664">
+        <path android:pathData="M307,251 H438 A56 56 0 0 1 494,307 V385.3 A128 128 0 0 0 385.3,494 H307 A56 56 0 0 1 251,438 V307 A56 56 0 0 1 307,251 Z M334,322 A16 16 0 1 0 302,322 A16 16 0 1 0 334,322 Z" android:fillType="evenOdd" android:fillColor="#000000" />
+        <path android:pathData="M586,251 H717 A56 56 0 0 1 773,307 V438 A56 56 0 0 1 717,494 H638.7 A128 128 0 0 0 530,385.3 V307 A56 56 0 0 1 586,251 Z" android:fillType="evenOdd" android:fillColor="#000000" />
+        <path android:pathData="M307,530 H385.3 A128 128 0 0 0 494,638.7 V717 A56 56 0 0 1 438,773 H307 A56 56 0 0 1 251,717 V586 A56 56 0 0 1 307,530 Z" android:fillType="evenOdd" android:fillColor="#000000" />
+        <path android:pathData="M638.7,530 H717 A56 56 0 0 1 773,586 V717 A56 56 0 0 1 717,773 H586 A56 56 0 0 1 530,717 V638.7 A128 128 0 0 0 638.7,530 Z M716,702 A16 16 0 1 0 684,702 A16 16 0 1 0 716,702 Z" android:fillType="evenOdd" android:fillColor="#000000" />
+        <path android:pathData="M410,512 A102 102 0 1 0 614,512 A102 102 0 1 0 410,512 Z M494,442 H530 V494 H582 V530 H530 V582 H494 V530 H442 V494 H494 Z" android:fillType="evenOdd" android:fillColor="#000000" />
+    </group>
+</vector>

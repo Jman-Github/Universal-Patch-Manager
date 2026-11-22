@@ -14,6 +14,9 @@ import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import androidx.core.graphics.drawable.toBitmap
 import app.universal.patch.manager.data.platform.Filesystem
+import app.universal.patch.manager.util.ManagerAppIcon
+import app.universal.patch.manager.util.ManagerAppIconController
+import app.universal.patch.manager.util.launcherComponent
 import app.universal.patch.manager.di.*
 import app.universal.patch.manager.domain.batch.batchOriginalPackageName
 import app.universal.patch.manager.domain.manager.PreferencesManager
@@ -84,11 +87,17 @@ import org.lsposed.hiddenapibypass.HiddenApiBypass
 import java.io.File
 
 class ManagerApplication : Application() {
+    internal val appIcons by lazy { ManagerAppIconController(this) }
+
     private val isPatcherProcess by lazy {
         val processName = if (Build.VERSION.SDK_INT >= 28) Application.getProcessName()
             else File("/proc/self/cmdline").readText().substringBefore('\u0000')
         processName.substringAfterLast(':', "").startsWith("patcher")
     }
+
+    // The isolated patcher process can outlive changes made by the main process.
+    internal fun notificationAppIcon(): ManagerAppIcon =
+        if (isPatcherProcess) appIcons.installedIcon() else appIcons.selected.value
 
     private val scope = MainScope()
     private var rootExternalInstallRecoveryJob: Job? = null
@@ -423,12 +432,14 @@ class ManagerApplication : Application() {
     // https://github.com/MorpheApp/morphe-manager/pull/795
     private fun observeLauncherShortcuts() {
         scope.launch(Dispatchers.IO) {
+            appIcons.reconcileLauncherIcons()
             combine(
                 installedAppRepository.getAll(),
-                prefs.savedAppLauncherShortcutPackages.flow
-            ) { installedApps, requestedPackages ->
-                installedApps to requestedPackages
-            }.collect { (installedApps, requestedPackages) ->
+                prefs.savedAppLauncherShortcutPackages.flow,
+                appIcons.selected
+            ) { installedApps, requestedPackages, icon ->
+                Triple(installedApps, requestedPackages, icon)
+            }.collect { (installedApps, requestedPackages, icon) ->
                 val capacity = savedAppLauncherShortcutCapacity(this@ManagerApplication)
                 val normalizedPackages = installedApps
                     .asSequence()
@@ -442,14 +453,15 @@ class ManagerApplication : Application() {
                 if (normalizedPackages != requestedPackages) {
                     prefs.savedAppLauncherShortcutPackages.update(normalizedPackages)
                 }
-                publishLauncherShortcuts(installedApps, normalizedPackages)
+                publishLauncherShortcuts(installedApps, normalizedPackages, icon)
             }
         }
     }
 
     private fun publishLauncherShortcuts(
         installedApps: List<app.universal.patch.manager.data.room.apps.installed.InstalledApp>,
-        enabledPackages: Set<String>
+        enabledPackages: Set<String>,
+        managerIcon: ManagerAppIcon
     ) {
         val maxShortcuts = ShortcutManagerCompat.getMaxShortcutCountPerActivity(this)
         if (maxShortcuts <= 0) return
@@ -462,6 +474,7 @@ class ManagerApplication : Application() {
             ?: fallbackIconSize
         val shortcuts = mutableListOf(
             batchShortcut(
+                managerIcon = managerIcon,
                 id = "check_patch_updates",
                 shortLabel = getString(R.string.shortcut_check_patch_updates_short),
                 longLabel = getString(R.string.shortcut_check_patch_updates),
@@ -503,6 +516,7 @@ class ManagerApplication : Application() {
                     originalPackageName = packageName
                 )
                 shortcuts += batchShortcut(
+                    managerIcon = managerIcon,
                     id = "patch_$packageName",
                     shortLabel = label,
                     longLabel = getString(R.string.shortcut_patch_app, label),
@@ -531,6 +545,7 @@ class ManagerApplication : Application() {
     ).isFile
 
     private fun batchShortcut(
+        managerIcon: ManagerAppIcon,
         id: String,
         shortLabel: String,
         longLabel: String,
@@ -539,6 +554,7 @@ class ManagerApplication : Application() {
         packageName: String? = null,
         icon: IconCompat
     ) = ShortcutInfoCompat.Builder(this, id)
+        .setActivity(managerIcon.launcherComponent(this))
         .setShortLabel(shortLabel)
         .setLongLabel(longLabel)
         .setIcon(icon)

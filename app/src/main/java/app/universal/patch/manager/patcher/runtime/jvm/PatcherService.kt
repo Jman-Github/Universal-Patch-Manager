@@ -9,6 +9,7 @@ package app.universal.patch.manager.patcher.runtime.jvm
 // https://github.com/MorpheApp/morphe-manager/pull/1474
 
 import android.app.Notification
+import app.universal.patch.manager.util.applyManagerNotificationIcon
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
@@ -140,7 +141,7 @@ open class PatcherService : Service() {
             )
             val notification = Notification.Builder(this, JVM_CHANNEL)
                 .setContentTitle(getString(R.string.patcher_notification_title))
-                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .applyManagerNotificationIcon(this)
                 .setOngoing(true)
                 .setLocalOnly(true)
                 .build()

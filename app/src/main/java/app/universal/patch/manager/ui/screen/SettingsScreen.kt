@@ -1,7 +1,6 @@
 package app.universal.patch.manager.ui.screen
 
 import androidx.annotation.StringRes
-import androidx.appcompat.content.res.AppCompatResources
 import app.universal.patch.manager.BuildConfig
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -71,9 +70,6 @@ private data class SearchEntry(
 @Composable
 fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> Unit) {
     val context = LocalContext.current
-    val appIcon = remember {
-        AppCompatResources.getDrawable(context, R.mipmap.ic_launcher)
-    }
     val settingsSections = remember {
         listOf(
             Section(
@@ -367,6 +363,13 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.update_checks_section, null, R.string.updates, Settings.Updates),
             SearchEntry(R.string.bundle_changelog_history_section, null, R.string.updates, Settings.Updates),
             SearchEntry(R.string.background_updates_section, null, R.string.updates, Settings.Updates),
+            SearchEntry(
+                R.string.manager_app_icon,
+                R.string.manager_app_icon_description,
+                R.string.general,
+                Settings.General,
+                keywords = listOf(R.string.manager_app_icons_section)
+            ),
             SearchEntry(R.string.dynamic_color, R.string.dynamic_color_description, R.string.general, Settings.General),
             SearchEntry(R.string.theme_presets, R.string.theme_presets_description, R.string.general, Settings.General),
             SearchEntry(R.string.theme_color, R.string.theme_color_description, R.string.general, Settings.General),
@@ -746,7 +749,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                                 packageInfo = null,
                                 contentDescription = stringResource(R.string.app_name),
                                 modifier = Modifier.size(32.dp),
-                                iconOverride = appIcon
+                                packageName = context.packageName
                             )
                         },
                         onClick = { navigate(destination.destination) }
