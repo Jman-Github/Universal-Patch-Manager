@@ -4,6 +4,28 @@ Release notes are generated automatically from Conventional Commits.
 
 Historical manually maintained release notes remain in `api/CHANGELOG.md` and `api/DEV-CHANGELOG.md`.
 
+# [2.1.0-dev.7](https://github.com/Jman-Github/Universal-Patch-Manager/compare/v2.1.0-dev.6...v2.1.0-dev.7) (2026-11-22)
+
+
+### Bug Fixes
+
+* **bundles:** prevent release settings from jumping ([fd51e5c](https://github.com/Jman-Github/Universal-Patch-Manager/commit/fd51e5cb47c9dcde9680ef302bf649ae0e9e61ea)), closes [#864](https://github.com/Jman-Github/Universal-Patch-Manager/issues/864) [#874](https://github.com/Jman-Github/Universal-Patch-Manager/issues/874)
+* **ci:** update root mount ownership assertion ([9e984d7](https://github.com/Jman-Github/Universal-Patch-Manager/commit/9e984d7e21a72ae1954a632beb051a4d0110e48e))
+* **import-export:** stabilize lists and skip duplicate app entries ([e6dc727](https://github.com/Jman-Github/Universal-Patch-Manager/commit/e6dc727fdd5ce4189326b48f870664fd527950fb)), closes [#863](https://github.com/Jman-Github/Universal-Patch-Manager/issues/863)
+* **manager:** correct warnings, scrolling, and helper actions ([a06ed20](https://github.com/Jman-Github/Universal-Patch-Manager/commit/a06ed20ca6d0c2c2bb60a7b1e32ab7499838ef76)), closes [#866](https://github.com/Jman-Github/Universal-Patch-Manager/issues/866) [#867](https://github.com/Jman-Github/Universal-Patch-Manager/issues/867) [#868](https://github.com/Jman-Github/Universal-Patch-Manager/issues/868) [#870](https://github.com/Jman-Github/Universal-Patch-Manager/issues/870) [#872](https://github.com/Jman-Github/Universal-Patch-Manager/issues/872) [#873](https://github.com/Jman-Github/Universal-Patch-Manager/issues/873)
+* **notifications:** prevent progress card clipping ([3a8da1b](https://github.com/Jman-Github/Universal-Patch-Manager/commit/3a8da1ba69ed2dca9d4ed9381aeea3b4f66074db)), closes [#860](https://github.com/Jman-Github/Universal-Patch-Manager/issues/860)
+* **root:** recover stale mounts and route stock installs ([b989fa0](https://github.com/Jman-Github/Universal-Patch-Manager/commit/b989fa00546378cb45ec94bd9c98f235195b759c))
+
+
+### Features
+
+* **manager:** add persistent patch sections ([a63cde0](https://github.com/Jman-Github/Universal-Patch-Manager/commit/a63cde07a41a0d616e98b85830096163ca24b181)), closes [#862](https://github.com/Jman-Github/Universal-Patch-Manager/issues/862) [#865](https://github.com/Jman-Github/Universal-Patch-Manager/issues/865) [#869](https://github.com/Jman-Github/Universal-Patch-Manager/issues/869) [#871](https://github.com/Jman-Github/Universal-Patch-Manager/issues/871) [#875](https://github.com/Jman-Github/Universal-Patch-Manager/issues/875) [#876](https://github.com/Jman-Github/Universal-Patch-Manager/issues/876)
+
+
+### Performance Improvements
+
+* **jvm:** launch Liberica 25 in a child process ([ec5e826](https://github.com/Jman-Github/Universal-Patch-Manager/commit/ec5e826a1958d6162f1c6a0789cbe77dcb68a40c)), closes [MorpheApp/morphe-manager#1474](https://github.com/MorpheApp/morphe-manager/issues/1474)
+
 # [2.1.0-dev.6](https://github.com/Jman-Github/Universal-Patch-Manager/compare/v2.1.0-dev.5...v2.1.0-dev.6) (2026-11-15)
 
 
