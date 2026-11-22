@@ -411,7 +411,11 @@ class RootMountVerifierTest {
         assertTrue(command.contains("pidof zygote 2>/dev/null || true"))
         assertTrue(command.contains("validate_zygote \"${'$'}pid\" || continue"))
         assertTrue(command.contains("namespace_layer_counts"))
-        assertTrue(command.contains("if ! visible_layer_is_owned \"${'$'}pid\" \"${'$'}target\" \"${'$'}counts\"; then"))
+        assertTrue(
+            command.contains(
+                """if ! visible_layer_is_owned "${'$'}pid" "${'$'}target" "${'$'}counts" "${'$'}@"; then"""
+            )
+        )
         assertTrue(command.contains("Foreign ${'$'}namespace_label mount covers a UPM layer"))
         assertTrue(command.contains("Failed to unmount ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid"))
         assertTrue(command.contains("nsenter --mount=\"/proc/${'$'}pid/ns/mnt\" -- umount"))
