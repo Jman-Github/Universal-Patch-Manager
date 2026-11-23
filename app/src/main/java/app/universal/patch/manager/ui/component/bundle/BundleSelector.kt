@@ -4,15 +4,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import app.universal.patch.manager.domain.bundles.PatchBundleSource
 import app.universal.patch.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.universal.patch.manager.ui.component.ColumnWithScrollbar
+import app.universal.patch.manager.ui.component.ScrollableBottomSheet
 import app.universal.patch.manager.R
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,20 +36,17 @@ fun BundleSelector(sources: List<PatchBundleSource>, onFinish: (PatchBundleSourc
         return
     }
 
-    ModalBottomSheet(
-        onDismissRequest = { onFinish(null) },
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ) {
-        Column(Modifier.fillMaxHeight(0.85f)) {
+    ScrollableBottomSheet(onDismissRequest = { onFinish(null) }) {
+        Column(Modifier.fillMaxWidth()) {
             Text(
                 text = stringResource(R.string.select),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp, bottom = 12.dp)
+                modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 12.dp)
             )
             HorizontalDivider()
             ColumnWithScrollbar(
-                modifier = Modifier.fillMaxWidth().weight(1f),
+                modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {

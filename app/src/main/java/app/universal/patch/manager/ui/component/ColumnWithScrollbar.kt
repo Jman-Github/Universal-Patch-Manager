@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -34,11 +33,12 @@ fun ColumnWithScrollbar(
             horizontalAlignment = horizontalAlignment,
             content = content
         )
-        Scrollbar(
-            state,
-            Modifier
-                .align(Alignment.CenterEnd),
-            thumbLength = thumbLength
-        )
+        Box(Modifier.matchParentSize()) {
+            Scrollbar(
+                state,
+                Modifier.align(Alignment.CenterEnd),
+                thumbLength = thumbLength
+            )
+        }
     }
 }

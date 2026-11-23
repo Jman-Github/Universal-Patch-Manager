@@ -64,7 +64,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -97,6 +96,7 @@ import java.nio.file.Path
 import kotlin.io.path.isDirectory
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import app.universal.patch.manager.ui.component.CenteredDialogTitle
 
@@ -469,7 +469,6 @@ fun SplitApkInstallerScreen(
 
             SplitInstallerRawLog(
                 entries = state.logEntries,
-                logRevision = state.logRevision,
                 logSessionId = state.logSessionId,
                 scrollState = logScrollState,
                 showActions = state.logComplete &&
@@ -504,7 +503,6 @@ fun SplitApkInstallerScreen(
 @Composable
 private fun SplitInstallerRawLog(
     entries: List<String>,
-    logRevision: Long,
     logSessionId: Long,
     scrollState: ScrollState,
     showActions: Boolean,
@@ -513,7 +511,6 @@ private fun SplitInstallerRawLog(
 ) {
     var followLatest by remember(logSessionId) { mutableStateOf(true) }
     var logExpanded by rememberSaveable(logSessionId) { mutableStateOf(true) }
-    val latestLogRevision by rememberUpdatedState(logRevision)
     val hasLogEntries by rememberUpdatedState(entries.isNotEmpty())
     val isLogDragged by scrollState.interactionSource.collectIsDraggedAsState()
     val showJumpToLatest by remember(scrollState, logSessionId) {
@@ -537,13 +534,16 @@ private fun SplitInstallerRawLog(
     }
 
     LaunchedEffect(scrollState, logSessionId) {
-        snapshotFlow { Triple(latestLogRevision, followLatest, logExpanded) }
-            .collect { (_, shouldFollowLatest, expanded) ->
-                if (shouldFollowLatest && expanded && hasLogEntries) {
-                    withFrameNanos { }
-                    scrollState.scrollTo(scrollState.maxValue)
-                }
+        // The scroll limit is updated by layout after new lines wrap or the viewport changes.
+        snapshotFlow {
+            scrollState.maxValue.takeIf {
+                it != Int.MAX_VALUE && followLatest && logExpanded && hasLogEntries && !isLogDragged
             }
+        }.collectLatest { end ->
+            if (end != null && scrollState.value != end) {
+                scrollState.scrollTo(end)
+            }
+        }
     }
 
     Card(

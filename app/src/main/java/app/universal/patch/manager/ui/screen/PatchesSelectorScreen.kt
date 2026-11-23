@@ -78,7 +78,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBarValue
 import androidx.compose.material3.ScrollableTabRow
@@ -87,7 +86,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSearchBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
@@ -161,7 +159,9 @@ import app.universal.patch.manager.ui.component.ExperimentalVersionBadge
 import app.universal.patch.manager.ui.component.ExpandableText
 import app.universal.patch.manager.ui.component.FullscreenDialog
 import app.universal.patch.manager.ui.component.InterceptBackHandler
+import app.universal.patch.manager.ui.component.ColumnWithScrollbar
 import app.universal.patch.manager.ui.component.LazyColumnWithScrollbar
+import app.universal.patch.manager.ui.component.ScrollableBottomSheet
 import app.universal.patch.manager.ui.component.SearchBar
 import app.universal.patch.manager.ui.component.SearchView
 import app.universal.patch.manager.ui.component.AlertDialogExtended
@@ -529,20 +529,12 @@ fun PatchesSelectorScreen(
     }
 
     if (showBottomSheet) {
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         val filterChipColors = FilterChipDefaults.filterChipColors(
             selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
         )
 
-        ModalBottomSheet(
-            onDismissRequest = {
-                showBottomSheet = false
-            },
-            sheetState = sheetState
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 24.dp)
-            ) {
+        ScrollableBottomSheet(onDismissRequest = { showBottomSheet = false }) {
+            ColumnWithScrollbar(contentModifier = Modifier.padding(horizontal = 24.dp)) {
                 Text(
                     text = stringResource(R.string.patch_selector_sheet_filter_title),
                     style = MaterialTheme.typography.headlineSmall,

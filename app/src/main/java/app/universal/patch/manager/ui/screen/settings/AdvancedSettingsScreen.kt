@@ -44,7 +44,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -103,7 +102,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -182,6 +180,7 @@ import androidx.core.content.getSystemService
 import androidx.lifecycle.viewModelScope
 import app.universal.patch.manager.BuildConfig
 import app.universal.patch.manager.R
+import app.universal.patch.manager.ui.component.ScrollableBottomSheet
 import app.universal.patch.manager.ui.component.AppTopBar
 import app.universal.patch.manager.ui.component.ColumnWithScrollbar
 import app.universal.patch.manager.ui.component.CenteredDialogTitle
@@ -4528,10 +4527,7 @@ private fun CustomInstallerManagerDialog(
     }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState
-    ) {
+    ScrollableBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         CustomInstallerContent(
             installerManager = installerManager,
             viewModel = viewModel,
@@ -4555,8 +4551,7 @@ private fun CustomInstallerContent(
     installTarget: InstallerManager.InstallTarget,
     customComponents: Set<String>,
     builtinComponents: Set<ComponentName>,
-    onClose: () -> Unit,
-    modifier: Modifier = Modifier
+    onClose: () -> Unit
 ) {
     val context = LocalContext.current
     val savedComponents = remember(customComponents) { customComponents.toSet() }
@@ -4575,7 +4570,6 @@ private fun CustomInstallerContent(
     val coroutineScope = rememberCoroutineScope()
     val trimmedInput = remember(inputValue) { inputValue.trim() }
     var selectedTab by rememberSaveable { mutableStateOf(InstallerTab.Saved) }
-    val scrollState = rememberScrollState()
             val autoSavedEntries = remember(builtinComponents, installTarget) {
                 buildList {
                     // Built-in system installers discovered automatically.
@@ -4653,12 +4647,10 @@ private fun CustomInstallerContent(
         }
     }
 
-    Column(
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-            .verticalScroll(scrollState)
+    ColumnWithScrollbar(
+        modifier = Modifier.fillMaxWidth(),
+        contentModifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
             text = stringResource(R.string.installer_custom_header),

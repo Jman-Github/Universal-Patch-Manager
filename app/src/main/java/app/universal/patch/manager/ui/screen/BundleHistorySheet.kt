@@ -17,6 +17,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.universal.patch.manager.util.catalogErrorMessage
 import app.universal.patch.manager.R
+import app.universal.patch.manager.ui.component.ScrollableBottomSheet
 import app.universal.patch.manager.network.dto.ExternalBundleSnapshot
 import app.universal.patch.manager.network.dto.HistoricalRelease
 import app.universal.patch.manager.ui.component.LazyColumnWithScrollbar
@@ -100,12 +101,8 @@ internal fun BundleHistorySheet(
         }
     }
 
-    // Size the sheet outside its offset-dependent content insets so scrolling cannot
-    // change its measured height and move the expanded anchor.
-    ModalBottomSheet(onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxHeight(0.9f),
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.fillMaxSize()) {
+    ScrollableBottomSheet(onDismissRequest = onDismiss, maxHeightFraction = 0.9f) {
+        Column(Modifier.fillMaxWidth()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically) {
@@ -128,7 +125,7 @@ internal fun BundleHistorySheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-            LazyColumnWithScrollbar(modifier = Modifier.weight(1f), state = listState,
+            LazyColumnWithScrollbar(modifier = Modifier.weight(1f, fill = false), state = listState,
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(releases, key = { it.id }) { release ->

@@ -46,7 +46,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -80,6 +79,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.documentfile.provider.DocumentFile
 import app.universal.patch.manager.R
+import app.universal.patch.manager.ui.component.ScrollableBottomSheet
 import app.universal.patch.manager.data.platform.Filesystem
 import app.universal.patch.manager.domain.installer.InstallerManager
 import app.universal.patch.manager.domain.manager.KeystoreManager
@@ -1404,42 +1404,34 @@ private fun PackageSelector(packages: Set<String>, onFinish: (String?) -> Unit) 
 
     if (noPackages) return
 
-    ModalBottomSheet(
-        onDismissRequest = { onFinish(null) }
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier
-                    .height(48.dp)
-                    .fillMaxWidth()
+    ScrollableBottomSheet(onDismissRequest = { onFinish(null) }) {
+        Column(Modifier.fillMaxWidth()) {
+            Text(
+                text = stringResource(R.string.select_package),
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 12.dp)
+            )
+            ColumnWithScrollbar(
+                modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = stringResource(R.string.select_package),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            packages.forEach {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier
-                        .height(48.dp)
-                        .fillMaxWidth()
-                        .clickable {
-                            onFinish(it)
-                        }
-                ) {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                packages.forEach { packageName ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier
+                            .height(48.dp)
+                            .fillMaxWidth()
+                            .clickable { onFinish(packageName) }
+                    ) {
+                        Text(
+                            text = packageName,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
         }

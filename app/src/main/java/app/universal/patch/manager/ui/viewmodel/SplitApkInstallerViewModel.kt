@@ -683,8 +683,7 @@ class SplitApkInstallerViewModel(
         val timestamp = "%1\$tH:%1\$tM:%1\$tS".format(Date())
         stateFlow.update { current ->
             current.copy(
-                logEntries = current.logEntries + "[$timestamp] $trimmed",
-                logRevision = current.logRevision + 1
+                logEntries = current.logEntries + "[$timestamp] $trimmed"
             )
         }
     }
@@ -698,7 +697,6 @@ class SplitApkInstallerViewModel(
                 successMessage = null,
                 logEntries = emptyList(),
                 logComplete = false,
-                logRevision = current.logRevision + 1,
                 logSessionId = current.logSessionId + 1
             )
         }
@@ -812,7 +810,6 @@ data class SplitApkInstallerState(
     val successMessage: String? = null,
     val logEntries: List<String> = emptyList(),
     val logComplete: Boolean = false,
-    val logRevision: Long = 0L,
     val logSessionId: Long = 0L
 )
 

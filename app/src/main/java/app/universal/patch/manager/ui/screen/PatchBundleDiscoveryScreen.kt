@@ -74,7 +74,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -116,7 +115,9 @@ import app.universal.patch.manager.network.dto.ExternalBundleSnapshot
 import app.universal.patch.manager.ui.component.AppTopBar
 import app.universal.patch.manager.ui.component.CheckedFilterChip
 import app.universal.patch.manager.ui.component.ConfirmDialog
+import app.universal.patch.manager.ui.component.ColumnWithScrollbar
 import app.universal.patch.manager.ui.component.LazyColumnWithScrollbar
+import app.universal.patch.manager.ui.component.ScrollableBottomSheet
 import app.universal.patch.manager.ui.component.ShimmerBox
 import app.universal.patch.manager.ui.component.bundle.LinkOptionRow
 import app.universal.patch.manager.ui.component.patches.PathSelectorDialog
@@ -458,14 +459,12 @@ fun PatchBundleDiscoveryScreen(
                 R.string.patch_bundle_discovery_use_latest
             }
         )
-        ModalBottomSheet(
+        ScrollableBottomSheet(
             onDismissRequest = { activeBundleMenu = null },
             sheetState = sheetState
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 20.dp),
+            ColumnWithScrollbar(
+                contentModifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(

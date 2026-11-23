@@ -30,7 +30,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -52,7 +51,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.patch.manager.network.dto.ReVancedAnnouncement
 import app.universal.patch.manager.ui.component.AppTopBar
+import app.universal.patch.manager.ui.component.ColumnWithScrollbar
 import app.universal.patch.manager.ui.component.LazyColumnWithScrollbar
+import app.universal.patch.manager.ui.component.ScrollableBottomSheet
 import app.universal.patch.manager.ui.component.LoadingIndicator
 import app.universal.patch.manager.ui.model.navigation.Announcement
 import app.universal.patch.manager.ui.viewmodel.AnnouncementSections
@@ -197,11 +198,9 @@ private fun AnnouncementFiltersSheet(
     onReset: () -> Unit,
     onToggleTag: (String) -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismissRequest) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
+    ScrollableBottomSheet(onDismissRequest = onDismissRequest) {
+        ColumnWithScrollbar(
+            contentModifier = Modifier.padding(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(

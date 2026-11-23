@@ -55,14 +55,16 @@ private fun Scrollbar(
 ) {
     val thickness = if (prominent) 6.dp else 4.dp
     val idleAlpha = if (prominent) 0.6f else 0.35f
+    // ComposeScrollbars installs touch handlers across its entire overlay when enabled.
+    // Leave input with the scrollable content underneath the indicator.
     val visibilityType = if (prominent) {
         ScrollbarsVisibilityType.Dynamic.Fade(
-            isVisibleOnTouchDown = true,
+            isVisibleOnTouchDown = false,
             isStaticWhenScrollPossible = true
         )
     } else {
         ScrollbarsVisibilityType.Dynamic.Fade(
-            isVisibleOnTouchDown = true,
+            isVisibleOnTouchDown = false,
             isStaticWhenScrollPossible = false
         )
     }
