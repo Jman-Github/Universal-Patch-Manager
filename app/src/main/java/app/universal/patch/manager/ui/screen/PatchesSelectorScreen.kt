@@ -199,14 +199,17 @@ fun PatchesSelectorScreen(
     viewModel: PatchesSelectorViewModel
 ) {
     val appInfo by viewModel.selectedAppInfo.collectAsStateWithLifecycle()
-    val bundles by viewModel.bundlesFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val patchSectionsState = viewModel.patchSectionsFlow.collectAsStateWithLifecycle(
+        initialValue = emptyList<PatchBundleInfo.Scoped>() to emptyMap()
+    )
+    val bundles by remember(patchSectionsState) { derivedStateOf { patchSectionsState.value.first } }
+    val newPatchNamesByBundle by remember(patchSectionsState) {
+        derivedStateOf { patchSectionsState.value.second }
+    }
     val bundleDisplayNames by viewModel.bundleDisplayNames.collectAsStateWithLifecycle(initialValue = emptyMap())
     val bundleTypes by viewModel.bundleTypes.collectAsStateWithLifecycle(initialValue = emptyMap<Int, BundleSourceType>())
     val profiles by viewModel.profiles.collectAsStateWithLifecycle(initialValue = emptyList<PatchProfile>())
     val suggestedVersionsByBundle by viewModel.suggestedVersionsByBundle.collectAsStateWithLifecycle(
-        initialValue = emptyMap()
-    )
-    val newPatchNamesByBundle by viewModel.newPatchNamesByBundle.collectAsStateWithLifecycle(
         initialValue = emptyMap()
     )
     val pagerState = rememberPagerState(

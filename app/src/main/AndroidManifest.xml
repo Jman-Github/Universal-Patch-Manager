@@ -52,35 +52,19 @@
         <service
             android:name="app.universal.patch.manager.patcher.runtime.jvm.PatcherService"
             android:exported="false"
-            android:foregroundServiceType="specialUse"
-            android:process=":patcher">
-            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Keeps the JVM patching worker active during a user-requested patch" />
-        </service>
+            android:process=":patcher" />
         <service
             android:name="app.universal.patch.manager.patcher.runtime.jvm.PatcherService1"
             android:exported="false"
-            android:foregroundServiceType="specialUse"
-            android:process=":patcher1">
-            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Keeps the JVM patching worker active during a user-requested patch" />
-        </service>
+            android:process=":patcher1" />
         <service
             android:name="app.universal.patch.manager.patcher.runtime.jvm.PatcherService2"
             android:exported="false"
-            android:foregroundServiceType="specialUse"
-            android:process=":patcher2">
-            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Keeps the JVM patching worker active during a user-requested patch" />
-        </service>
+            android:process=":patcher2" />
         <service
             android:name="app.universal.patch.manager.patcher.runtime.jvm.PatcherService3"
             android:exported="false"
-            android:foregroundServiceType="specialUse"
-            android:process=":patcher3">
-            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Keeps the JVM patching worker active during a user-requested patch" />
-        </service>
+            android:process=":patcher3" />
 
         <meta-data
             android:name="app.universal.patch.manager.DATABASE_VERSION"

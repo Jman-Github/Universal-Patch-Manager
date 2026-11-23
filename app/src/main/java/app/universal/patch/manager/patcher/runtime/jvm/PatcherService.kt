@@ -8,16 +8,8 @@ package app.universal.patch.manager.patcher.runtime.jvm
 // https://github.com/MorpheApp/morphe-manager/commit/76b5477eca7a97b393a95cc5880d90d1ab47354a
 // https://github.com/MorpheApp/morphe-manager/pull/1474
 
-import android.app.Notification
-import app.universal.patch.manager.util.applyManagerNotificationIcon
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.Service
-import android.content.pm.ServiceInfo
-import android.os.Build
 import android.util.Log
-import androidx.core.app.ServiceCompat
-import app.universal.patch.manager.R
 import android.content.Intent
 import android.os.ParcelFileDescriptor
 import android.os.Process
@@ -44,7 +36,6 @@ open class PatcherService : Service() {
             check(!running) { "The worker runs once per process" }
             running = true
             if (launch.command.isNotEmpty()) {
-                if (requestFile.isNotEmpty()) startJvmForeground()
                 return startJvm(launch, requestFile, events)
             }
             thread(name = "BoundPatcherRuntime") {
@@ -117,7 +108,6 @@ open class PatcherService : Service() {
                 val diagnostics = synchronized(tail) { tail.toList() }
                 writeJvmEvent(events, "jvm_ended", mapOf("status" to status, "output" to diagnostics))
             } finally {
-                stopJvmForeground()
                 exitProcess(status)
             }
         }
@@ -134,40 +124,14 @@ open class PatcherService : Service() {
         }
     }
 
-    private fun startJvmForeground() {
-        try {
-            getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(JVM_CHANNEL, getString(R.string.patcher), NotificationManager.IMPORTANCE_LOW)
-            )
-            val notification = Notification.Builder(this, JVM_CHANNEL)
-                .setContentTitle(getString(R.string.patcher_notification_title))
-                .applyManagerNotificationIcon(this)
-                .setOngoing(true)
-                .setLocalOnly(true)
-                .build()
-            val type = if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
-            ServiceCompat.startForeground(this, Process.myPid(), notification, type)
-        } catch (error: SecurityException) {
-            Log.w(JVM_TAG, "Foreground promotion unavailable; keeping the worker bound", error)
-        } catch (error: IllegalStateException) {
-            Log.w(JVM_TAG, "Foreground promotion unavailable; keeping the worker bound", error)
-        }
-    }
-
-    private fun stopJvmForeground() {
-        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
-    }
-
     private companion object {
         const val JVM_TAG = "EmbeddedJvm"
-        const val JVM_CHANNEL = "patcher_jvm"
         const val MAX_OUTPUT_LINES = 30
         const val MAX_OUTPUT_CHARS = 4096
     }
 
     override fun onBind(intent: Intent) = binder
     override fun onUnbind(intent: Intent): Boolean {
-        stopJvmForeground()
         Process.killProcess(Process.myPid())
         return false
     }

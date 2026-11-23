@@ -95,9 +95,7 @@ class ManagerApplication : Application() {
         processName.substringAfterLast(':', "").startsWith("patcher")
     }
 
-    // The isolated patcher process can outlive changes made by the main process.
-    internal fun notificationAppIcon(): ManagerAppIcon =
-        if (isPatcherProcess) appIcons.installedIcon() else appIcons.selected.value
+    internal fun notificationAppIcon(): ManagerAppIcon = appIcons.selected.value
 
     private val scope = MainScope()
     private var rootExternalInstallRecoveryJob: Job? = null
