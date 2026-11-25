@@ -37,8 +37,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.LaunchedEffect
 import app.universal.patch.manager.domain.bundles.BundleIcon
+import app.universal.patch.manager.domain.bundles.BundleIconIssue
 import app.universal.patch.manager.domain.bundles.BundleIconRepository
-import app.universal.patch.manager.domain.bundles.RemotePatchBundle
+import app.universal.patch.manager.util.networkWarningMessage
+import coil3.network.HttpException
 import org.koin.compose.koinInject
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -117,6 +119,15 @@ fun BundleItem(
     var changelogHistoryLoading by remember { mutableStateOf(false) }
     var changelogHistoryError by remember { mutableStateOf<Throwable?>(null) }
     val remoteSource = src.asRemoteOrNull
+    val iconRepository: BundleIconRepository = koinInject()
+    var bundleIcon by remember(src.uid, remoteSource?.endpoint) { mutableStateOf(BundleIcon()) }
+    // Update checks can hydrate metadata without changing the endpoint or artifact.
+    LaunchedEffect(src) {
+        if (remoteSource != null) bundleIcon = iconRepository.resolve(src)
+    }
+    var iconLoadFailure by remember(src.uid, remoteSource?.endpoint, bundleIcon.url, bundleIcon.avatar) {
+        mutableStateOf<Throwable?>(null)
+    }
     val historicalChangelogSource = remoteSource?.takeIf { it.supportsHistoricalChangelog }
     val supportsHistoricalChangelog = historicalChangelogSource != null
 
@@ -351,17 +362,14 @@ fun BundleItem(
                             onCheckedChange = toggleSelection,
                         )
                     }
-                    val iconRepository: BundleIconRepository = koinInject()
-                    var bundleIcon by remember(src.uid, (src as? RemotePatchBundle)?.endpoint) {
-                        mutableStateOf(BundleIcon())
-                    }
-                    // Update checks can hydrate metadata without changing the endpoint or artifact.
-                    LaunchedEffect(src) {
-                        bundleIcon = iconRepository.resolve(src)
-                    }
-                    if (src is RemotePatchBundle) {
-                        CatalogIcon(bundleIcon.url, bundleIcon.avatar, src.displayTitle,
-                            isOfficial = bundleIcon.url == BundleIconRepository.OFFICIAL_ICON_URL)
+                    if (remoteSource != null) {
+                        CatalogIcon(
+                            bundleIcon.url,
+                            bundleIcon.avatar,
+                            src.displayTitle,
+                            isOfficial = bundleIcon.url == BundleIconRepository.OFFICIAL_ICON_URL,
+                            onUnavailable = { iconLoadFailure = it }
+                        )
                     }
                     val titleScrollState = rememberScrollState()
                     Text(
@@ -400,6 +408,32 @@ fun BundleItem(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                val loadFailure = iconLoadFailure
+                val iconFailureReason = when {
+                    (loadFailure as? HttpException)?.response?.code == 429 ||
+                        ((!bundleIcon.hasImage || loadFailure != null) &&
+                            bundleIcon.issue == BundleIconIssue.RateLimited) ->
+                        stringResource(R.string.warning_network_rate_limit)
+                    loadFailure != null -> context.networkWarningMessage(loadFailure)
+                    else -> null
+                }
+                val iconWarning = when {
+                    iconFailureReason != null ->
+                        stringResource(R.string.bundle_icon_load_failed_reason, iconFailureReason)
+                    loadFailure != null || (!bundleIcon.hasImage && bundleIcon.issue == BundleIconIssue.LookupFailed) ->
+                        stringResource(R.string.bundle_icon_load_failed)
+                    !bundleIcon.hasImage && bundleIcon.issue == BundleIconIssue.NotProvided ->
+                        stringResource(R.string.bundle_icon_not_provided)
+                    else -> null
+                }
+                if (iconWarning != null) {
+                    Text(
+                        text = iconWarning,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = secondaryTextColor
+                    )
+                }
+
                 val versionText = src.version?.let {
                     if (it.startsWith("v", ignoreCase = true)) it else "v$it"
                 }

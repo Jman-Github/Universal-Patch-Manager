@@ -3422,7 +3422,6 @@ internal fun ActionButtonSettings(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ActionOrderResetButtons(
     @StringRes showAllLabel: Int,
@@ -3431,25 +3430,16 @@ internal fun ActionOrderResetButtons(
     onResetOrder: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    FlowRow(
+    Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
-        itemVerticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        TextButton(onClick = onShowAll) {
-            Text(
-                text = stringResource(showAllLabel),
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis
-            )
+        TextButton(onClick = onShowAll, modifier = Modifier.weight(1f)) {
+            Text(stringResource(showAllLabel), textAlign = TextAlign.Center)
         }
         TextButton(onClick = onResetOrder, modifier = Modifier.weight(1f)) {
-            Text(
-                text = stringResource(resetOrderLabel),
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.End
-            )
+            Text(stringResource(resetOrderLabel), textAlign = TextAlign.Center)
         }
     }
 }

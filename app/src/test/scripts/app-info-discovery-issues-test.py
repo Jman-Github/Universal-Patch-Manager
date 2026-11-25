@@ -31,7 +31,12 @@ for locale in ("values", "values-en-rUS"):
     keys = [node.attrib["name"] for node in xml]
     assert len(keys) == len(set(keys))
     resources.append({node.attrib["name"]: node.text for node in xml if node.tag == "string"})
-for key in ("catalog_request_timeout", "catalog_bundle_changed_discovery", "catalog_changed_refresh"):
+for key in (
+    "catalog_request_timeout", "catalog_bundle_changed_discovery", "catalog_changed_refresh",
+    "warning_network_dns", "warning_network_connection", "warning_network_connection_aborted",
+    "warning_network_rate_limit", "bundle_icon_not_provided", "bundle_icon_load_failed",
+    "bundle_icon_load_failed_reason", "app_selector_version",
+):
     assert resources[0][key] == resources[1][key]
 namespace = {"__file__": str(Path(__file__).with_name("bundle-ui-issues-test.py"))}
 exec(Path(namespace["__file__"]).read_text().split('(ROOT / "build").mkdir')[0], namespace)
@@ -48,6 +53,7 @@ open class Context {
         6 -> "localized connection"
         7 -> "localized rate limit"
         8 -> "localized HTTP ${args.single()}"
+        9 -> "localized connection interrupted"
         else -> "localized catalog"
     }
 }
@@ -62,6 +68,7 @@ const val warning_network_timeout=5
 const val warning_network_connection=6
 const val warning_network_rate_limit=7
 const val warning_network_http_error=8
+const val warning_network_connection_aborted=9
 } }
 """)
     (work / "ApiError.kt").write_text("""package app.universal.patch.manager.network.utils
@@ -91,7 +98,8 @@ fun main() {
     check(context.catalogErrorMessage("Catalog changed; refresh the catalog") == "localized catalog")
     check(context.catalogErrorMessage("Server detail") == "Server detail")
     check(context.networkWarningMessage(Exception(java.net.UnknownHostException("example.org"))) == "localized DNS")
-    check(context.networkWarningMessage(java.net.ConnectException("connection abort")) == "localized connection")
+    check(context.networkWarningMessage(java.net.ConnectException("connection refused")) == "localized connection")
+    check(context.networkWarningMessage(Exception(java.net.SocketException("Software caused connection abort"))) == "localized connection interrupted")
     check(context.networkWarningMessage(java.net.SocketTimeoutException()) == "localized timeout")
     check(context.networkWarningMessage(APIError(Status(403), "API rate limit exceeded")) == "localized rate limit")
     check(context.networkWarningMessage(APIError(Status(503), "raw details")) == "localized HTTP 503")

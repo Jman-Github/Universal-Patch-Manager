@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -88,12 +87,11 @@ fun AppliedPatchesDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.End
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             TextButton(onClick = onDismissRequest) {
                                 Text(stringResource(R.string.cancel))
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
                             FilledTonalButton(
                                 onClick = onConfirm,
                                 enabled = confirmEnabled

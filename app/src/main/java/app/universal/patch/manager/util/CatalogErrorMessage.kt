@@ -25,17 +25,33 @@ internal fun Context.networkWarningMessage(error: Throwable): String? {
             is UnknownHostException -> return getString(R.string.warning_network_dns)
             is SocketTimeoutException, is HttpRequestTimeoutException ->
                 return getString(R.string.warning_network_timeout)
-            is SocketException -> return getString(R.string.warning_network_connection)
-            is APIError -> return httpWarningMessage(
-                cause.code.value,
-                rateLimited = cause.code.value == 403 && cause.message.orEmpty().contains("rate limit", true)
+            is SocketException -> return getString(
+                if (cause.message.orEmpty().contains("connection abort", ignoreCase = true)) {
+                    R.string.warning_network_connection_aborted
+                } else {
+                    R.string.warning_network_connection
+                }
             )
+            is APIError -> return httpWarningMessage(cause.code.value, cause.isRateLimitResponse())
             is HttpService.TooManyRequestsException -> return getString(R.string.warning_network_rate_limit)
             is HttpService.HttpException -> return httpWarningMessage(cause.status.value)
         }
     }
     return null
 }
+
+internal fun Throwable.isNetworkRateLimit(): Boolean =
+    generateSequence(this) { it.cause }.take(8).any { cause ->
+        when (cause) {
+            is APIError -> cause.isRateLimitResponse()
+            is HttpService.TooManyRequestsException -> true
+            is HttpService.HttpException -> cause.status.value == 429
+            else -> false
+        }
+    }
+
+private fun APIError.isRateLimitResponse(): Boolean =
+    code.value == 429 || (code.value == 403 && message.orEmpty().contains("rate limit", true))
 
 private fun Context.httpWarningMessage(status: Int, rateLimited: Boolean = false): String =
     if (status == 429 || rateLimited) getString(R.string.warning_network_rate_limit)

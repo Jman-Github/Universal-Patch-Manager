@@ -25,6 +25,7 @@ fun CatalogIcon(
     description: String? = null,
     modifier: Modifier = Modifier.size(40.dp),
     isOfficial: Boolean = false,
+    onUnavailable: ((Throwable) -> Unit)? = null,
 ) {
     var model by remember(iconUrl, fallbackUrl) {
         mutableStateOf(iconUrl?.takeIf { it.isNotBlank() } ?: fallbackUrl)
@@ -41,9 +42,10 @@ fun CatalogIcon(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit,
                 onSuccess = { imageLoaded = true },
-                onError = {
+                onError = { state ->
                     imageLoaded = false
-                    model = fallbackUrl?.takeUnless { it == model }
+                    model = fallbackUrl?.takeIf { it.isNotBlank() && it != model }
+                    if (model == null) onUnavailable?.invoke(state.result.throwable)
                 })
         }
     }

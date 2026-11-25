@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.pm.PackageInfo
 import android.graphics.drawable.Drawable
+import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,6 +29,7 @@ import app.universal.patch.manager.domain.repository.appNamePackagePattern
 import app.universal.patch.manager.util.longPressOnly
 import app.universal.patch.manager.util.toast
 import app.universal.patch.manager.util.versionCodeFor
+import app.universal.patch.manager.util.withHapticFeedback
 
 @Composable
 fun AppInfo(
@@ -189,7 +191,8 @@ fun AppVersion(
                 clipboard.setPrimaryClip(ClipData.newPlainText(copyLabel, displayVersion))
                 context.toast(copiedMessage)
             }
-        })
+            Unit
+        }.withHapticFeedback(HapticFeedbackConstants.LONG_PRESS))
     } else {
         Modifier
     }

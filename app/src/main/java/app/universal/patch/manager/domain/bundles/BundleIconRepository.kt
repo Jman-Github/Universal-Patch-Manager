@@ -4,7 +4,11 @@ import android.app.Application
 import app.universal.patch.manager.network.api.ExternalBundlesApi
 import app.universal.patch.manager.network.api.ExternalBundlesEndpoints
 import app.universal.patch.manager.network.service.HttpService
+import app.universal.patch.manager.network.utils.APIError
+import app.universal.patch.manager.network.utils.APIResponse
 import app.universal.patch.manager.network.utils.getOrNull
+import app.universal.patch.manager.network.utils.getOrThrow
+import app.universal.patch.manager.util.isNetworkRateLimit
 import io.ktor.client.request.*
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.*
@@ -23,7 +27,17 @@ import java.net.URLEncoder
 import java.security.MessageDigest
 
 @Serializable
-data class BundleIcon(val url: String? = null, val avatar: String? = null, val checkedAt: Long = 0)
+data class BundleIcon(
+    val url: String? = null,
+    val avatar: String? = null,
+    val checkedAt: Long = 0,
+    val issue: BundleIconIssue? = null
+) {
+    val hasImage: Boolean get() = url != null || avatar != null
+}
+
+@Serializable
+enum class BundleIconIssue { NotProvided, LookupFailed, RateLimited }
 
 /** Repository metadata and missing root images are checked at most once per day. */
 class BundleIconRepository(
@@ -62,7 +76,9 @@ class BundleIconRepository(
                 http.json.decodeFromString<BundleIcon>(file.readText())
             }.getOrNull()
             val now = System.currentTimeMillis()
-            if (cached != null && now - cached.checkedAt in 0 until CACHE_TTL_MS) return@withLock cached
+            if (cached != null && (cached.hasImage || cached.issue != null) &&
+                now - cached.checkedAt in 0 until CACHE_TTL_MS
+            ) return@withLock cached
             var fallback = cached
             val icon = try {
                 if (registrySource != null || source is ExternalGraphqlPatchBundle) {
@@ -73,16 +89,26 @@ class BundleIconRepository(
                             ?.let { "https://github.com/${it.ownerName!!.trim()}/${it.repoName!!.trim()}" }
                     val prerelease = if (registrySource != null) registrySource.prerelease else external?.isPrerelease
                     val bundle = sourceUrl?.let {
-                        api.getLatestBundleForSource(it, prerelease).getOrNull()
-                            ?: (if (prerelease != null) api.getLatestBundleForSource(it, null).getOrNull() else null)
+                        val preferred = api.getLatestBundleForSource(it, prerelease)
+                        if (prerelease == null) preferred.getOrThrow()
+                        else preferred.getOrNull() ?: run {
+                            val latest = api.getLatestBundleForSource(it, null)
+                            latest.getOrNull() ?: if (preferred is APIResponse.Success) {
+                                latest.getOrThrow()
+                            } else {
+                                preferred.getOrThrow()
+                            }
+                        }
                     }
                     if (bundle != null) {
                         val newIcon = bundle.iconUrl?.trim()?.takeIf(String::isNotBlank)
                         val newAvatar = bundle.ownerAvatarUrl?.trim()?.takeIf(String::isNotBlank)
                         BundleIcon(newIcon, newAvatar, now)
                     } else {
-                        cached?.copy(checkedAt = now - CACHE_TTL_MS + FAILURE_TTL_MS)
-                            ?: BundleIcon(checkedAt = now - CACHE_TTL_MS + FAILURE_TTL_MS)
+                        (cached ?: BundleIcon()).copy(
+                            checkedAt = now - CACHE_TTL_MS + FAILURE_TTL_MS,
+                            issue = BundleIconIssue.NotProvided
+                        )
                     }
                 } else {
                     withTimeoutOrNull(ExternalBundlesEndpoints.HOST_QUERY_TIMEOUT_MS) {
@@ -95,11 +121,23 @@ class BundleIconRepository(
                 }
             } catch (cancel: CancellationException) {
                 throw cancel
-            } catch (_: Exception) {
-                fallback?.copy(checkedAt = now - CACHE_TTL_MS + FAILURE_TTL_MS)
-                    ?: BundleIcon(checkedAt = now - CACHE_TTL_MS + FAILURE_TTL_MS)
+            } catch (error: Exception) {
+                val issue = if (error.isNetworkRateLimit()) {
+                    BundleIconIssue.RateLimited
+                } else {
+                    BundleIconIssue.LookupFailed
+                }
+                (fallback ?: BundleIcon()).copy(
+                    checkedAt = now - CACHE_TTL_MS + FAILURE_TTL_MS,
+                    issue = issue
+                )
+            }.let { result ->
+                if (!result.hasImage && result.issue == null) {
+                    result.copy(issue = BundleIconIssue.NotProvided)
+                } else result
             }
-            if (icon.url != null || icon.avatar != null) {
+            // A temporary fallback must not bypass the next repository lookup.
+            if (icon.hasImage && icon.issue == null) {
                 if (external != null && (external.iconUrl.isNullOrBlank() || external.ownerAvatarUrl.isNullOrBlank())) {
                     val updated = external.copy(
                         iconUrl = icon.url?.trim()?.takeIf(String::isNotBlank) ?: external.iconUrl?.trim()?.takeIf(String::isNotBlank),
@@ -138,7 +176,9 @@ class BundleIconRepository(
             is RepositoryReleaseSource.Forgejo -> parsed.apiUrl
         }
         val response = http.http.get(metadataUrl)
-        check(response.status.isSuccess()) { "Repository metadata unavailable" }
+        if (!response.status.isSuccess()) {
+            throw APIError(response.status, response.bodyAsText())
+        }
         val data = http.json.parseToJsonElement(response.bodyAsText()).jsonObject
         val branch = data["default_branch"]?.jsonPrimitive?.contentOrNull ?: return null
         val avatar = if (parsed is RepositoryReleaseSource.GitLab) {
@@ -157,7 +197,7 @@ class BundleIconRepository(
         }
         val imageResponse = http.http.head(rootImage)
         if (!imageResponse.status.isSuccess() && imageResponse.status != HttpStatusCode.NotFound) {
-            throw IllegalStateException("Repository image temporarily unavailable")
+            throw APIError(imageResponse.status, null)
         }
         return BundleIcon(rootImage.takeIf { imageResponse.status.isSuccess() }, avatar, now)
     }
