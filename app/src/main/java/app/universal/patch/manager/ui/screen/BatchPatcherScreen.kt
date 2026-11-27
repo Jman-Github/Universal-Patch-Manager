@@ -94,6 +94,7 @@ import app.universal.patch.manager.domain.batch.BatchPatchItem
 import app.universal.patch.manager.domain.batch.BatchPhase
 import app.universal.patch.manager.domain.batch.BatchRunState
 import app.universal.patch.manager.domain.batch.canStartBatchPatch
+import app.universal.patch.manager.domain.batch.selectedBundleNames
 import app.universal.patch.manager.domain.installer.shouldUseConfiguredInstallerWithoutPrompt
 import app.universal.patch.manager.domain.manager.PreferencesManager
 import app.universal.patch.manager.ui.component.KeepScreenOn
@@ -205,8 +206,8 @@ fun BatchPatcherScreen(
     scheduled: Boolean = false,
     requestId: String,
     onBackClick: () -> Unit,
-    onOpenProgress: (String) -> Unit,
-    onEditPatches: (SelectedApplicationInfo.PatchesSelector.ViewModelParams) -> Unit,
+    onOpenProgress: (key: String) -> Unit,
+    onEditPatches: (key: String, SelectedApplicationInfo.PatchesSelector.ViewModelParams) -> Unit,
     viewModel: BatchPatcherViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -231,7 +232,7 @@ fun BatchPatcherScreen(
     var showCancelConfirmation by rememberSaveable { mutableStateOf(false) }
     var showReorderDialog by rememberSaveable { mutableStateOf(false) }
     var showSaveBeforeLeaving by rememberSaveable { mutableStateOf(false) }
-    var resultActionPackage by rememberSaveable { mutableStateOf<String?>(null) }
+    var resultActionKey by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingResultAction by rememberSaveable { mutableStateOf<String?>(null) }
 
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
@@ -282,10 +283,10 @@ fun BatchPatcherScreen(
         phase == BatchPhase.RUNNING ||
         phase == BatchPhase.INSTALLING
     val resultActionItem = state?.items?.firstOrNull {
-        it.packageName == resultActionPackage
+        it.key == resultActionKey
     }
     val resultActions = rememberBatchResultActions(resultActionItem, viewModel)
-    LaunchedEffect(resultActionItem?.packageName, pendingResultAction) {
+    LaunchedEffect(resultActionItem?.key, pendingResultAction) {
         when (pendingResultAction) {
             RESULT_ACTION_EXPORT -> resultActions.exportApk()
             RESULT_ACTION_LOGS -> resultActions.showLogs()
@@ -379,24 +380,29 @@ fun BatchPatcherScreen(
                         onRetry = viewModel::retryFailed
                     )
                 }
-                items(current.items, key = { it.packageName }) { item ->
+                items(current.items, key = { it.key }) { item ->
                     val isActiveInstall = item.installing &&
-                        current.activeInstallPackageName == item.packageName
+                        current.activeInstallKey == item.key
                     BatchItemCard(
                         item = item,
+                        // Name the bundles when the same app is queued more than once.
+                        showBundleNames = current.items.count {
+                            it.packageName == item.packageName
+                        } > 1,
                         phase = current.phase,
                         isActiveInstall = isActiveInstall,
                         canInstall = current.canInstallBatchItem(item),
                         resultActionOrder = batchResultActionOrder,
                         hiddenResultActions = batchResultHiddenActions,
-                        onToggle = { viewModel.toggleExcluded(item.packageName) },
+                        onToggle = { viewModel.toggleExcluded(item.key) },
                         onAttach = {
-                            viewModel.requestAttach(item.packageName)
+                            viewModel.requestAttach(item.key)
                         },
-                        onForce = { viewModel.forceVersion(item.packageName) },
+                        onForce = { viewModel.forceVersion(item.key) },
                         onEdit = {
                             item.input?.let { input ->
                                 onEditPatches(
+                                    item.key,
                                     SelectedApplicationInfo.PatchesSelector.ViewModelParams(
                                         app = input,
                                         currentSelection = item.selection,
@@ -408,20 +414,20 @@ fun BatchPatcherScreen(
                                 )
                             }
                         },
-                        onOpenProgress = { onOpenProgress(item.packageName) },
+                        onOpenProgress = { onOpenProgress(item.key) },
                         onExport = {
-                            resultActionPackage = item.packageName
+                            resultActionKey = item.key
                             pendingResultAction = RESULT_ACTION_EXPORT
                         },
                         onLogs = {
-                            resultActionPackage = item.packageName
+                            resultActionKey = item.key
                             pendingResultAction = RESULT_ACTION_LOGS
                         },
                         onInstallOrOpen = {
                             if (isActiveInstall) {
                                 viewModel.cancelInstall()
                             } else {
-                                resultActionPackage = item.packageName
+                                resultActionKey = item.key
                                 pendingResultAction = RESULT_ACTION_INSTALL
                             }
                         }
@@ -448,8 +454,9 @@ fun BatchPatcherScreen(
         )
     }
 
-    viewModel.attachTarget?.let { packageName ->
-        val targetItem = state?.items?.firstOrNull { it.packageName == packageName }
+    viewModel.attachTarget?.let { key ->
+        val targetItem = state?.items?.firstOrNull { it.key == key }
+        val packageName = targetItem?.packageName ?: key
         AppSourceSelectorDialog(
             plugins = plugins,
             installedApp = null,
@@ -475,7 +482,7 @@ fun BatchPatcherScreen(
                 items = current.items,
                 onDismissRequest = { showReorderDialog = false },
                 onConfirm = { ordered ->
-                    viewModel.reorder(ordered.map { it.packageName })
+                    viewModel.reorder(ordered.map { it.key })
                     showReorderDialog = false
                 }
             )
@@ -560,11 +567,18 @@ private fun BatchOrderDialog(
                 ) {
                     itemsIndexed(
                         workingOrder,
-                        key = { _, item -> item.packageName }
+                        key = { _, item -> item.key }
                     ) { index, item ->
                         val interactionSource = remember { MutableInteractionSource() }
-                        ReorderableItem(reorderableState, key = item.packageName) {
-                            BatchOrderRow(index, item, interactionSource)
+                        ReorderableItem(reorderableState, key = item.key) {
+                            BatchOrderRow(
+                                index = index,
+                                item = item,
+                                showBundleNames = workingOrder.count {
+                                    it.packageName == item.packageName
+                                } > 1,
+                                interactionSource = interactionSource
+                            )
                         }
                     }
                 }
@@ -577,6 +591,7 @@ private fun BatchOrderDialog(
 private fun ReorderableCollectionItemScope.BatchOrderRow(
     index: Int,
     item: BatchPatchItem,
+    showBundleNames: Boolean,
     interactionSource: MutableInteractionSource
 ) {
     Row(
@@ -605,6 +620,17 @@ private fun ReorderableCollectionItemScope.BatchOrderRow(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+            val bundleNames = item.selectedBundleNames()
+            if (showBundleNames && bundleNames.isNotEmpty()) {
+                Text(
+                    text = bundleNames,
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
                     softWrap = false
                 )
@@ -788,6 +814,7 @@ private fun FinishedHeader(
 @Composable
 private fun BatchItemCard(
     item: BatchPatchItem,
+    showBundleNames: Boolean,
     phase: BatchPhase,
     isActiveInstall: Boolean,
     canInstall: Boolean,
@@ -864,6 +891,17 @@ private fun BatchItemCard(
                             modifier = Modifier.horizontalScroll(rememberScrollState()),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                    val bundleNames = item.selectedBundleNames()
+                    if (showBundleNames && bundleNames.isNotEmpty()) {
+                        Text(
+                            text = bundleNames,
+                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
                             maxLines = 1,
                             softWrap = false
                         )

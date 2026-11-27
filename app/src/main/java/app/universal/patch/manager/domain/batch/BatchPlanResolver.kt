@@ -65,14 +65,18 @@ class BatchPlanResolver(
         forcedUseMount: Boolean? = null
     ): List<BatchPatchItem> = coroutineScope {
         packageNames.distinct().map { packageName ->
-            async { resolve(packageName, forcedUseMount = forcedUseMount) }
+            async {
+                // Keyed by the requested target, so a retry resolves the same saved variant.
+                resolve(packageName, forcedUseMount = forcedUseMount).copy(key = packageName)
+            }
         }.awaitAll()
     }
 
     suspend fun resolveManual(
         entries: List<ManualBatchPatchEntry>
     ): List<BatchPatchItem> = coroutineScope {
-        entries.distinctBy { it.input.packageName }.map { entry ->
+        // Each entry is its own item: the same app may be queued once per set of bundles.
+        entries.distinctBy { it.key }.map { entry ->
             async {
                 val resolved = resolve(
                     targetIdentifier = entry.sourceEntryKey ?: entry.input.packageName,
@@ -104,7 +108,8 @@ class BatchPlanResolver(
                     sourceEntryKey = entry.sourceEntryKey ?: resolved.sourceEntryKey,
                     patcherEngine = patcherEngine,
                     state = state,
-                    message = null
+                    message = null,
+                    key = entry.key
                 )
             }
         }.awaitAll()
@@ -640,7 +645,8 @@ class BatchPlanResolver(
             state = state,
             message = null,
             forceVersionMismatch = forcedMismatch,
-            signatureWorkflow = item.signatureWorkflow
+            signatureWorkflow = item.signatureWorkflow,
+            key = item.key
         )
     }
 

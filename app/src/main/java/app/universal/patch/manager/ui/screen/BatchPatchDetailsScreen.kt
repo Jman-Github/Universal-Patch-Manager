@@ -95,7 +95,7 @@ import org.koin.compose.koinInject
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BatchPatchDetailsScreen(
-    packageName: String,
+    itemKey: String,
     onBackClick: () -> Unit,
     viewModel: BatchPatcherViewModel = koinViewModel()
 ) {
@@ -115,9 +115,9 @@ fun BatchPatchDetailsScreen(
     val coroutineScope = rememberCoroutineScope()
     val useExclusiveAutoExpand =
         autoExpandRunningSteps && autoExpandRunningStepsExclusive
-    val item = state?.items?.firstOrNull { it.packageName == packageName }
+    val item = state?.items?.firstOrNull { it.key == itemKey }
     val resourceGraphState = rememberResourceGraphState(
-        state?.requestId, packageName, item?.patcherSessionInfo?.startedAtElapsedRealtimeMs
+        state?.requestId, itemKey, item?.patcherSessionInfo?.startedAtElapsedRealtimeMs
     )
     val lifecycleOwner = LocalLifecycleOwner.current
     val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
@@ -137,8 +137,8 @@ fun BatchPatchDetailsScreen(
     val canUseLogs = item?.let {
         it.state == BatchItemState.SUCCEEDED || it.state == BatchItemState.FAILED
     } == true
-    val activeInstallPackage = state?.activeInstallPackageName
-    val isActiveInstall = item?.installing == true && item.packageName == activeInstallPackage
+    val activeInstallKey = state?.activeInstallKey
+    val isActiveInstall = item?.installing == true && item.key == activeInstallKey
     val canInstallOrOpen = item?.let {
         !it.saving && (
             isActiveInstall ||

@@ -700,10 +700,11 @@ private fun ReVancedManager(
                 scheduled = data.scheduled,
                 requestId = data.requestId,
                 onBackClick = navController::navigateUp,
-                onOpenProgress = { packageName ->
-                    navController.navigate(BatchPatchDetails(packageName))
+                onOpenProgress = { key ->
+                    navController.navigate(BatchPatchDetails(key))
                 },
-                onEditPatches = { params ->
+                onEditPatches = { key, params ->
+                    batchPatcherVm.editingItemKey = key
                     navController.navigateComplex(BatchPatchesSelector, params)
                 },
                 viewModel = batchPatcherVm
@@ -713,7 +714,7 @@ private fun ReVancedManager(
         composable<BatchPatchDetails> {
             val data = it.toRoute<BatchPatchDetails>()
             BatchPatchDetailsScreen(
-                packageName = data.packageName,
+                itemKey = data.itemKey,
                 onBackClick = navController::popBackStack,
                 viewModel = batchPatcherVm
             )
@@ -726,7 +727,7 @@ private fun ReVancedManager(
                 onBackClick = navController::popBackStack,
                 onSave = { patches, options, _ ->
                     batchPatcherVm.updateConfiguration(
-                        packageName = data.app.packageName,
+                        key = batchPatcherVm.editingItemKey ?: data.app.packageName,
                         patches = patches,
                         options = options
                     )
