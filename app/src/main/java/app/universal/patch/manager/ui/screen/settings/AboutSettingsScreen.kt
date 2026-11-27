@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.screen.settings
 
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.view.HapticFeedbackConstants
@@ -33,8 +35,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -153,7 +153,7 @@ fun AboutSettingsScreen(
         }
     }
 
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
     Scaffold(
         topBar = {
             AppTopBar(
@@ -381,9 +381,11 @@ fun AboutSettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(0.dp)
             ) {
+                // Expressive matches the Credits card: a title segment, then full-width rows.
+                val expressive = LocalExpressiveDesign.current
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = if (expressive) Modifier else Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(if (expressive) 0.dp else 4.dp)
                 ) {
                     SettingsSearchHighlight(
                         targetKey = R.string.licensing,
@@ -393,9 +395,10 @@ fun AboutSettingsScreen(
                         Text(
                             text = stringResource(R.string.licensing),
                             style = MaterialTheme.typography.titleMedium,
-                            modifier = highlightModifier
+                            modifier = (if (expressive) Modifier.padding(16.dp) else Modifier).then(highlightModifier)
                         )
                     }
+                    if (expressive) ExpressiveSettingsDivider()
                     licensingItems.forEachIndexed { index, item ->
                         SettingsSearchHighlight(
                             targetKey = item.titleRes,

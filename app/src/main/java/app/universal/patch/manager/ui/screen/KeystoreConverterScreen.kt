@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.design.CircularProgressIndicator
+import app.universal.patch.manager.ui.component.design.Button
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -21,10 +23,8 @@ import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.WarningAmber
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon

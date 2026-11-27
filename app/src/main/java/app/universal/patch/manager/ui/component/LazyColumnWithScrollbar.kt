@@ -18,6 +18,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 
 internal val DASHBOARD_SCROLLBAR_THUMB_LENGTH = 64.dp
+
+/** Bottom list padding that lets the last dashboard card scroll above the floating action buttons. */
+internal val DashboardFabClearance = 96.dp
 internal val LAZY_SCROLLBAR_TOUCH_WIDTH = 24.dp
 
 @Composable

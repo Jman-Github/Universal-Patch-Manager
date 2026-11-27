@@ -1,5 +1,11 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsCard
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
+import app.universal.patch.manager.ui.component.design.TextButton
 import app.universal.patch.manager.domain.bundles.toLegacyAwareBundleIndex
 
 import android.content.ClipData
@@ -48,17 +54,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.surfaceColorAtElevation
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -1086,14 +1088,13 @@ fun InstalledAppInfoScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.7f)
-                            .height(4.dp)
                             .clip(RoundedCornerShape(999.dp))
                     )
                 }
             },
             confirmButton = {},
             dismissButton = {},
-            shape = RoundedCornerShape(28.dp)
+            shape = MaterialTheme.shapes.extraLarge.withClassicCorner(28.dp)
         )
     }
 
@@ -1103,7 +1104,7 @@ fun InstalledAppInfoScreen(
         )
     }
 
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
 
     Scaffold(
         topBar = {
@@ -1393,14 +1394,13 @@ fun InstalledAppInfoScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.7f)
-                            .height(4.dp)
                             .clip(RoundedCornerShape(999.dp))
                     )
                 }
             },
             confirmButton = {},
             dismissButton = {},
-            shape = RoundedCornerShape(28.dp)
+            shape = MaterialTheme.shapes.extraLarge.withClassicCorner(28.dp)
         )
     }
     FlowRow(
@@ -1408,7 +1408,7 @@ fun InstalledAppInfoScreen(
         verticalArrangement = Arrangement.spacedBy(2.dp),
         modifier = Modifier
             .padding(horizontal = 16.dp)
-            .clip(RoundedCornerShape(24.dp))
+            .clip(MaterialTheme.shapes.extraLarge.withClassicCorner(24.dp))
     ) {
         val installType = remember(
             installedApp.installType,
@@ -1829,9 +1829,7 @@ fun InstalledAppInfoScreen(
         }
     }
 
-            Column(
-                modifier = Modifier.padding(vertical = 16.dp)
-            ) {
+            AppDetailsGroup {
                 SettingsListItem(
                     modifier = Modifier.clickable(
                         enabled = appliedSelection != null
@@ -2239,6 +2237,16 @@ private data class PendingSavedExportConfirmation(
     val directory: Path,
     val fileName: String
 )
+
+/** Expressive gathers the app details into one card; classic keeps the plain list. */
+@Composable
+private fun AppDetailsGroup(content: @Composable () -> Unit) {
+    if (LocalExpressiveDesign.current) {
+        ExpressiveSettingsCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp), content = content)
+    } else {
+        Column(modifier = Modifier.padding(vertical = 16.dp)) { content() }
+    }
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

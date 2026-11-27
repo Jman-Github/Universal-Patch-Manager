@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.screen.settings
 
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,8 +24,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -57,7 +56,7 @@ fun ContributorSettingsScreen(
     viewModel: ContributorViewModel = koinViewModel()
 ) {
     val repositories = viewModel.repositories
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
     val uriHandler = LocalUriHandler.current
 
     Scaffold(

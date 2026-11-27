@@ -1,9 +1,14 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
+import app.universal.patch.manager.ui.component.design.CircularProgressIndicator
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.FilledTonalButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Refresh
@@ -216,7 +221,7 @@ private fun HistoricalReleaseCard(
         }
     }
 
-    Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
+    Surface(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

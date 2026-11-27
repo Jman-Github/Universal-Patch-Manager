@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.screen.settings
 
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.component.design.TextButton
 import app.universal.patch.manager.util.managerStorageRoot
 
 import app.universal.patch.manager.util.managerStorageContext
@@ -44,9 +46,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -124,7 +123,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
     val filesystem: Filesystem = koinInject()
     val repatchSourceCleanup: RepatchSourceCleanup = koinInject()
     val coroutineScope = rememberCoroutineScope()
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
     val autoClearCacheInterval by prefs.autoClearCacheInterval.getAsState()
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }

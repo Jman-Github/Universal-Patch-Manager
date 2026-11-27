@@ -61,6 +61,16 @@ private fun results(query: String) = entries.filter { entry ->
     matchesSettingsSearch(text, query)
 }
 fun main() {
+    for (query in listOf("available downloaders", "import downloaders")) {
+        check(results(query).any { it.title == R.string.downloader_catalog_title &&
+            it.targetId == it.title && it.destination == Settings.Downloads }) { query }
+    }
+    check(results("app icons").any { it.title == R.string.manager_app_icon &&
+        it.targetId == it.title && it.destination == Settings.General })
+    for (query in listOf("design language", "UI engine", "Classic", "Material 3 Expressive", "M3E")) {
+        check(results(query).any { it.title == R.string.design_language &&
+            it.targetId == it.title && it.destination == Settings.General }) { query }
+    }
     for (query in listOf("pin patcher resource graphs", "patcher pin graphs", "fixed patcher graphs", "pinning patcher", "PATCHER  PINNED")) {
         check(results(query).any { it.title == R.string.patcher_resource_graphs_pinned_title &&
             it.targetId == it.title && it.destination == Settings.Patcher }) { query }

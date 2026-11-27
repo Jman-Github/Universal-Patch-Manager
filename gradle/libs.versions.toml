@@ -8,6 +8,7 @@ documentfile-version = "1.1.0"
 preferences-datastore = "1.2.1"
 work-runtime = "2.11.2"
 compose-bom = "2026.06.00"
+material3 = "1.5.0"
 navigation = "2.9.8"
 accompanist = "0.37.0"
 placeholder = "1.1.2"
@@ -64,7 +65,7 @@ compose-ui = { group = "androidx.compose.ui", name = "ui" }
 compose-ui-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 compose-livedata = { group = "androidx.compose.runtime", name = "runtime-livedata" }
-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+compose-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
 compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
 

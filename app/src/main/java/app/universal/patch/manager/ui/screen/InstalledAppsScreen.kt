@@ -1,5 +1,10 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.DashboardFabClearance
+import app.universal.patch.manager.ui.component.design.horizontalScrollFade
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import app.universal.patch.manager.ui.component.CollectionDialog
 import app.universal.patch.manager.ui.component.minimalActionButtons
 import android.content.pm.PackageInfo
@@ -41,11 +46,9 @@ import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -195,7 +198,8 @@ fun InstalledAppsScreen(
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Top,
-                contentPadding = PaddingValues(bottom = 12.dp)
+                // Room for the floating action buttons, so the last card can scroll clear of them.
+                contentPadding = PaddingValues(bottom = DashboardFabClearance)
             ) {
                 items(
                     filteredApps.orEmpty(),
@@ -324,7 +328,7 @@ private fun InstalledAppCard(
     } else {
         installedApp.currentPackageName
     }
-    val cardShape = RoundedCornerShape(18.dp)
+    val cardShape = MaterialTheme.shapes.large.withClassicCorner(18.dp)
     val elevation = if (isSelected) 6.dp else 2.dp
     val cardBase = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
     val headerBase = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp)
@@ -481,6 +485,7 @@ private fun InstalledAppCard(
                     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                         Row(
                             modifier = Modifier
+                                .horizontalScrollFade(actionScrollState)
                                 .widthIn(min = maxWidth)
                                 .consumeHorizontalScroll(actionScrollState),
                             horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
@@ -601,7 +606,7 @@ private fun InstalledAppCard(
 
 @Composable
 private fun InstalledAppCardPlaceholder() {
-    val cardShape = RoundedCornerShape(16.dp)
+    val cardShape = MaterialTheme.shapes.large.withClassicCorner(16.dp)
     val elevation = 2.dp
     Surface(
         modifier = Modifier
@@ -621,7 +626,7 @@ private fun InstalledAppCardPlaceholder() {
         ) {
             ShimmerBox(
                 modifier = Modifier.size(48.dp),
-                shape = RoundedCornerShape(12.dp)
+                shape = MaterialTheme.shapes.medium.withClassicCorner(12.dp)
             )
             Column(
                 modifier = Modifier.weight(1f),

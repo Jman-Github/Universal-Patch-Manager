@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
+import app.universal.patch.manager.ui.component.design.TextButton
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*

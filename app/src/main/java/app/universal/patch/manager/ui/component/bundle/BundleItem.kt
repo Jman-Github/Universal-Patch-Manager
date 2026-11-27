@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.component.bundle
 
+import app.universal.patch.manager.ui.component.design.horizontalScrollFade
+import app.universal.patch.manager.ui.theme.withClassicCorner
 import app.universal.patch.manager.ui.component.minimalActionButtons
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -314,7 +316,7 @@ fun BundleItem(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = disabledAlpha)
     }
-    val cardShape = RoundedCornerShape(18.dp)
+    val cardShape = MaterialTheme.shapes.large.withClassicCorner(18.dp)
     val cardBase = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
     val headerBase = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp)
     val cardBackground = cardBase.copy(alpha = if (src.enabled) 1f else 0.6f)
@@ -498,6 +500,7 @@ fun BundleItem(
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
+                .horizontalScrollFade(actionScrollState)
                 .widthIn(min = maxWidth)
                 .consumeHorizontalScroll(actionScrollState),
             horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
@@ -632,7 +635,7 @@ private fun BundleActionPill(
 fun BundleItemPlaceholder(
     modifier: Modifier = Modifier
 ) {
-    val cardShape = RoundedCornerShape(18.dp)
+    val cardShape = MaterialTheme.shapes.large.withClassicCorner(18.dp)
     Surface(
         modifier = modifier
             .fillMaxWidth()

@@ -1,5 +1,9 @@
 package app.universal.patch.manager.ui.screen
 
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import app.universal.patch.manager.ui.component.design.topScrollFade
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.component.design.IconButton
 import androidx.annotation.StringRes
 import app.universal.patch.manager.BuildConfig
 import androidx.compose.foundation.layout.Arrangement
@@ -12,6 +16,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
@@ -30,7 +35,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalContext
@@ -41,10 +45,12 @@ import app.universal.patch.manager.R
 import app.universal.patch.manager.ui.component.AppIcon
 import app.universal.patch.manager.ui.component.AppTopBar
 import app.universal.patch.manager.ui.component.ColumnWithScrollbar
+import app.universal.patch.manager.ui.component.LazyColumnWithScrollbar
 import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsCard
 import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsItem
 import app.universal.patch.manager.ui.model.matchesSettingsSearch
+import app.universal.patch.manager.ui.model.settingsSearchTerms
 import app.universal.patch.manager.ui.model.navigation.Settings
 import app.universal.patch.manager.ui.screen.settings.SettingsSearchState
 import app.universal.patch.manager.ui.screen.settings.SettingsSearchTarget
@@ -80,6 +86,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                 keywords = listOf(
                     R.string.appearance,
                     R.string.dynamic_color,
+                    R.string.design_language,
                     R.string.theme_presets,
                     R.string.theme_color,
                     R.string.accent_color,
@@ -371,6 +378,13 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                 keywords = listOf(R.string.manager_app_icons_section)
             ),
             SearchEntry(R.string.dynamic_color, R.string.dynamic_color_description, R.string.general, Settings.General),
+            SearchEntry(
+                R.string.design_language, null, R.string.general, Settings.General,
+                keywords = listOf(
+                    R.string.design_language_classic, R.string.design_language_expressive,
+                    R.string.design_language_search_keywords
+                )
+            ),
             SearchEntry(R.string.theme_presets, R.string.theme_presets_description, R.string.general, Settings.General),
             SearchEntry(R.string.theme_color, R.string.theme_color_description, R.string.general, Settings.General),
             SearchEntry(R.string.accent_color, R.string.accent_color_description, R.string.general, Settings.General),
@@ -409,6 +423,11 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.downloader_auto_save_title, R.string.downloader_auto_save_description, R.string.downloads, Settings.Downloads),
             SearchEntry(R.string.downloader_auto_save_latest_only_title, R.string.downloader_auto_save_latest_only_description, R.string.downloads, Settings.Downloads),
             SearchEntry(R.string.downloader_plugins, null, R.string.downloads, Settings.Downloads),
+            SearchEntry(
+                R.string.downloader_catalog_title, R.string.downloader_catalog_description,
+                R.string.downloads, Settings.Downloads,
+                keywords = listOf(R.string.downloader_catalog_available)
+            ),
             SearchEntry(R.string.downloaded_apps, null, R.string.downloads, Settings.Downloads),
             SearchEntry(R.string.downloaded_apps_export, null, R.string.downloads, Settings.Downloads),
             SearchEntry(R.string.patcher_runtime_plugins, R.string.patcher_runtime_plugins_description, R.string.patcher_runtime_plugins, Settings.PatcherRuntimes),
@@ -656,7 +675,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
         )
     }
     var searchQuery by rememberSaveable { mutableStateOf("") }
-    val normalizedQuery = searchQuery.trim().lowercase()
+    val normalizedQuery = searchQuery.trim()
     val filteredSections = settingsSections
     val filteredEntries = if (normalizedQuery.isBlank()) {
         emptyList()
@@ -681,18 +700,22 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
     val aboutSection = filteredSections.firstOrNull { it.destination == Settings.About }
     val mainSections = filteredSections.filterNot { it.destination == Settings.About }
 
+    val scrollBehavior = rememberAppBarScrollBehavior()
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             AppTopBar(
                 title = stringResource(R.string.settings),
                 onBackClick = onBackClick,
+                scrollBehavior = scrollBehavior
             )
         }
     ) { paddingValues ->
         val searchCard: @Composable () -> Unit = {
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                // Lines the search icon and hint up with the row icons and titles below.
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
             ) {
                 TextField(
                     value = searchQuery,
@@ -702,7 +725,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                     trailingIcon = {
                         if (searchQuery.isNotBlank()) {
                             IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Outlined.Close, null)
+                                Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.clear))
                             }
                         }
                     },
@@ -779,20 +802,20 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                         )
                     }
                 } else {
-                    ColumnWithScrollbar(
-                        thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+                    ExpressiveSettingsCard(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f)
+                            .weight(1f, fill = false)
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
                     ) {
                         val highlightStyle = SpanStyle(
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold
                         )
-                        ExpressiveSettingsCard(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                        LazyColumnWithScrollbar(
+                            thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH
                         ) {
-                            filteredEntries.forEachIndexed { index, entry ->
+                            itemsIndexed(filteredEntries) { index, entry ->
                                 val titleText = stringResource(entry.title)
                                 val descriptionText = entry.description?.let { stringResource(it) }
                                 val categoryText = stringResource(entry.category)
@@ -885,7 +908,10 @@ private fun SettingsOverviewLayout(
             val scrollPlaceable = subcompose(SettingsOverviewSlot.Scroll) {
                 ColumnWithScrollbar(
                     thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // Rows fade out under the pinned search card instead of being cut off on a hard line.
+                        .topScrollFade({ scrollState.value }),
                     state = scrollState
                 ) {
                     mainContent()
@@ -908,31 +934,18 @@ private fun SettingsOverviewLayout(
     }
 }
 
-private fun buildHighlightedText(
+internal fun buildHighlightedText(
     text: String,
     query: String,
     highlightStyle: SpanStyle
-): AnnotatedString {
-    if (query.isBlank()) {
-        return AnnotatedString(text)
-    }
-    val lowerText = text.lowercase()
-    val lowerQuery = query.lowercase()
-    var searchIndex = 0
-    return buildAnnotatedString {
-        while (searchIndex < text.length) {
-            val matchIndex = lowerText.indexOf(lowerQuery, searchIndex)
-            if (matchIndex == -1) {
-                append(text.substring(searchIndex))
-                break
-            }
-            if (matchIndex > searchIndex) {
-                append(text.substring(searchIndex, matchIndex))
-            }
-            withStyle(highlightStyle) {
-                append(text.substring(matchIndex, matchIndex + lowerQuery.length))
-            }
-            searchIndex = matchIndex + lowerQuery.length
+): AnnotatedString = buildAnnotatedString {
+    append(text)
+    for (term in settingsSearchTerms(query)) {
+        var start = text.indexOf(term, ignoreCase = true)
+        while (start >= 0) {
+            val end = start + term.length
+            addStyle(highlightStyle, start, end)
+            start = text.indexOf(term, startIndex = end, ignoreCase = true)
         }
     }
 }

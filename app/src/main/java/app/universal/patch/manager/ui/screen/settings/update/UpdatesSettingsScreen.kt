@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.screen.settings.update
 
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.component.design.TextButton
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
@@ -19,9 +21,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -75,7 +74,7 @@ fun UpdatesSettingsScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
     val managerInterval by vm.backgroundManagerUpdateInterval.getAsState()
     val runtimeInterval by vm.backgroundRuntimeUpdateInterval.getAsState()
     val backgroundInterval by vm.backgroundBundleUpdateInterval.getAsState()

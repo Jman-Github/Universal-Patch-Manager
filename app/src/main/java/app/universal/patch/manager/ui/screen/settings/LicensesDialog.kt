@@ -1,6 +1,7 @@
 package app.universal.patch.manager.ui.screen.settings
 
-import androidx.compose.foundation.clickable
+import app.universal.patch.manager.ui.component.design.ListItem
+import app.universal.patch.manager.ui.component.design.TextButton
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,11 +15,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -118,7 +117,7 @@ fun LicensesDialog(onDismiss: () -> Unit) {
             ) {
                 items(libraries) { library ->
                     ListItem(
-                        modifier = Modifier.clickable { selectedLibrary = library },
+                        onClick = { selectedLibrary = library },
                         headlineContent = {
                             Text(
                                 text = library.name,

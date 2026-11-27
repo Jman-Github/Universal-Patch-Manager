@@ -1,5 +1,8 @@
 package app.universal.patch.manager.ui.component
 
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
+import app.universal.patch.manager.ui.component.design.IconButton
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -7,20 +10,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
@@ -56,7 +56,7 @@ fun DownloadProgressBanner(
         tonalElevation = 2.dp,
         shadowElevation = 6.dp,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        shape = RoundedCornerShape(14.dp)
+        shape = MaterialTheme.shapes.medium.withClassicCorner(14.dp)
     ) {
         Column(modifier = Modifier.padding(contentPadding)) {
             Box(
@@ -122,14 +122,13 @@ fun DownloadProgressBanner(
                 val progressModifier = Modifier
                     .padding(top = 8.dp)
                     .fillMaxWidth()
-                    .height(4.dp)
                 if (clampedProgress == null) {
                     LinearProgressIndicator(modifier = progressModifier)
                 } else {
                     LinearProgressIndicator(
                         progress = { clampedProgress },
                         modifier = progressModifier,
-                        drawStopIndicator = {}
+                        showStopIndicator = false
                     )
                 }
             }

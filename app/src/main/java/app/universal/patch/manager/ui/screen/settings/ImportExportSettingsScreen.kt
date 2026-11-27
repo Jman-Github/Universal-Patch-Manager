@@ -1,5 +1,10 @@
 package app.universal.patch.manager.ui.screen.settings
 
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -43,17 +48,12 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -714,18 +714,17 @@ fun ImportExportSettingsScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.7f)
-                            .height(4.dp)
                             .clip(RoundedCornerShape(999.dp))
                     )
                 }
             },
             confirmButton = {},
             dismissButton = {},
-            shape = RoundedCornerShape(28.dp)
+            shape = MaterialTheme.shapes.extraLarge.withClassicCorner(28.dp)
         )
     }
 
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
 
     Scaffold(
         topBar = {

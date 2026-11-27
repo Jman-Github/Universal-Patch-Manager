@@ -1,5 +1,13 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.theme.actionTrayColor
+
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
+
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.ListItem
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import app.universal.patch.manager.ui.component.CollectionDialog
 import app.universal.patch.manager.ui.component.minimalActionButtons
 import androidx.annotation.StringRes
@@ -75,15 +83,12 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBarValue
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.rememberSearchBarState
@@ -1722,11 +1727,17 @@ fun PatchesSelectorScreen(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxSize()) {
+                    // Expressive tabs share the page color with the search bar above them.
+                    val bundleTabContainerColor = if (LocalExpressiveDesign.current) {
+                        Color.Transparent
+                    } else {
+                        MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp)
+                    }
                     if (bundles.isNotEmpty()) {
                         if (bundles.size == 1) {
                             TabRow(
                                 selectedTabIndex = swipeSyncedTabIndex,
-                                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp)
+                                containerColor = bundleTabContainerColor
                             ) {
                                 bundles.forEachIndexed { index, bundle ->
                                     HapticTab(
@@ -1751,7 +1762,7 @@ fun PatchesSelectorScreen(
                         } else {
                             ScrollableTabRow(
                                 selectedTabIndex = swipeSyncedTabIndex,
-                                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp)
+                                containerColor = bundleTabContainerColor
                             ) {
                                 bundles.forEachIndexed { index, bundle ->
                                     HapticTab(
@@ -2021,14 +2032,21 @@ private fun PatchItem(
         modifier = Modifier
             .fillMaxWidth()
             .let { if (!compatible) it.alpha(0.6f) else it },
-        shape = RoundedCornerShape(20.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
         tonalElevation = 2.dp,
         onClick = onItemClick
     ) {
+        // When the version chips end the card, their 48dp touch row already adds 8dp under the chip,
+        // so the card trims that much to keep its top and bottom spacing even.
+        val showsOptionPreview = showOptionPreviews &&
+            patch.options?.isNotEmpty() == true &&
+            optionSummaries.isNotEmpty()
+        val trimChipTouchPadding = showVersionTags && hasChips &&
+            !showsOptionPreview
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = if (trimChipTouchPadding) 8.dp else 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
@@ -2119,14 +2137,10 @@ private fun PatchItem(
                     }
                 }
             }
-            if (
-                showOptionPreviews &&
-                patch.options?.isNotEmpty() == true &&
-                optionSummaries.isNotEmpty()
-            ) {
+            if (showsOptionPreview) {
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = MaterialTheme.shapes.medium.withClassicCorner(14.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -2316,7 +2330,7 @@ private fun PatchVersionChip(
         enabled = onClick != null,
         color = background,
         contentColor = contentColor,
-        shape = if (fullWidth) RoundedCornerShape(6.dp) else RoundedCornerShape(999.dp),
+        shape = if (fullWidth) MaterialTheme.shapes.small.withClassicCorner(6.dp) else RoundedCornerShape(999.dp),
         border = if (outlined) BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)) else null,
         modifier = if (fullWidth) {
             modifier
@@ -2775,17 +2789,12 @@ private fun PatchProfileNameDialog(
                         ) { profile ->
                             val selected = selectedProfileId == profile.uid
                             ListItem(
+                                selected = selected,
+                                enabled = !isSaving,
+                                onClick = { onProfileSelected(if (selected) null else profile) },
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(
-                                        if (selected)
-                                            MaterialTheme.colorScheme.secondaryContainer
-                                        else
-                                            Color.Transparent
-                                    )
-                                    .clickable(enabled = !isSaving) {
-                                        onProfileSelected(if (selected) null else profile)
-                                    }
+                                    .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
+                                    .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
                                     .padding(horizontal = 4.dp),
                                 headlineContent = { Text(profile.name) },
                                 supportingContent = resolvePatchProfileAppVersion(
@@ -2797,7 +2806,6 @@ private fun PatchProfileNameDialog(
                                     {
                                         Text(
                                             text = version.ifBlank { stringResource(R.string.any_version) },
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             style = MaterialTheme.typography.bodySmall
                                         )
                                     }
@@ -2911,8 +2919,8 @@ private fun PatchSelectionActionsPopup(
         val popupWidth = measuredWidth.coerceAtMost(popupMaxWidth)
 
         Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+            shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
+            color = actionTrayColor(),
             tonalElevation = 0.dp,
             shadowElevation = 6.dp,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
@@ -3059,7 +3067,7 @@ private fun SelectionActionButton(
             contentColor = contentColor,
             tonalElevation = 6.dp,
             shadowElevation = 2.dp,
-            shape = RoundedCornerShape(18.dp),
+            shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
             modifier = Modifier
                 .size(52.dp)
                 .alpha(contentAlpha)
@@ -3136,7 +3144,7 @@ private fun PatchSectionHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
+                .clip(MaterialTheme.shapes.large.withClassicCorner(20.dp))
                 .clickable(role = Role.Button, onClick = onToggle)
                 .semantics { stateDescription = state }
                 .heightIn(min = 48.dp)
@@ -3299,7 +3307,7 @@ private fun OptionsDialog(
             item(key = "options_summary") {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
+                    shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
                     tonalElevation = 2.dp
                 ) {
                     Column(
@@ -3330,7 +3338,7 @@ private fun OptionsDialog(
                 @Suppress("UNCHECKED_CAST")
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
+                    shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
                     tonalElevation = 2.dp
                 ) {
                     OptionItem(

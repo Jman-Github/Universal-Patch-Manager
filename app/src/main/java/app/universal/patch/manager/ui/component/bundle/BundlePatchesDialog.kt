@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.component.bundle
 
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.IconButton
 import app.universal.patch.manager.ui.component.persistentControls
 import android.net.Uri
 import android.os.Build
@@ -175,7 +177,7 @@ fun PatchItem(
             .fillMaxWidth()
             .then(
                 if (patch.options.isNullOrEmpty()) Modifier else Modifier
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(MaterialTheme.shapes.small.withClassicCorner(8.dp))
                     .clickable(onClick = onExpandOptions),
             )
     ) {
@@ -359,7 +361,7 @@ fun PatchItem(
                                     disabledContainerColor = Color.Transparent,
                                     disabledContentColor = MaterialTheme.colorScheme.onSurface
                                 ), shape = when {
-                                    options.size == 1 -> RoundedCornerShape(8.dp)
+                                    options.size == 1 -> MaterialTheme.shapes.small.withClassicCorner(8.dp)
                                     i == 0 -> RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
                                     i == options.lastIndex -> RoundedCornerShape(
                                         bottomStart = 8.dp,

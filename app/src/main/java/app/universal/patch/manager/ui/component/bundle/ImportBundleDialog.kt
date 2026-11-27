@@ -1,6 +1,11 @@
 package app.universal.patch.manager.ui.component.bundle
 
-import androidx.compose.foundation.clickable
+import app.universal.patch.manager.util.withHapticFeedback
+import android.view.HapticFeedbackConstants
+import app.universal.patch.manager.ui.component.design.ListItem
+import app.universal.patch.manager.ui.component.design.ListItemRadioButton
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,16 +21,13 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.universal.patch.manager.R
 import app.universal.patch.manager.ui.component.AlertDialogExtended
 import app.universal.patch.manager.ui.component.TextHorizontalPadding
 import app.universal.patch.manager.ui.component.haptics.HapticCheckbox
-import app.universal.patch.manager.ui.component.haptics.HapticRadioButton
 import app.universal.patch.manager.util.transparentListItemColors
 
 private enum class BundleType {
@@ -146,35 +148,25 @@ private fun SelectBundleTypeStep(
         )
         Column {
             ListItem(
-                modifier = Modifier.clickable(
-                    role = Role.RadioButton,
-                    onClick = { onBundleTypeSelected(BundleType.Remote) }
-                ),
+                selected = bundleType == BundleType.Remote,
+                onClick = { onBundleTypeSelected(BundleType.Remote) },
                 headlineContent = { Text(stringResource(R.string.enter_url)) },
                 overlineContent = { Text(stringResource(R.string.recommended)) },
                 supportingContent = { Text(stringResource(R.string.remote_patches_description)) },
                 leadingContent = {
-                    HapticRadioButton(
-                        selected = bundleType == BundleType.Remote,
-                        onClick = null
-                    )
+                    ListItemRadioButton(selected = bundleType == BundleType.Remote)
                 },
                 colors = transparentListItemColors
             )
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
             ListItem(
-                modifier = Modifier.clickable(
-                    role = Role.RadioButton,
-                    onClick = { onBundleTypeSelected(BundleType.Local) }
-                ),
+                selected = bundleType == BundleType.Local,
+                onClick = { onBundleTypeSelected(BundleType.Local) },
                 headlineContent = { Text(stringResource(R.string.select_from_storage)) },
                 supportingContent = { Text(stringResource(R.string.local_patches_description)) },
                 overlineContent = { },
                 leadingContent = {
-                    HapticRadioButton(
-                        selected = bundleType == BundleType.Local,
-                        onClick = null
-                    )
+                    ListItemRadioButton(selected = bundleType == BundleType.Local)
                 },
                 colors = transparentListItemColors
             )
@@ -234,7 +226,7 @@ private fun ImportBundleStep(
                                 Icon(imageVector = Icons.Default.Topic, contentDescription = null)
                             }
                         },
-                        modifier = Modifier.clickable { launchPatchActivity() },
+                        onClick = { launchPatchActivity() },
                         colors = transparentListItemColors
                     )
                 }
@@ -258,39 +250,21 @@ private fun ImportBundleStep(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
                 ) {
                     ListItem(
-                        modifier = Modifier.clickable(
-                            role = Role.Checkbox,
-                            onClick = { onAutoUpdateChange(!autoUpdate) }
-                        ),
+                        checked = autoUpdate,
+                        onCheckedChange = onAutoUpdateChange.withHapticFeedback(HapticFeedbackConstants.CLOCK_TICK),
                         headlineContent = { Text(stringResource(R.string.auto_update)) },
                         leadingContent = {
-                            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-                                HapticCheckbox(
-                                    checked = autoUpdate,
-                                    onCheckedChange = {
-                                        onAutoUpdateChange(!autoUpdate)
-                                    }
-                                )
-                            }
+                            HapticCheckbox(checked = autoUpdate, onCheckedChange = null)
                         },
                         colors = transparentListItemColors
                     )
                     ListItem(
-                        modifier = Modifier.clickable(
-                            role = Role.Checkbox,
-                            onClick = { onSearchUpdateChange(!searchUpdate) }
-                        ),
+                        checked = searchUpdate,
+                        onCheckedChange = onSearchUpdateChange.withHapticFeedback(HapticFeedbackConstants.CLOCK_TICK),
                         headlineContent = { Text(stringResource(R.string.bundle_search_update)) },
                         supportingContent = { Text(stringResource(R.string.bundle_search_update_description)) },
                         leadingContent = {
-                            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-                                HapticCheckbox(
-                                    checked = searchUpdate,
-                                    onCheckedChange = {
-                                        onSearchUpdateChange(!searchUpdate)
-                                    }
-                                )
-                            }
+                            HapticCheckbox(checked = searchUpdate, onCheckedChange = null)
                         },
                         colors = transparentListItemColors
                     )

@@ -1,5 +1,8 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.DashboardFabClearance
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,10 +20,8 @@ import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -170,6 +171,8 @@ fun BundleListScreen(
                 state = listState,
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Top,
+                // Room for the floating action buttons, so the last card can scroll clear of them.
+                contentPadding = PaddingValues(bottom = DashboardFabClearance)
             ) {
                 items(
                     currentSources,

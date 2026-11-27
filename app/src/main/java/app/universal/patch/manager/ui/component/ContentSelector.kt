@@ -1,8 +1,8 @@
 package app.universal.patch.manager.ui.component
 
+import app.universal.patch.manager.ui.component.design.Button
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.compose.material3.Button
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue

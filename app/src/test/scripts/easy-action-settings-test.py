@@ -36,10 +36,9 @@ minimal_callback = block(minimal, "onValueChange = { enabled ->").split("->", 1)
 visibility_callback = block(dashboard, "onCheckedChange = { shown ->").split("->", 1)[1]
 move_callback = block(dashboard, "fun moveAction(")
 save_callback = block(dashboard, "fun saveOrder(")
-footer = dashboard.split("        FlowRow(", 1)[1]
-show_all_callback = block(footer, "TextButton(onClick = {")
-second_button = footer.index("TextButton(onClick = {", footer.index("TextButton(onClick = {") + 1)
-reset_order_callback = block(footer[second_button:], "TextButton(onClick = {")
+footer = dashboard.split("ActionOrderResetButtons(", 1)[1]
+show_all_callback = block(footer, "onShowAll = {")
+reset_order_callback = block(footer, "onResetOrder = {")
 harness = """
 package regression
 import kotlinx.coroutines.*
@@ -141,7 +140,7 @@ compiler = [artifact("org.jetbrains.kotlin", name, kotlin) for name in
 deps = [artifact("org.jetbrains.kotlin", "kotlin-stdlib", kotlin), artifact("org.jetbrains", "annotations"),
         artifact("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm")]
 compiler += deps
-java = Path(r"C:\Program Files\Java\jdk-17\bin\java.exe")
+java = compat.JAVA
 cp = lambda paths: os.pathsep.join(map(str, paths))
 with tempfile.TemporaryDirectory(prefix="easy-actions-", dir=ROOT / "build") as directory:
     work = Path(directory)

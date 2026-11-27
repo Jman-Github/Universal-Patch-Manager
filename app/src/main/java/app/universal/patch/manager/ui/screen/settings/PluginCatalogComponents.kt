@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.screen.settings
 
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
 import android.text.format.Formatter
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.animateFloatAsState
@@ -68,7 +69,7 @@ internal fun CatalogTransferProgress(
                 targetValue = fraction, animationSpec = ProgressIndicatorDefaults.ProgressAnimationSpec,
                 label = "runtimeDownloadProgress"
             )
-            LinearProgressIndicator(progress = { animated }, modifier = Modifier.fillMaxWidth(), drawStopIndicator = {})
+            LinearProgressIndicator(progress = { animated }, modifier = Modifier.fillMaxWidth(), showStopIndicator = false)
         }
         if (progress?.stage == RuntimeDownloadStage.DOWNLOADING &&
             (progress.bytesDownloaded > 0 || progress.totalBytes != null)) {

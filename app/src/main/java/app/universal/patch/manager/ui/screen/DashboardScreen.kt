@@ -1,5 +1,13 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.theme.restingShadow
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
+import app.universal.patch.manager.ui.component.design.CircularProgressIndicator
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.TextButton
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
+import app.universal.patch.manager.util.withHapticFeedback
 import app.universal.patch.manager.ui.component.persistentControls
 import android.annotation.SuppressLint
 import android.app.Activity
@@ -10,6 +18,7 @@ import android.content.pm.PackageInfo
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.provider.Settings
+import android.view.HapticFeedbackConstants
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,8 +29,13 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -85,7 +99,7 @@ import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Sort
+import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.Source
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.Update
@@ -97,19 +111,18 @@ import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ShortNavigationBar
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ShortNavigationBarItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.surfaceColorAtElevation
@@ -909,14 +922,13 @@ fun DashboardScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.7f)
-                            .height(4.dp)
                             .clip(RoundedCornerShape(999.dp))
                     )
                 }
             },
             confirmButton = {},
             dismissButton = {},
-            shape = RoundedCornerShape(28.dp)
+            shape = MaterialTheme.shapes.extraLarge.withClassicCorner(28.dp)
         )
     }
 
@@ -1825,14 +1837,13 @@ fun DashboardScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.7f)
-                            .height(4.dp)
                             .clip(RoundedCornerShape(999.dp))
                     )
                 }
             },
             confirmButton = {},
             dismissButton = {},
-            shape = RoundedCornerShape(28.dp)
+            shape = MaterialTheme.shapes.extraLarge.withClassicCorner(28.dp)
         )
     }
 
@@ -2553,7 +2564,7 @@ fun DashboardScreen(
                                         showBundleOrderDialog = true
                                     }
                                 ) {
-                                    Icon(Icons.Outlined.Sort, stringResource(R.string.bundle_reorder))
+                                    Icon(Icons.AutoMirrored.Outlined.Sort, stringResource(R.string.bundle_reorder))
                                 }
                             }
                             if (uiPage == DashboardPage.DASHBOARD && !appsSelectionActive) {
@@ -2569,7 +2580,7 @@ fun DashboardScreen(
                                         showAppsOrderDialog = true
                                     }
                                 ) {
-                                    Icon(Icons.Outlined.Sort, stringResource(R.string.apps_reorder))
+                                    Icon(Icons.AutoMirrored.Outlined.Sort, stringResource(R.string.apps_reorder))
                                 }
                             }
                             if (uiPage == DashboardPage.PROFILES && showPatchProfilesTab && !profilesSelectable) {
@@ -2585,7 +2596,7 @@ fun DashboardScreen(
                                         showProfilesOrderDialog = true
                                     }
                                 ) {
-                                    Icon(Icons.Outlined.Sort, stringResource(R.string.patch_profiles_reorder))
+                                    Icon(Icons.AutoMirrored.Outlined.Sort, stringResource(R.string.patch_profiles_reorder))
                                 }
                             }
                             IconButton(onClick = onSettingsClick) {
@@ -2825,12 +2836,7 @@ fun DashboardScreen(
     ) { paddingValues ->
         Box(Modifier.padding(paddingValues)) {
             Column {
-            TabRow(
-                selectedTabIndex = swipeSyncedTabIndex,
-                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
-                indicator = {},
-                divider = {}
-            ) {
+            DashboardTabBar(swipeSyncedTabIndex) {
                 visibleTabs.forEach { page ->
                     val selected = page == swipeSyncedPage
                     val updateCount = when (page) {
@@ -2842,23 +2848,7 @@ fun DashboardScreen(
                         }
                         else -> null
                     }
-                    val tabScale by animateFloatAsState(
-                        targetValue = if (selected) 1.02f else 1f,
-                        animationSpec = spring(
-                            stiffness = Spring.StiffnessMediumLow,
-                            dampingRatio = Spring.DampingRatioMediumBouncy
-                        ),
-                        label = "dashboardTabScale"
-                    )
-                    val tabOffsetY by animateDpAsState(
-                        targetValue = if (selected) (-2).dp else 0.dp,
-                        animationSpec = spring(
-                            stiffness = Spring.StiffnessMediumLow,
-                            dampingRatio = Spring.DampingRatioNoBouncy
-                        ),
-                        label = "dashboardTabOffset"
-                    )
-                    HapticTab(
+                    DashboardTab(
                         selected = selected,
                         onClick = {
                             composableScope.launch {
@@ -2868,12 +2858,6 @@ fun DashboardScreen(
                                 scrollToVisiblePage(page, animated = true)
                             }
                         },
-                        modifier = Modifier
-                            .graphicsLayer {
-                                scaleX = tabScale
-                                scaleY = tabScale
-                            }
-                            .offset(y = tabOffsetY),
                         text = if (hideMainTabLabels) null else {
                             {
                                 DashboardTabLabel(
@@ -2884,18 +2868,17 @@ fun DashboardScreen(
                             }
                         },
                         icon = {
+                            val description = if (hideMainTabLabels) stringResource(page.titleResId) else null
                             if (hideMainTabLabels && updateCount != null) {
                                 BadgedBox(
                                     badge = { DashboardTabUpdateBadge(updateCount) }
                                 ) {
-                                    Icon(page.icon, null)
+                                    Icon(page.icon, description)
                                 }
                             } else {
-                                Icon(page.icon, null)
+                                Icon(page.icon, description)
                             }
-                        },
-                        selectedContentColor = MaterialTheme.colorScheme.primary,
-                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        }
                     )
                 }
             }
@@ -3231,9 +3214,9 @@ private fun ToolsTabScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Surface(
-                    shape = RoundedCornerShape(20.dp),
+                    shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
                     tonalElevation = 2.dp,
-                    shadowElevation = 6.dp,
+                    shadowElevation = 6.dp.restingShadow(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(onClick = onOpenYoutubeAssetsScreen)
@@ -3246,7 +3229,7 @@ private fun ToolsTabScreen(
                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Surface(
-                            shape = RoundedCornerShape(14.dp),
+                            shape = MaterialTheme.shapes.medium.withClassicCorner(14.dp),
                             color = MaterialTheme.colorScheme.primaryContainer,
                             modifier = Modifier.size(52.dp)
                         ) {
@@ -3278,9 +3261,9 @@ private fun ToolsTabScreen(
                 }
 
                 Surface(
-                    shape = RoundedCornerShape(20.dp),
+                    shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
                     tonalElevation = 2.dp,
-                    shadowElevation = 6.dp,
+                    shadowElevation = 6.dp.restingShadow(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(onClick = onOpenMergeScreen)
@@ -3293,7 +3276,7 @@ private fun ToolsTabScreen(
                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Surface(
-                            shape = RoundedCornerShape(14.dp),
+                            shape = MaterialTheme.shapes.medium.withClassicCorner(14.dp),
                             color = MaterialTheme.colorScheme.primaryContainer,
                             modifier = Modifier.size(52.dp)
                         ) {
@@ -3325,9 +3308,9 @@ private fun ToolsTabScreen(
                 }
 
                 Surface(
-                    shape = RoundedCornerShape(20.dp),
+                    shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
                     tonalElevation = 2.dp,
-                    shadowElevation = 6.dp,
+                    shadowElevation = 6.dp.restingShadow(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(onClick = onOpenSplitInstallerScreen)
@@ -3340,7 +3323,7 @@ private fun ToolsTabScreen(
                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Surface(
-                            shape = RoundedCornerShape(14.dp),
+                            shape = MaterialTheme.shapes.medium.withClassicCorner(14.dp),
                             color = MaterialTheme.colorScheme.primaryContainer,
                             modifier = Modifier.size(52.dp)
                         ) {
@@ -3372,9 +3355,9 @@ private fun ToolsTabScreen(
                 }
 
                 Surface(
-                    shape = RoundedCornerShape(20.dp),
+                    shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
                     tonalElevation = 2.dp,
-                    shadowElevation = 6.dp,
+                    shadowElevation = 6.dp.restingShadow(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(onClick = onOpenApkSignerScreen)
@@ -3387,7 +3370,7 @@ private fun ToolsTabScreen(
                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Surface(
-                            shape = RoundedCornerShape(14.dp),
+                            shape = MaterialTheme.shapes.medium.withClassicCorner(14.dp),
                             color = MaterialTheme.colorScheme.primaryContainer,
                             modifier = Modifier.size(52.dp)
                         ) {
@@ -3419,9 +3402,9 @@ private fun ToolsTabScreen(
                 }
 
                 Surface(
-                    shape = RoundedCornerShape(20.dp),
+                    shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
                     tonalElevation = 2.dp,
-                    shadowElevation = 6.dp,
+                    shadowElevation = 6.dp.restingShadow(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(onClick = onOpenKeystoreCreatorScreen)
@@ -3434,7 +3417,7 @@ private fun ToolsTabScreen(
                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Surface(
-                            shape = RoundedCornerShape(14.dp),
+                            shape = MaterialTheme.shapes.medium.withClassicCorner(14.dp),
                             color = MaterialTheme.colorScheme.primaryContainer,
                             modifier = Modifier.size(52.dp)
                         ) {
@@ -3466,9 +3449,9 @@ private fun ToolsTabScreen(
                 }
 
                 Surface(
-                    shape = RoundedCornerShape(20.dp),
+                    shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
                     tonalElevation = 2.dp,
-                    shadowElevation = 6.dp,
+                    shadowElevation = 6.dp.restingShadow(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(onClick = onOpenKeystoreConverterScreen)
@@ -3481,7 +3464,7 @@ private fun ToolsTabScreen(
                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Surface(
-                            shape = RoundedCornerShape(14.dp),
+                            shape = MaterialTheme.shapes.medium.withClassicCorner(14.dp),
                             color = MaterialTheme.colorScheme.primaryContainer,
                             modifier = Modifier.size(52.dp)
                         ) {
@@ -3797,7 +3780,7 @@ private fun MergeSplitInstalledAppCard(
                 if (hasSplitApks) Modifier.clickable(onClick = onClick)
                 else Modifier
             ),
-        shape = RoundedCornerShape(20.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
         tonalElevation = 2.dp
     ) {
         Column(
@@ -3992,6 +3975,79 @@ fun Notifications(
 }
 
 @Composable
+private fun DashboardTabBar(selectedIndex: Int, content: @Composable () -> Unit) {
+    if (LocalExpressiveDesign.current) {
+        // Same tone as the top bar above it, so the header reads as one block; the hairline marks
+        // where the page content starts scrolling.
+        Column {
+            ShortNavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface,
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                content = content
+            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+        }
+    } else {
+        TabRow(
+            selectedTabIndex = selectedIndex,
+            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
+            indicator = {},
+            divider = {},
+            tabs = content
+        )
+    }
+}
+
+@Composable
+private fun DashboardTab(
+    selected: Boolean,
+    onClick: () -> Unit,
+    text: (@Composable () -> Unit)?,
+    icon: @Composable () -> Unit
+) {
+    if (LocalExpressiveDesign.current) {
+        ShortNavigationBarItem(
+            selected = selected,
+            onClick = onClick.withHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY),
+            icon = icon,
+            label = text
+        )
+        return
+    }
+
+    val tabScale by animateFloatAsState(
+        targetValue = if (selected) 1.02f else 1f,
+        animationSpec = spring(
+            stiffness = Spring.StiffnessMediumLow,
+            dampingRatio = Spring.DampingRatioMediumBouncy
+        ),
+        label = "dashboardTabScale"
+    )
+    val tabOffsetY by animateDpAsState(
+        targetValue = if (selected) (-2).dp else 0.dp,
+        animationSpec = spring(
+            stiffness = Spring.StiffnessMediumLow,
+            dampingRatio = Spring.DampingRatioNoBouncy
+        ),
+        label = "dashboardTabOffset"
+    )
+    HapticTab(
+        selected = selected,
+        onClick = onClick,
+        modifier = Modifier
+            .graphicsLayer {
+                scaleX = tabScale
+                scaleY = tabScale
+            }
+            .offset(y = tabOffsetY),
+        text = text,
+        icon = icon,
+        selectedContentColor = MaterialTheme.colorScheme.primary,
+        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+@Composable
 private fun DashboardTabLabel(
     text: String,
     selected: Boolean,
@@ -4002,7 +4058,12 @@ private fun DashboardTabLabel(
         fontSize = 10.sp
     )
     val isSingleWord = text.none { it.isWhitespace() }
+    val expressiveTabs = LocalExpressiveDesign.current
     val labelContent: @Composable (Modifier, Color) -> Unit = { modifier, color ->
+        // Classic tabs place their icon from the label's text baseline. Baseline-aligning the
+        // update badge with the label keeps the badge digit from pulling that baseline down, which
+        // used to drop the badged tab's icon below the others.
+        val baselineAligned = !expressiveTabs
         Row(
             modifier = modifier.widthIn(min = 56.dp, max = 88.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
@@ -4010,7 +4071,9 @@ private fun DashboardTabLabel(
         ) {
             Text(
                 text = text,
-                modifier = Modifier.weight(1f, fill = false),
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .then(if (baselineAligned) Modifier.alignByBaseline() else Modifier),
                 style = compactTabLabelStyle,
                 color = color,
                 maxLines = if (isSingleWord) 1 else 2,
@@ -4018,22 +4081,32 @@ private fun DashboardTabLabel(
                 textAlign = TextAlign.Center,
                 overflow = TextOverflow.Ellipsis
             )
-            updateCount?.let { DashboardTabUpdateBadge(it) }
+            updateCount?.let {
+                Box(if (baselineAligned) Modifier.alignByBaseline() else Modifier) {
+                    DashboardTabUpdateBadge(it)
+                }
+            }
         }
     }
-    if (selected) {
-        Surface(
-            shape = RoundedCornerShape(999.dp),
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-        ) {
-            labelContent(
-                Modifier.padding(
-                    horizontal = if (isSingleWord) 3.dp else 6.dp,
-                    vertical = 3.dp,
-                ),
-                MaterialTheme.colorScheme.onPrimaryContainer
-            )
-        }
+    if (expressiveTabs) {
+        labelContent(Modifier, androidx.compose.material3.LocalContentColor.current)
+    } else if (selected) {
+        // The pill is drawn behind the label rather than padding it: padding took width from the
+        // narrow tab and wrapped two-word labels, and the extra height lifted the selected icon.
+        val pillColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+        val pillInset = if (isSingleWord) 4.dp else 6.dp
+        labelContent(
+            Modifier.drawBehind {
+                val inset = pillInset.toPx()
+                drawRoundRect(
+                    color = pillColor,
+                    topLeft = Offset(-inset, 0f),
+                    size = Size(size.width + inset * 2, size.height),
+                    cornerRadius = CornerRadius(size.height / 2)
+                )
+            },
+            MaterialTheme.colorScheme.onPrimaryContainer
+        )
     } else {
         labelContent(Modifier, MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -4126,7 +4199,7 @@ private fun DashboardSearchField(
     }
 
     Surface(
-        shape = RoundedCornerShape(18.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
         tonalElevation = 3.dp,
         shadowElevation = 10.dp,
         border = BorderStroke(
@@ -4159,7 +4232,7 @@ private fun DashboardSearchField(
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester),
-                shape = RoundedCornerShape(18.dp),
+                shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp),
                 unfocusedContainerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp),

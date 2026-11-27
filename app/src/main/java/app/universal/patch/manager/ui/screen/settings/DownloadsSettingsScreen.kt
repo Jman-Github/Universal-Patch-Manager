@@ -1,5 +1,15 @@
 package app.universal.patch.manager.ui.screen.settings
 
+import androidx.compose.ui.window.DialogProperties
+import app.universal.patch.manager.ui.component.design.horizontalScrollFade
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
+import app.universal.patch.manager.ui.component.design.CircularProgressIndicator
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.FilledTonalButton
+import app.universal.patch.manager.ui.component.design.OutlinedButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.ClipData
@@ -46,22 +56,14 @@ import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -177,7 +179,7 @@ fun DownloadsSettingsScreen(
         }.toSet()
     }
     val remoteSourceBusyState = viewModel.remoteSourceBusyState
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -288,6 +290,7 @@ fun DownloadsSettingsScreen(
                 R.string.download_behavior_section, R.string.downloader_auto_save_title,
                 R.string.downloader_auto_save_latest_only_title -> 0
                 R.string.downloader_plugins -> 2
+                R.string.downloader_catalog_title -> 3
                 else -> 4 + sourceStates.size + pluginStates.size +
                     apkDownloadHelpers.filterNot { it.packageName in managedHelperPackages }
                         .distinctBy { it.packageName }.size +
@@ -571,14 +574,13 @@ fun DownloadsSettingsScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.7f)
-                            .height(4.dp)
                             .clip(RoundedCornerShape(999.dp))
                     )
                 }
             },
             confirmButton = {},
             dismissButton = {},
-            shape = RoundedCornerShape(28.dp)
+            shape = MaterialTheme.shapes.extraLarge.withClassicCorner(28.dp)
         )
     }
 
@@ -685,10 +687,17 @@ fun DownloadsSettingsScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
                     ) {
-                        ExpressiveSettingsItem(
-                            headlineContent = stringResource(R.string.downloader_catalog_title),
-                            supportingContent = stringResource(R.string.downloader_catalog_description)
-                        )
+                        SettingsSearchHighlight(
+                            targetKey = R.string.downloader_catalog_title,
+                            activeKey = highlightTarget,
+                            onHighlightComplete = { highlightTarget = null }
+                        ) { modifier ->
+                            ExpressiveSettingsItem(
+                                headlineContent = stringResource(R.string.downloader_catalog_title),
+                                supportingContent = stringResource(R.string.downloader_catalog_description),
+                                modifier = modifier
+                            )
+                        }
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1262,7 +1271,7 @@ private fun DownloadedAppCard(
     onDelete: () -> Unit,
     onInstall: () -> Unit
 ) {
-    val cardShape = RoundedCornerShape(18.dp)
+    val cardShape = MaterialTheme.shapes.large.withClassicCorner(18.dp)
     val elevation = if (selected) 6.dp else 2.dp
     val cardBackground = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
     val headerBackground = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp)
@@ -1355,6 +1364,7 @@ private fun DownloadedAppCard(
                 BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier
+                            .horizontalScrollFade(actionScrollState)
                             .widthIn(min = maxWidth)
                             .consumeHorizontalScroll(actionScrollState),
                         horizontalArrangement = Arrangement.spacedBy(
@@ -1697,7 +1707,7 @@ private fun DownloaderPluginLeadingIcon(
         DownloaderPluginType.Remote -> Icons.Outlined.Link
     }
     Card(
-        shape = RoundedCornerShape(18.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
         )
@@ -1727,7 +1737,7 @@ private fun DownloaderPluginDetailBox(
     ) {
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
+                .clip(MaterialTheme.shapes.small.withClassicCorner(10.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
         ) {
             Text(
@@ -1757,6 +1767,9 @@ private fun DownloaderSourceSettingsDialog(
     val sourceLabel = remember(source.name) { source.name.toDownloaderDisplayLabel() }
     AlertDialog(
         onDismissRequest = onDismiss,
+        // Wider than the platform default so the switch rows keep room for their descriptions.
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.padding(horizontal = 16.dp),
         title = { CenteredDialogTitle(stringResource(R.string.downloader_source_settings_title, sourceLabel)) },
         text = {
             if (source.repoUrl.isBlank()) {

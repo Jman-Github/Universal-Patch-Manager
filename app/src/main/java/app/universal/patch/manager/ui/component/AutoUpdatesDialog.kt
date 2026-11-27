@@ -1,16 +1,15 @@
 package app.universal.patch.manager.ui.component
 
+import app.universal.patch.manager.ui.component.design.ListItem
+import app.universal.patch.manager.ui.component.design.TextButton
 import androidx.annotation.StringRes
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -67,9 +66,10 @@ private fun AutoUpdatesItem(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) = ListItem(
+    checked = checked,
     leadingContent = { Icon(icon, null) },
     headlineContent = { Text(stringResource(headline)) },
     trailingContent = { HapticCheckbox(checked = checked, onCheckedChange = null) },
-    modifier = Modifier.clickable { onCheckedChange(!checked) },
+    onCheckedChange = onCheckedChange,
     colors = transparentListItemColors
 )

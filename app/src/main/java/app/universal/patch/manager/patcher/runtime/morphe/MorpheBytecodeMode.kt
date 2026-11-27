@@ -4,7 +4,7 @@ enum class MorpheBytecodeMode(
     val runtimeValue: String,
 ) {
     FAST("STRIP_FAST"),
-    FULL("FULL");
+    SAFE("STRIP_SAFE");
 
     companion object {
         fun fromRuntimeValue(value: String?): MorpheBytecodeMode =

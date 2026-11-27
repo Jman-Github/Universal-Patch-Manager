@@ -1749,7 +1749,7 @@ class PatcherWorker(
                 null
             }
             activeMorpheDexGroupTitle = when {
-                morpheBytecodeMode.equals("FULL", ignoreCase = true) -> "Compiling DEX files: FULL"
+                morpheBytecodeMode.equals("STRIP_SAFE", ignoreCase = true) -> "Compiling DEX files: SAFE"
                 morpheBytecodeMode != null -> "Compiling DEX files: FAST"
                 else -> null
             }

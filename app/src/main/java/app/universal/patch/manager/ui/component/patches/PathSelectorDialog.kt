@@ -5,6 +5,9 @@ package app.universal.patch.manager.ui.component.patches
  * Code adapted from Morphe, see third-party/NOTICE for more information.
  * https://github.com/MorpheApp/morphe-manager/blob/0b39b6479b07cfdae5b976cd922480fba406d155/app/src/main/java/app/morphe/manager/ui/screen/shared/FilePicker.kt
  */
+import app.universal.patch.manager.ui.component.design.ListItem
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import app.universal.patch.manager.ui.component.persistentControls
 import android.text.format.DateFormat
 import android.text.format.Formatter
@@ -26,7 +29,6 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.text.SimpleDateFormat
 import java.util.Date
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -48,7 +50,7 @@ import androidx.compose.material.icons.outlined.Android
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.Sort
+import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.SdCard
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.Storage
@@ -62,13 +64,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -361,7 +360,7 @@ fun PathSelectorDialog(
                             Box {
                                 IconButton(onClick = { showSortMenu = true }) {
                                     Icon(
-                                        Icons.Outlined.Sort,
+                                        Icons.AutoMirrored.Outlined.Sort,
                                         contentDescription = stringResource(R.string.path_selector_sort_title)
                                     )
                                 }
@@ -1107,18 +1106,10 @@ private fun PathItem(
     supportingText: String? = null,
     supportingContent: (@Composable () -> Unit)? = null
 ) {
-    val hasLongClick = onLongClick != null
-    val clickEnabled = enabled || hasLongClick
     ListItem(
-        modifier = if (clickEnabled) {
-            Modifier.combinedClickable(
-                enabled = clickEnabled,
-                onClick = { if (enabled) onClick() },
-                onLongClick = onLongClick
-            )
-        } else {
-            Modifier
-        },
+        enabled = enabled || onLongClick != null,
+        onClick = { if (enabled) onClick() },
+        onLongClick = onLongClick,
         headlineContent = { Text(name) },
         supportingContent = supportingContent ?: supportingText?.let { { Text(it) } },
         leadingContent = {

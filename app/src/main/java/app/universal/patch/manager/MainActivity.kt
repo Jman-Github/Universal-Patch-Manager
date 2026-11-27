@@ -1,5 +1,8 @@
 package app.universal.patch.manager
 
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import app.universal.patch.manager.ui.component.design.CircularProgressIndicator
 import android.app.ActivityManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -26,10 +29,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -48,6 +53,7 @@ import androidx.navigation.NavOptionsBuilder
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import androidx.appcompat.app.AppCompatActivity
@@ -105,12 +111,14 @@ import app.universal.patch.manager.ui.screen.settings.AdvancedSettingsMode
 import app.universal.patch.manager.ui.screen.settings.ContributorSettingsScreen
 import app.universal.patch.manager.ui.screen.settings.DeveloperSettingsScreen
 import app.universal.patch.manager.ui.screen.settings.DownloadsSettingsScreen
+import app.universal.patch.manager.ui.screen.settings.DesignChange
 import app.universal.patch.manager.ui.screen.settings.GeneralSettingsScreen
 import app.universal.patch.manager.ui.screen.settings.ImportExportSettingsScreen
 import app.universal.patch.manager.ui.screen.settings.PatcherRuntimePluginsSettingsScreen
 import app.universal.patch.manager.ui.screen.settings.StorageSettingsScreen
 import app.universal.patch.manager.ui.screen.settings.update.ChangelogsSettingsScreen
 import app.universal.patch.manager.ui.screen.settings.update.UpdatesSettingsScreen
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
 import app.universal.patch.manager.ui.theme.UpmTheme
 import app.universal.patch.manager.ui.theme.Theme
 import app.universal.patch.manager.ui.viewmodel.BatchPatcherViewModel
@@ -133,7 +141,9 @@ import org.koin.androidx.compose.navigation.koinNavViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import org.koin.androidx.viewmodel.ext.android.getViewModel as getActivityViewModel
+import app.universal.patch.manager.util.toast
 import java.io.File
+import java.io.IOException
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
@@ -166,7 +176,25 @@ class MainActivity : AppCompatActivity() {
         val vm: MainViewModel = getActivityViewModel()
         vm.handleInitialIntent(intent)
 
+        // Keep the active engine fixed until the activity is recreated.
+        val expressiveDesign = vm.prefs.expressiveDesign.getBlocking()
         setContent {
+            val navController = rememberNavController()
+            var confirmedDesignChange by rememberSaveable { mutableStateOf<DesignChange?>(null) }
+            LaunchedEffect(confirmedDesignChange) {
+                val change = confirmedDesignChange ?: return@LaunchedEffect
+                try {
+                    if (change == DesignChange.ResetTheme) vm.prefs.resetThemeSettings()
+                    else vm.prefs.expressiveDesign.update(change.expressive)
+                } catch (_: IOException) {
+                    confirmedDesignChange = null
+                    toast(getString(R.string.design_language_save_failed))
+                    return@LaunchedEffect
+                }
+                confirmedDesignChange = null
+                if (change.expressive != expressiveDesign) recreate()
+            }
+
             val launcher = rememberLauncherForActivityResult(
                 ActivityResultContracts.StartActivityForResult(),
                 onResult = vm::applyLegacySettings
@@ -229,6 +257,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             CompositionLocalProvider(
+                LocalExpressiveDesign provides expressiveDesign,
                 LocalPreventAccidentalTouching provides preventAccidentalTouching
             ) {
                 UpmTheme(
@@ -244,6 +273,8 @@ class MainActivity : AppCompatActivity() {
                         imageOverlayAlpha = customBackgroundImageOpacity
                     ) {
                         ReVancedManager(
+                            navController = navController,
+                            onConfirmDesignChange = { confirmedDesignChange = it },
                             vm = vm,
                             disableScreenSlideTransitions = !customBackgroundImageUri.isNullOrBlank()
                         )
@@ -354,6 +385,8 @@ private fun CustomBackgroundImage(
 
 @Composable
 private fun ReVancedManager(
+    navController: NavHostController,
+    onConfirmDesignChange: (DesignChange) -> Unit,
     vm: MainViewModel,
     disableScreenSlideTransitions: Boolean
 ) {
@@ -364,7 +397,7 @@ private fun ReVancedManager(
             modifier = androidx.compose.ui.Modifier.fillMaxSize(),
             contentAlignment = androidx.compose.ui.Alignment.Center
         ) {
-            androidx.compose.material3.CircularProgressIndicator()
+            CircularProgressIndicator()
         }
         return
     }
@@ -372,7 +405,6 @@ private fun ReVancedManager(
         app.universal.patch.manager.ui.screen.settings.RuntimeCatalogScreen(onboarding = true)
         return
     }
-    val navController = rememberNavController()
     val dashboardVm: DashboardViewModel = koinViewModel()
     val batchPatcherVm: BatchPatcherViewModel = koinViewModel()
     val manualBatchQueue: ManualBatchPatchQueue = koinInject()
@@ -508,22 +540,29 @@ private fun ReVancedManager(
         }
     }
 
+    val motion = if (LocalExpressiveDesign.current) MaterialTheme.motionScheme else null
     NavHost(
         navController = navController,
         startDestination = Dashboard,
         enterTransition = {
             if (disableScreenSlideTransitions) EnterTransition.None
+            else if (motion != null) slideInHorizontally(motion.defaultSpatialSpec()) { it / 6 } +
+                fadeIn(motion.defaultEffectsSpec())
             else slideInHorizontally(initialOffsetX = { it })
         },
         exitTransition = {
             if (disableScreenSlideTransitions) ExitTransition.None
+            else if (motion != null) fadeOut(motion.fastEffectsSpec())
             else slideOutHorizontally(targetOffsetX = { -it / 3 })
         },
         popEnterTransition = {
-            EnterTransition.None
+            if (!disableScreenSlideTransitions && motion != null) fadeIn(motion.defaultEffectsSpec())
+            else EnterTransition.None
         },
         popExitTransition = {
             if (disableScreenSlideTransitions) ExitTransition.None
+            else if (motion != null) slideOutHorizontally(motion.defaultSpatialSpec()) { it / 6 } +
+                fadeOut(motion.fastEffectsSpec())
             else slideOutHorizontally(targetOffsetX = { it })
         },
     ) {
@@ -1115,7 +1154,10 @@ private fun ReVancedManager(
             }
 
             composable<Settings.General> {
-                GeneralSettingsScreen(onBackClick = navController::popBackStack)
+                GeneralSettingsScreen(
+                    onBackClick = navController::popBackStack,
+                    onConfirmDesignChange = onConfirmDesignChange
+                )
             }
 
             composable<Settings.Advanced> {

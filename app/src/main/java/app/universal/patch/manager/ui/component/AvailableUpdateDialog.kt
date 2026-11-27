@@ -1,6 +1,9 @@
 package app.universal.patch.manager.ui.component
 
-import androidx.compose.foundation.clickable
+import app.universal.patch.manager.util.withHapticFeedback
+import android.view.HapticFeedbackConstants
+import app.universal.patch.manager.ui.component.design.ListItem
+import app.universal.patch.manager.ui.component.design.TextButton
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,7 +19,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.universal.patch.manager.R
 import app.universal.patch.manager.network.dto.ReVancedAsset
@@ -99,7 +101,8 @@ fun AvailableUpdateDialog(
                     }
                 }
                 ListItem(
-                    modifier = Modifier.clickable { dontShowAgain = !dontShowAgain },
+                    checked = dontShowAgain,
+                    onCheckedChange = { value: Boolean -> dontShowAgain = value }.withHapticFeedback(HapticFeedbackConstants.CLOCK_TICK),
                     headlineContent = {
                         Text(
                             text = stringResource(R.string.never_show_again),
@@ -107,9 +110,7 @@ fun AvailableUpdateDialog(
                         )
                     },
                     leadingContent = {
-                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-                            HapticCheckbox(checked = dontShowAgain, onCheckedChange = { dontShowAgain = it })
-                        }
+                        HapticCheckbox(checked = dontShowAgain, onCheckedChange = null)
                     },
                     colors = transparentListItemColors
                 )

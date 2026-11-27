@@ -1,8 +1,10 @@
 package app.universal.patch.manager.ui.component
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.draw.clip
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.RowScope
@@ -34,27 +36,33 @@ fun RowScope.SegmentedButton(
     iconDescription: String? = null,
     enabled: Boolean = true
 ) {
-    val contentColor = if (enabled)
-        MaterialTheme.colorScheme.primary
-    else
-        MaterialTheme.colorScheme.onSurface.copy(0.38f)
+    val expressive = LocalExpressiveDesign.current
+    val colors = MaterialTheme.colorScheme
+    val contentColor = when {
+        !enabled -> colors.onSurface.copy(alpha = 0.38f)
+        expressive -> colors.onSecondaryContainer
+        else -> colors.primary
+    }
+    val containerColor = when {
+        !enabled -> colors.onSurface.copy(alpha = 0.12f)
+        expressive -> colors.secondaryContainer
+        else -> colors.surfaceColorAtElevation(2.dp)
+    }
 
     CompositionLocalProvider(LocalContentColor provides contentColor) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
             modifier = Modifier
+                // Connected button group: tight inner corners, the parent clip supplies the outer ones.
+                .then(if (expressive) Modifier.clip(MaterialTheme.shapes.extraSmall) else Modifier)
                 .combinedClickable(
+                    role = Role.Button,
                     enabled = enabled,
                     onClick = onClick,
                     onLongClick = onLongClick
                 )
-                .background(
-                    if (enabled)
-                        MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
-                    else
-                        MaterialTheme.colorScheme.onSurface.copy(0.12f)
-                )
+                .background(containerColor)
                 .weight(1f)
                 .padding(vertical = 20.dp)
         ) {

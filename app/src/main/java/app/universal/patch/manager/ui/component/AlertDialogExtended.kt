@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.component
 
+import androidx.compose.ui.window.DialogProperties
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +40,7 @@ fun CenteredDialogTitle(
 ) {
     Text(
         text = text,
+        style = if (LocalExpressiveDesign.current) MaterialTheme.typography.headlineSmall else LocalTextStyle.current,
         modifier = modifier.fillMaxWidth(),
         textAlign = TextAlign.Center
     )
@@ -62,11 +65,16 @@ fun AlertDialogExtended(
     tonalElevation: Dp = AlertDialogDefaults.TonalElevation,
     textHorizontalPadding: PaddingValues = TextHorizontalPadding,
     textBottomPadding: Dp = 24.dp,
-    fillText: Boolean = false
+    fillText: Boolean = false,
+    // Dialogs listing option cards use most of the screen width so their text does not wrap word by word.
+    wide: Boolean = false
 ) {
     BasicAlertDialog(
         onDismissRequest = onDismissRequest,
-        modifier = Modifier.imePadding()
+        modifier = Modifier
+            .imePadding()
+            .then(if (wide) Modifier.padding(horizontal = 16.dp) else Modifier),
+        properties = DialogProperties(usePlatformDefaultWidth = !wide)
     ) {
         Surface(
             modifier = modifier,

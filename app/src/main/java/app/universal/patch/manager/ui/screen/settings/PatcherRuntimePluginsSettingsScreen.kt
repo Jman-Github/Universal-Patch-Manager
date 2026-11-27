@@ -1,5 +1,13 @@
 package app.universal.patch.manager.ui.screen.settings
 
+import androidx.compose.ui.window.DialogProperties
+import app.universal.patch.manager.ui.component.design.horizontalScrollFade
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.FilledTonalButton
+import app.universal.patch.manager.ui.component.design.OutlinedButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.view.HapticFeedbackConstants
@@ -38,19 +46,13 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import app.universal.patch.manager.ui.component.bundle.BundleMetaPill
@@ -109,7 +111,7 @@ fun PatcherRuntimePluginsSettingsScreen(
     onBackClick: () -> Unit,
     viewModel: PatcherRuntimePluginsViewModel = koinViewModel()
 ) {
-    val topAppBarScrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val topAppBarScrollBehavior = rememberAppBarScrollBehavior()
     val pluginStates by viewModel.runtimePluginStates.collectAsStateWithLifecycle(emptyMap())
     val availableVersions by viewModel.availableRuntimeVersions.collectAsStateWithLifecycle(emptyMap())
     val sourceStates by viewModel.runtimePluginSourceStates.collectAsStateWithLifecycle(emptyMap())
@@ -866,7 +868,7 @@ private fun RuntimeActionText(text: String) {
 @Composable
 private fun RuntimePluginAppIcon(packageInfo: android.content.pm.PackageInfo?) {
     Card(
-        shape = RoundedCornerShape(18.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
         )
@@ -880,7 +882,7 @@ private fun RuntimePluginAppIcon(packageInfo: android.content.pm.PackageInfo?) {
                 contentDescription = null,
                 modifier = Modifier
                     .size(28.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(MaterialTheme.shapes.small.withClassicCorner(8.dp))
             )
         }
     }
@@ -889,7 +891,7 @@ private fun RuntimePluginAppIcon(packageInfo: android.content.pm.PackageInfo?) {
 @Composable
 private fun RuntimePluginLeadingIcon(icon: ImageVector) {
     Card(
-        shape = RoundedCornerShape(18.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
         )
@@ -917,7 +919,7 @@ private fun RuntimePluginDetailBox(detail: String) {
     ) {
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
+                .clip(MaterialTheme.shapes.small.withClassicCorner(10.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
         ) {
             Text(
@@ -927,7 +929,9 @@ private fun RuntimePluginDetailBox(detail: String) {
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Clip,
+                // The fade shows the source can be scrolled instead of looking cut off mid-word.
                 modifier = Modifier
+                    .horizontalScrollFade(scrollState)
                     .horizontalScroll(scrollState)
                     .padding(horizontal = 10.dp, vertical = 8.dp)
             )
@@ -948,6 +952,9 @@ private fun RuntimeSourceSettingsDialog(
     val sourceLabel = remember(sourceName) { sourceName.toRuntimeDisplayLabel() }
     AlertDialog(
         onDismissRequest = onDismiss,
+        // Wider than the platform default so the switch rows keep room for their descriptions.
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.padding(horizontal = 16.dp),
         title = { CenteredDialogTitle(stringResource(R.string.downloader_source_settings_title, sourceLabel)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {

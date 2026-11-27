@@ -5,6 +5,7 @@
 
 package app.universal.patch.manager.ui.component.patcher
 
+import app.universal.patch.manager.ui.component.design.TextButton
 import androidx.annotation.StringRes
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.AnimatedVisibility
@@ -33,7 +34,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect

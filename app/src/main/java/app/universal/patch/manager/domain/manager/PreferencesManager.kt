@@ -102,6 +102,7 @@ class PreferencesManager(
     val showLsposedTab = booleanPreference("show_lsposed_tab", false)
     val appSelectorSortMode = stringPreference("app_selector_sort_mode", "NAME_ASC")
     val batchQueueAppSelectorSortMode = stringPreference("batch_queue_app_selector_sort_mode", "NAME_ASC")
+    val expressiveDesign = booleanPreference("expressive_design", false)
     val theme = enumPreference("theme", Theme.SYSTEM)
     val appLanguage = stringPreference("app_language", "system")
 
@@ -698,6 +699,7 @@ class PreferencesManager(
         val patcherLogMode: PatcherLogMode? = null,
         val patchAvailabilityEnabled: Boolean? = null,
         val removeGmsCoreForPrimaryMount: Boolean? = null,
+        val expressiveDesign: Boolean? = null,
         val theme: Theme? = null,
         val appLanguage: String? = null,
         val api: String? = null,
@@ -846,6 +848,19 @@ class PreferencesManager(
         val searchEngineHost: String? = null,
     )
 
+    suspend fun resetThemeSettings() = edit {
+        expressiveDesign.value = expressiveDesign.default
+        theme.value = theme.default
+        dynamicColor.value = dynamicColor.default
+        pureBlackTheme.value = pureBlackTheme.default
+        materialYouPureBlackTheme.value = materialYouPureBlackTheme.default
+        pureBlackOnSystemDark.value = pureBlackOnSystemDark.default
+        themePresetSelectionEnabled.value = themePresetSelectionEnabled.default
+        themePresetSelectionName.value = themePresetSelectionName.default
+        customAccentColor.value = customAccentColor.default
+        customThemeColor.value = customThemeColor.default
+    }
+
     suspend fun exportSettings(): SettingsSnapshot = readSnapshot {
         var snapshot = SettingsSnapshot()
         snapshot = exportAppearanceSettings(snapshot)
@@ -932,6 +947,7 @@ class PreferencesManager(
             batchQueueAppSelectorSortMode = batchQueueAppSelectorSortMode.value,
             themePresetSelectionName = themePresetSelectionName.value,
             themePresetSelectionEnabled = themePresetSelectionEnabled.value,
+            expressiveDesign = expressiveDesign.value,
             theme = theme.value,
             appLanguage = appLanguage.value
         )
@@ -1172,6 +1188,7 @@ class PreferencesManager(
         }
         snapshot.themePresetSelectionName?.let { themePresetSelectionName.value = it }
         snapshot.themePresetSelectionEnabled?.let { themePresetSelectionEnabled.value = it }
+        snapshot.expressiveDesign?.let { expressiveDesign.value = it }
         snapshot.theme?.let { theme.value = it }
         snapshot.appLanguage?.let { appLanguage.value = it }
     }

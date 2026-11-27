@@ -1,5 +1,14 @@
 package app.universal.patch.manager.ui.screen.settings
 
+import app.universal.patch.manager.ui.theme.actionTrayColor
+
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.ListItem
+import app.universal.patch.manager.ui.component.design.ListItemRadioButton
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.FilledTonalButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import app.universal.patch.manager.ui.component.minimalActionButtons
 import android.Manifest
 import android.app.ActivityManager
@@ -97,10 +106,7 @@ import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -109,12 +115,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -172,7 +175,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.LineHeightStyle
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
@@ -199,6 +201,7 @@ import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsItem
 import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsSwitch
 import app.universal.patch.manager.ui.component.settings.SettingsSearchHighlight
 import app.universal.patch.manager.ui.component.patcher.InstallerPickerDialog
+import app.universal.patch.manager.ui.component.patcher.installerOptionRowColors
 import app.universal.patch.manager.ui.component.patcher.ShizukuConfigurationDialog
 import app.universal.patch.manager.domain.installer.InstallerManager
 import app.universal.patch.manager.domain.manager.SearchForUpdatesBackgroundInterval
@@ -393,7 +396,7 @@ fun AdvancedSettingsScreen(
             availableVariables = ExportNameFormatter.availableMergedApkVariables()
         )
     }
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
 
     LaunchedEffect(searchTarget, mode) {
         val target = searchTarget
@@ -1208,17 +1211,15 @@ fun AdvancedSettingsScreen(
                                 .filterNot { it == SearchForUpdatesBackgroundInterval.NEVER }
                                 .forEach { interval ->
                                     ListItem(
+                                        selected = interval == autoPatchInterval,
                                         colors = transparentListItemColors,
                                         leadingContent = {
-                                            RadioButton(
-                                                selected = interval == autoPatchInterval,
-                                                onClick = null
-                                            )
+                                            ListItemRadioButton(selected = interval == autoPatchInterval)
                                         },
                                         headlineContent = {
                                             Text(stringResource(interval.displayName))
                                         },
-                                        modifier = Modifier.clickable {
+                                        onClick = {
                                             viewModel.setAutoPatchInterval(interval)
                                             showAutoPatchIntervalDialog = false
                                         }
@@ -2087,7 +2088,7 @@ fun AdvancedSettingsScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Surface(
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = MaterialTheme.shapes.small.withClassicCorner(8.dp),
                                     color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
                                 ) {
                                     Text(
@@ -2123,7 +2124,7 @@ fun AdvancedSettingsScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Surface(
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = MaterialTheme.shapes.small.withClassicCorner(8.dp),
                                     color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
                                 ) {
                                     Text(
@@ -2267,7 +2268,7 @@ private fun LanguageDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                             .clickable { onSelect(option.code) }
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -2815,7 +2816,7 @@ internal fun ActionButtonSettings(
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .clip(RoundedCornerShape(12.dp))
+                                                .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                                                 .clickable(enabled = !forcedHidden) { setVisible(!visible) }
                                                 .alpha(if (forcedHidden) 0.7f else 1f)
                                                 .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -2935,7 +2936,7 @@ internal fun ActionButtonSettings(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clip(RoundedCornerShape(12.dp))
+                                            .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                                             .clickable { setVisible(!visible) }
                                             .padding(horizontal = 10.dp, vertical = 6.dp),
                                         verticalAlignment = Alignment.CenterVertically
@@ -3054,7 +3055,7 @@ internal fun ActionButtonSettings(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                                     .clickable { setVisible(!visible) }
                                     .padding(horizontal = 10.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -3163,7 +3164,7 @@ internal fun ActionButtonSettings(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
+                                        .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                                         .clickable { setVisible(!visible) }
                                         .padding(horizontal = 10.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
@@ -3271,7 +3272,7 @@ internal fun ActionButtonSettings(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
+                                        .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                                         .clickable { setVisible(!visible) }
                                         .padding(horizontal = 10.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
@@ -3386,7 +3387,7 @@ internal fun ActionButtonSettings(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                                     .clickable { setVisible(!visible) }
                                     .padding(horizontal = 10.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -3476,8 +3477,8 @@ private fun PatchSelectionActionPreview(
             contentAlignment = if (centerContent || minimalActionButtons("selection")) Alignment.Center else Alignment.CenterEnd
         ) {
             Surface(
-                shape = RoundedCornerShape(18.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
+                color = actionTrayColor(),
                 tonalElevation = 0.dp,
                 shadowElevation = 6.dp,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
@@ -3705,8 +3706,8 @@ private fun PatchBundleActionPreview(
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+            shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
+            color = actionTrayColor(),
             tonalElevation = 0.dp,
             shadowElevation = 6.dp,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
@@ -3812,8 +3813,8 @@ private fun BatchResultActionPreview(
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+            shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
+            color = actionTrayColor(),
             tonalElevation = 0.dp,
             shadowElevation = 6.dp,
             border = BorderStroke(
@@ -3921,8 +3922,8 @@ private fun SavedAppActionPreview(
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+            shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
+            color = actionTrayColor(),
             tonalElevation = 0.dp,
             shadowElevation = 6.dp,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
@@ -4028,8 +4029,8 @@ private fun PatchProfileActionPreview(
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+            shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
+            color = actionTrayColor(),
             tonalElevation = 0.dp,
             shadowElevation = 6.dp,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
@@ -4134,8 +4135,8 @@ private fun LsposedModuleActionPreview(
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+            shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
+            color = actionTrayColor(),
             tonalElevation = 0.dp,
             shadowElevation = 6.dp,
             border = BorderStroke(
@@ -4366,7 +4367,7 @@ private fun ExportNameFormatDialog(
                 )
                 Surface(
                     tonalElevation = 2.dp,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = MaterialTheme.shapes.medium.withClassicCorner(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -4400,7 +4401,7 @@ private fun ExportNameFormatDialog(
                         variables.forEach { variable ->
                             Surface(
                                 tonalElevation = 1.dp,
-                                shape = RoundedCornerShape(16.dp),
+                                shape = MaterialTheme.shapes.large.withClassicCorner(16.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column(
@@ -5020,10 +5021,12 @@ private fun InstallerSelectionDialog(
                         option.availability.reason in shizukuPromptReasons &&
                         onOpenShizuku != null
                     ListItem(
-                        modifier = Modifier.clickable(enabled = enabled) {
+                        selected = selectedOption,
+                        enabled = enabled,
+                        onClick = {
                             if (enabled) currentSelection = option.token
                         },
-                        colors = transparentListItemColors,
+                        colors = installerOptionRowColors(enabled),
                         leadingContent = {
                             val iconDrawable = option.icon
                             val useInstallerIcon = iconDrawable != null && when (option.token) {
@@ -5039,22 +5042,11 @@ private fun InstallerSelectionDialog(
                                     enabled = enabled || selectedOption
                                 )
                             } else {
-                                RadioButton(
-                                    selected = selectedOption,
-                                    onClick = null,
-                                    enabled = enabled
-                                )
+                                ListItemRadioButton(selected = selectedOption, enabled = enabled)
                             }
                         },
                         headlineContent = {
-                            Text(
-                                option.label,
-                                color = if (enabled) {
-                                    MaterialTheme.colorScheme.onSurface
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                }
-                            )
+                            Text(option.label)
                         },
                         supportingContent = {
                             val desc = option.description?.let { text ->
@@ -5072,14 +5064,11 @@ private fun InstallerSelectionDialog(
                             if (desc != null || statusBadges.isNotEmpty() || showShizukuAction) {
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     desc?.let {
-                                        Text(
-                                            it,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                        Text(it)
                                     }
                                     statusBadges.forEach { status ->
                                         Surface(
-                                            shape = RoundedCornerShape(8.dp),
+                                            shape = MaterialTheme.shapes.small.withClassicCorner(8.dp),
                                             color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
                                             tonalElevation = 0.dp
                                         ) {
@@ -5126,12 +5115,12 @@ private fun InstallerIcon(
     Box(
         modifier = Modifier
             .size(40.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
             .background(background)
             .border(
                 width = if (selected) 2.dp else 1.dp,
                 color = borderColor,
-                shape = RoundedCornerShape(12.dp)
+                shape = MaterialTheme.shapes.medium.withClassicCorner(12.dp)
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -5269,9 +5258,9 @@ private fun SelectionDialogOptionRow(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(MaterialTheme.shapes.large.withClassicCorner(16.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(16.dp),
         color = Color.Transparent,
         tonalElevation = 0.dp
     ) {
@@ -5310,13 +5299,13 @@ private fun SelectionDialogOptionRow(
 @StringRes
 private fun MorpheBytecodeMode.titleRes(): Int = when (this) {
     MorpheBytecodeMode.FAST -> R.string.morphe_bytecode_mode_fast
-    MorpheBytecodeMode.FULL -> R.string.morphe_bytecode_mode_full
+    MorpheBytecodeMode.SAFE -> R.string.morphe_bytecode_mode_safe
 }
 
 @StringRes
 private fun MorpheBytecodeMode.descriptionRes(): Int = when (this) {
     MorpheBytecodeMode.FAST -> R.string.morphe_bytecode_mode_fast_description
-    MorpheBytecodeMode.FULL -> R.string.morphe_bytecode_mode_full_description
+    MorpheBytecodeMode.SAFE -> R.string.morphe_bytecode_mode_safe_description
 }
 
 @StringRes

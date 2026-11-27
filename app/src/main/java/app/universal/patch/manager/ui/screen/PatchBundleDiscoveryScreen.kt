@@ -1,5 +1,11 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.FilledTonalButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import app.universal.patch.manager.ui.component.persistentControls
 import android.content.Context
 import android.content.ClipData
@@ -28,7 +34,6 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.outlined.WarningAmber
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -50,7 +55,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
@@ -68,9 +72,7 @@ import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.Source
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -78,10 +80,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -155,7 +154,7 @@ fun PatchBundleDiscoveryScreen(
     onViewPatches: (ExternalBundleSnapshot) -> Unit,
     viewModel: BundleDiscoveryViewModel = koinViewModel(),
 ) {
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val browsingState by viewModel.browsingState.collectAsStateWithLifecycle()
@@ -703,7 +702,7 @@ fun PatchBundleDiscoveryScreen(
                 ) {
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(shape = RoundedCornerShape(20.dp),
+                            Surface(shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
                                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                                 modifier = Modifier.weight(1f)) {
                                 BoxWithConstraints(Modifier.padding(4.dp).selectableGroup()) {
@@ -718,7 +717,7 @@ fun PatchBundleDiscoveryScreen(
                                         Surface(
                                             modifier = Modifier.offset(x = indicatorOffset)
                                                 .width(tabWidth).fillMaxHeight(),
-                                            shape = RoundedCornerShape(16.dp),
+                                            shape = MaterialTheme.shapes.large.withClassicCorner(16.dp),
                                             color = MaterialTheme.colorScheme.secondaryContainer,
                                             content = {}
                                         )
@@ -736,7 +735,7 @@ fun PatchBundleDiscoveryScreen(
                                                 Surface(
                                                     selected = selected,
                                                     onClick = { viewModel.setDiscoveryTab(isApps) },
-                                                    shape = RoundedCornerShape(16.dp),
+                                                    shape = MaterialTheme.shapes.large.withClassicCorner(16.dp),
                                                     color = Color.Transparent,
                                                     contentColor = labelColor,
                                                     modifier = Modifier.weight(1f).semantics { role = Role.Tab },
@@ -934,7 +933,7 @@ fun PatchBundleDiscoveryScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
                             ) {
-                                val pillShape = RoundedCornerShape(24.dp)
+                                val pillShape = MaterialTheme.shapes.extraLarge.withClassicCorner(24.dp)
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1038,7 +1037,7 @@ fun PatchBundleDiscoveryScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
                             ) {
-                                val pillShape = RoundedCornerShape(24.dp)
+                                val pillShape = MaterialTheme.shapes.extraLarge.withClassicCorner(24.dp)
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1453,7 +1452,7 @@ private fun BundleDiscoveryItem(
                         LinearProgressIndicator(
                             progress = { fraction },
                             modifier = Modifier.fillMaxWidth(),
-                            drawStopIndicator = {}
+                            showStopIndicator = false
                         )
                     }
                 }

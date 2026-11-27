@@ -1,5 +1,9 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import app.universal.patch.manager.ui.component.persistentControls
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -44,14 +48,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -396,7 +396,7 @@ fun AppSelectorScreen(
             }
         }
 
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
 
     Scaffold(
         topBar = {
@@ -699,7 +699,7 @@ private enum class AppSelectorSortMode(
 private fun AppSelectorCardPlaceholder(modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
         tonalElevation = 2.dp
     ) {
         Column(
@@ -715,7 +715,7 @@ private fun AppSelectorCardPlaceholder(modifier: Modifier = Modifier) {
             ) {
                 ShimmerBox(
                     modifier = Modifier.size(48.dp),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = MaterialTheme.shapes.medium.withClassicCorner(12.dp)
                 )
                 Column(
                     modifier = Modifier.weight(1f),
@@ -742,7 +742,7 @@ private fun SelectFromStorageCard(
     Surface(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
         tonalElevation = 2.dp
     ) {
         Row(
@@ -755,7 +755,7 @@ private fun SelectFromStorageCard(
             Surface(
                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
                 contentColor = MaterialTheme.colorScheme.primary,
-                shape = RoundedCornerShape(12.dp)
+                shape = MaterialTheme.shapes.medium.withClassicCorner(12.dp)
             ) {
                 Box(
                     modifier = Modifier
@@ -804,7 +804,7 @@ private fun AppSelectorCard(
     Surface(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
         tonalElevation = 2.dp
     ) {
         Column(
@@ -1029,7 +1029,7 @@ private fun VersionSearchChip(
             context.openUrl(buildSearchUrl(packageName, version, versionCodes, searchEngineHost))
         },
         modifier = chipModifier,
-        shape = if (highlighted) RoundedCornerShape(999.dp) else RoundedCornerShape(6.dp),
+        shape = if (highlighted) RoundedCornerShape(999.dp) else MaterialTheme.shapes.small.withClassicCorner(6.dp),
         color = background,
         contentColor = contentColor,
         border = if (highlighted) {
@@ -1221,7 +1221,7 @@ private fun BundleSuggestionCard(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(18.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
         tonalElevation = 1.dp
     ) {
         Column(

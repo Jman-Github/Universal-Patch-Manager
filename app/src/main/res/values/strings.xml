@@ -306,6 +306,13 @@
     <string name="patcher_category_description">Patching logic, performance, and workflow</string>
     <string name="advanced_system">Advanced &amp; System</string>
     <string name="advanced_system_description">Safety, debug, and system controls</string>
+    <string name="design_language">Design language</string>
+    <string name="design_language_classic">Classic</string>
+    <string name="design_language_expressive">Material 3 Expressive</string>
+    <string name="design_language_restart_message">Restart UP Manager to switch to %1$s?</string>
+    <string name="design_language_reset_restart_message">Reset all theme settings and restart UP Manager with the Classic design?</string>
+    <string name="design_language_save_failed">Could not save the design change. Try again.</string>
+    <string name="design_language_search_keywords">UI engine M3E</string>
     <string name="theme_section">Theme</string>
     <string name="background_section">Background</string>
     <string name="navigation_tabs_section">Navigation &amp; Tabs</string>
@@ -1003,8 +1010,8 @@ Patch profiles are not affected.</string>
     <string name="morphe_bytecode_mode_dialog_description">Choose how Morphe processes DEX files when applying Morphe patches. This only affects the Morphe runtime</string>
     <string name="morphe_bytecode_mode_fast">Fast (Recommended)</string>
     <string name="morphe_bytecode_mode_fast_description">Faster Morphe patching with lower memory use, but patched APKs can be larger</string>
-    <string name="morphe_bytecode_mode_full">Full</string>
-    <string name="morphe_bytecode_mode_full_description">Uses the legacy full bytecode pipeline. Slower and more memory intensive, but useful if fast mode causes issues</string>
+    <string name="morphe_bytecode_mode_safe">Safe</string>
+    <string name="morphe_bytecode_mode_safe_description">Produces smaller patched APKs than Fast mode, but takes longer and uses more memory</string>
     <string name="reset_to_recommended">Reset to recommended</string>
     <string name="reset_to_default">Reset to default</string>
     <string name="patcher_memory_usage_graph_title">Show patcher resource graphs</string>
@@ -1522,6 +1529,9 @@ Patch profiles are not affected.</string>
     <string name="patch_profile_auto_patch_description">When enabled and an APK is saved, tapping this profile starts patching instead of opening patch selection.</string>
     <string name="apk_file_type">APK</string>
     <string name="patch_profile_version_override_action">Patch profile version settings</string>
+    <string name="patch_profile_settings_section_source">Source</string>
+    <string name="patch_profile_settings_section_install">Installation</string>
+    <string name="patch_profile_settings_section_patching">Patching</string>
     <string name="patch_profile_version_override_title">Version settings for "%1$s"</string>
     <string name="patch_profile_version_override_message">Set a specific app version to store with this profile, or target all versions.</string>
     <string name="patch_profile_version_override_label">App version</string>

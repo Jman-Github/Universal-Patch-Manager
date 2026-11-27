@@ -1,5 +1,7 @@
 ﻿package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.component.design.TextButton
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
@@ -23,9 +25,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
@@ -56,7 +55,7 @@ fun UpdateScreen(
     onBackClick: () -> Unit,
     vm: UpdateViewModel = koinViewModel()
 ) {
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
 
     if (vm.showRebrandNotice) {
         ManagerRebrandNoticeDialog(
@@ -69,7 +68,7 @@ fun UpdateScreen(
     Scaffold(
         topBar = {
             AppTopBar(
-                title = { Text(stringResource(vm.state.title)) },
+                title = stringResource(vm.state.title),
                 scrollBehavior = scrollBehavior,
                 onBackClick = onBackClick
             )

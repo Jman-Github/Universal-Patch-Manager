@@ -5,6 +5,9 @@
 
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
+import app.universal.patch.manager.ui.component.design.IconButton
 import android.content.Context
 import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
@@ -16,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Cancel
@@ -27,8 +29,6 @@ import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,7 +39,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -223,7 +223,7 @@ fun BatchPatchDetailsScreen(
                                 },
                                 onClick = resultActions.installOrOpen,
                                 enabled = installActionEnabled,
-                                shape = RoundedCornerShape(16.dp)
+                                shape = MaterialTheme.shapes.large.withClassicCorner(16.dp)
                             )
                         }
                     }
@@ -310,7 +310,7 @@ fun BatchPatchDetailsScreen(
                     progressUi?.progress ?: if (item.state == BatchItemState.SUCCEEDED) 1f else 0f
                 },
                 modifier = Modifier.fillMaxWidth(),
-                drawStopIndicator = {}
+                showStopIndicator = false
             )
             val pinGraphs = pinResourceGraphs && showPatcherMemoryUsageGraph && item.memoryUsageSamples.isNotEmpty()
             val resourceGraphs: @Composable () -> Unit = {

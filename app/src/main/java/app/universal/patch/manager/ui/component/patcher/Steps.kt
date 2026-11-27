@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.component.patcher
 
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
@@ -110,7 +111,11 @@ fun Steps(
         modifier = Modifier
             .clip(MaterialTheme.shapes.large)
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            // Low sits almost on the page tone; steps use each design's regular card tone.
+            .background(
+                if (LocalExpressiveDesign.current) MaterialTheme.colorScheme.surfaceContainerHigh
+                else MaterialTheme.colorScheme.surfaceContainer
+            )
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

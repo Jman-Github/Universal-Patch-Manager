@@ -1,5 +1,10 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.FilledTonalButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import android.os.Build
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -26,7 +31,6 @@ import app.universal.patch.manager.ui.component.ColumnWithScrollbar
 import app.universal.patch.manager.ui.component.LazyColumnWithScrollbar
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.outlined.Cancel
@@ -36,7 +40,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.PostAdd
 import androidx.compose.material.icons.outlined.Save
-import androidx.compose.material.icons.outlined.Sort
+import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Checkbox
@@ -45,14 +49,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -506,7 +506,6 @@ fun MergeSplitApkScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.75f)
-                            .height(4.dp)
                     )
                 }
             }
@@ -702,7 +701,7 @@ fun MergeSplitApkScreen(
             LinearProgressIndicator(
                 progress = { mergeProgress },
                 modifier = Modifier.fillMaxWidth(),
-                drawStopIndicator = {}
+                showStopIndicator = false
             )
 
             val pinGraphs = pinResourceGraphs && showSplitMergeMemoryUsageGraph && state.memoryUsageSamples.isNotEmpty()
@@ -1313,7 +1312,7 @@ internal fun SplitMergeSelectionDialog(
                         Box {
                             IconButton(onClick = { showSortMenu = true }) {
                                 Icon(
-                                    imageVector = Icons.Outlined.Sort,
+                                    imageVector = Icons.AutoMirrored.Outlined.Sort,
                                     contentDescription = stringResource(
                                         R.string.merge_split_apk_sort_title
                                     )
@@ -1577,7 +1576,7 @@ private fun SplitMergeModuleRow(
 ) {
     Surface(
         onClick = { if (enabled) onCheckedChange(!checked) },
-        shape = RoundedCornerShape(20.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
         tonalElevation = 2.dp
     ) {
         Row(

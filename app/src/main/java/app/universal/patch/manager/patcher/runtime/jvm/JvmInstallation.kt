@@ -225,7 +225,7 @@ class JvmInstallation(private val app: Application) {
         const val ASSETS_DIR = "jvm"
         // Keep the loader and the support APK on the same glibc build. Older managers look
         // for the ABI archives directly in assets/jvm and continue with ART on new packs.
-        const val RUNTIME_DIR = "$ASSETS_DIR/liberica-gpkg-2"
+        const val RUNTIME_DIR = "$ASSETS_DIR/liberica-gpkg-3"
         const val STAGING_SUFFIX = ".staging"
         val ABIS_BY_INSTRUCTION_SET = mapOf("arm" to "armeabi-v7a", "arm64" to "arm64-v8a", "x86_64" to "x86_64")
     }

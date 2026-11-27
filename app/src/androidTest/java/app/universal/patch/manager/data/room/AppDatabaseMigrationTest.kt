@@ -156,7 +156,7 @@ class AppDatabaseMigrationTest {
             val longVersionCode = 4_294_969_656L
             migrated.execSQL(
                 "UPDATE installed_app SET version_code = ? WHERE current_package_name = ?",
-                arrayOf(longVersionCode, packageName),
+                arrayOf<Any>(longVersionCode, packageName),
             )
             migrated.query("SELECT version_code FROM installed_app").use { cursor ->
                 assertTrue(cursor.moveToFirst())

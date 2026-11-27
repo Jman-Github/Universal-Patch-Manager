@@ -423,12 +423,12 @@ android {
 
 // glibc loader pins must match shared-support in Universal-Patch-Manager-Runtimes.
 // Adapted from https://github.com/MorpheApp/morphe-manager/pull/1474
-val glibcRelease = "gpkg-2"
+val glibcRelease = "gpkg-3"
 val glibcLoaderLibrary = "libglibc_loader.so"
 val glibcLoaderTasks = mapOf(
-    "arm64-v8a" to Triple("aarch64", "d724753a7bc5374972b95b6c720bca64922d54701d07d5758ad338c24ad015bc", "ld-linux-aarch64.so.1"),
-    "armeabi-v7a" to Triple("arm", "f28c0682b8b15333180a47bc551245183c16f7ced24dd8bda09ba5a9394507d9", "ld-linux-armhf.so.3"),
-    "x86_64" to Triple("x86_64", "71b57bdf1fb9dc13701bea732303dac5499ed0542c6d70a28d59b7f6645f2f0e", "ld-linux-x86-64.so.2")
+    "arm64-v8a" to Triple("aarch64", "a190d90f0d097465a49d7467d630da69f9be38dfb5d838cd46e258c3c1d762fb", "ld-linux-aarch64.so.1"),
+    "armeabi-v7a" to Triple("arm", "29a2580243674498bb7fb56a66590a599924d2599a7b50d88f6d1b1fc918bf06", "ld-linux-armhf.so.3"),
+    "x86_64" to Triple("x86_64", "b0bca2eb75d84b14a752df801b3ea40cb60ccb17410d33657a257b0f72e7e470", "ld-linux-x86-64.so.2")
 ).map { (targetAbi, build) ->
     val (arch, digest, loaderName) = build
     tasks.register<PrepareGlibcTask>("prepareJvmLoader" + targetAbi.replace("-", "").replace("_", "")) {

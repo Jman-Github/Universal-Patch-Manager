@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.component
 
+import app.universal.patch.manager.ui.component.design.TextButton
 import android.graphics.drawable.ColorDrawable
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -25,7 +26,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect

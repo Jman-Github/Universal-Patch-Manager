@@ -1,5 +1,11 @@
 package app.universal.patch.manager.ui.screen.dashboard
 
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.ListItem
+import app.universal.patch.manager.ui.component.design.ListItemRadioButton
+import app.universal.patch.manager.ui.component.design.OutlinedButton
+import app.universal.patch.manager.ui.component.design.TextButton
+import app.universal.patch.manager.ui.component.design.Button
 import app.universal.patch.manager.ui.component.minimalActionButtons
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -14,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,7 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -39,7 +45,6 @@ import app.universal.patch.manager.ui.component.RememberedGetContent
 import app.universal.patch.manager.ui.component.ShimmerBox
 import app.universal.patch.manager.ui.component.TransparentLoadingDialog
 import app.universal.patch.manager.ui.component.toPickerDirectoryUri
-import app.universal.patch.manager.ui.component.haptics.HapticRadioButton
 import app.universal.patch.manager.ui.component.patches.PathSelectorDialog
 import app.universal.patch.manager.ui.component.patcher.InstallerPickerDialog
 import app.universal.patch.manager.ui.model.LsposedModuleActionKey
@@ -460,15 +465,13 @@ private fun AddModuleSourceRow(
     onClick: () -> Unit,
 ) {
     ListItem(
-        modifier = Modifier.clickable(role = Role.RadioButton, onClick = onClick),
+        selected = selected,
+        onClick = onClick,
         headlineContent = { Text(title) },
         supportingContent = { Text(description) },
         overlineContent = { overline?.let { Text(it) } },
         leadingContent = {
-            HapticRadioButton(
-                selected = selected,
-                onClick = null,
-            )
+            ListItemRadioButton(selected = selected)
         },
         colors = transparentListItemColors,
     )
@@ -530,7 +533,7 @@ private fun FrameworkCard(
                 )
             )
             if (installed) {
-                add(LsposedAction(stringResource(R.string.lsposed_open_manager_short), Icons.Outlined.OpenInNew, onClick = onOpen))
+                add(LsposedAction(stringResource(R.string.lsposed_open_manager_short), Icons.AutoMirrored.Outlined.OpenInNew, onClick = onOpen))
             }
         }
         LsposedActionRow(actions)
@@ -568,7 +571,7 @@ private fun ModuleCard(
         val actions = actionOrder.mapNotNull { key ->
             when (key) {
                 LsposedModuleActionKey.MANAGER ->
-                    LsposedAction(stringResource(R.string.lsposed_manager), Icons.Outlined.OpenInNew, onClick = onOpenManager)
+                    LsposedAction(stringResource(R.string.lsposed_manager), Icons.AutoMirrored.Outlined.OpenInNew, onClick = onOpenManager)
                 LsposedModuleActionKey.SETTINGS ->
                     LsposedAction(stringResource(R.string.lsposed_settings), Icons.Outlined.Settings, onClick = onSettings)
                 LsposedModuleActionKey.UPDATE -> when {
@@ -606,7 +609,7 @@ private fun LsposedStyledCard(
     icon: ImageVector? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(18.dp)
+    val shape = MaterialTheme.shapes.large.withClassicCorner(18.dp)
     Surface(
         modifier = modifier
             .fillMaxWidth()

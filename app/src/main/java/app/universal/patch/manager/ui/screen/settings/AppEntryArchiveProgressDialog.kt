@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.screen.settings
 
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,7 +9,6 @@ import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -82,7 +82,7 @@ internal fun AppEntryArchiveProgressDialog(progress: AppEntryArchive.Progress) {
                     LinearProgressIndicator(
                         progress = { (progress.completed.toFloat() / progress.total).coerceIn(0f, 1f) },
                         modifier = Modifier.fillMaxWidth(),
-                        drawStopIndicator = {}
+                        showStopIndicator = false
                     )
                     Text(
                         stringResource(R.string.app_entries_progress_count, progress.completed, progress.total),

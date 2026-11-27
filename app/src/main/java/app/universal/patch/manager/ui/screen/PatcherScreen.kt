@@ -1,5 +1,11 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
+import app.universal.patch.manager.ui.component.design.CircularProgressIndicator
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.FilledTonalButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import android.os.Build
 import android.net.Uri
 import android.content.ClipData
@@ -37,19 +43,14 @@ import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -69,7 +70,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -674,14 +675,13 @@ fun PatcherScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.7f)
-                            .height(4.dp)
                             .clip(RoundedCornerShape(999.dp))
                     )
                 }
             },
             confirmButton = {},
             dismissButton = {},
-            shape = RoundedCornerShape(28.dp)
+            shape = MaterialTheme.shapes.extraLarge.withClassicCorner(28.dp)
         )
     }
 
@@ -819,14 +819,13 @@ fun PatcherScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.7f)
-                            .height(4.dp)
                             .clip(RoundedCornerShape(999.dp))
                     )
                 }
             },
             confirmButton = {},
             dismissButton = {},
-            shape = RoundedCornerShape(28.dp)
+            shape = MaterialTheme.shapes.extraLarge.withClassicCorner(28.dp)
         )
     }
     exportFileDialogState?.let { state ->
@@ -907,14 +906,13 @@ fun PatcherScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.7f)
-                            .height(4.dp)
                             .clip(RoundedCornerShape(999.dp))
                     )
                 }
             },
             confirmButton = {},
             dismissButton = {},
-            shape = RoundedCornerShape(28.dp)
+            shape = MaterialTheme.shapes.extraLarge.withClassicCorner(28.dp)
         )
     }
 
@@ -1433,7 +1431,7 @@ fun PatcherScreen(
                                                 bottomEnd = 0.dp
                                             )
                                         } else {
-                                            RoundedCornerShape(16.dp)
+                                            MaterialTheme.shapes.large.withClassicCorner(16.dp)
                                         }
                                     )
                                     if (showMountFallbackMenu && !viewModel.isInstalling) {
@@ -1494,7 +1492,7 @@ fun PatcherScreen(
             LinearProgressIndicator(
                 progress = { patcherProgress.progress },
                 modifier = Modifier.fillMaxWidth(),
-                drawStopIndicator = {}
+                showStopIndicator = false
             )
 
             val pinGraphs = pinResourceGraphs && showPatcherMemoryUsageGraph && viewModel.patcherMemoryUsageSamples.isNotEmpty()

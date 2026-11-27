@@ -400,10 +400,10 @@ internal class PatcherProgressTracker(
     private fun currentWriteApkDexGroupTitle(): String {
         if (!isMorpheSelection()) return WRITE_APK_DEX_GROUP_TITLE
         val bytecodeMode = morpheBytecodeMode()
-        return if (bytecodeMode.equals("FULL", ignoreCase = true)) {
-            "Compiling DEX files: FULL"
-        } else {
-            "Compiling DEX files: FAST"
+        return when {
+            bytecodeMode.equals("STRIP_SAFE", ignoreCase = true) -> "Compiling DEX files: SAFE"
+            bytecodeMode.equals("FULL", ignoreCase = true) -> "Compiling DEX files: FULL"
+            else -> "Compiling DEX files: FAST"
         }
     }
 

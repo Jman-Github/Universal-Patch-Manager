@@ -1,11 +1,13 @@
 package app.universal.patch.manager.ui.screen.settings
 
+import app.universal.patch.manager.ui.theme.actionTrayColor
+
+import app.universal.patch.manager.ui.theme.withClassicCorner
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -101,8 +103,8 @@ internal fun DashboardActionSettings(
                 workingOrder.add(to.index, workingOrder.removeAt(from.index))
             }
             Surface(
-                shape = RoundedCornerShape(18.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
+                color = actionTrayColor(),
                 shadowElevation = 6.dp,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
                 modifier = Modifier.widthIn(max = 520.dp)

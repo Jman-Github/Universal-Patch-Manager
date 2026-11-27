@@ -34,14 +34,29 @@ def method(text, signature):
 
 # Every displayed settings subsection must have a searchable entry and a highlight target.
 search = source("ui/screen/SettingsScreen.kt")
-for path in (BASE / "ui/screen/settings").rglob("*.kt"):
+settings_dir = BASE / "ui/screen/settings"
+# These section names are search keywords for the controls that open their pickers.
+section_controls = {
+    "downloader_catalog_available": ("downloader_catalog_title", settings_dir / "DownloadsSettingsScreen.kt"),
+    "manager_app_icons_section": ("manager_app_icon", settings_dir / "GeneralSettingsScreen.kt"),
+}
+for component in ("ColumnWithScrollbar", "LazyColumnWithScrollbar"):
+    assert "thumbLength: Dp? = DASHBOARD_SCROLLBAR_THUMB_LENGTH" in source(f"ui/component/{component}.kt")
+for path in settings_dir.rglob("*.kt"):
     text = path.read_text(encoding="utf-8")
     for title in re.findall(r"GroupHeader\(\s*(?:title = )?stringResource\(R.string.(\w+)\)", text):
+        if title in section_controls:
+            control, screen = section_controls[title]
+            entry = re.search(r"SearchEntry\(\s*R\.string\." + control + r"\s*,(?:(?!SearchEntry\().)*", search, re.S)
+            assert entry and re.search(r"keywords\s*=\s*listOf\([^)]*\bR\.string\." + title + r"\b", entry[0]), title
+            assert "targetKey = R.string." + control in screen.read_text(encoding="utf-8"), control
+            continue
         assert re.search(r"SearchEntry\(\s*R.string." + title + r"\s*,", search), (path.name, title)
         assert ("targetKey = R.string." + title in text or
                 "R.string." + title in re.sub(r"GroupHeader\([^)]*\)", "", text)), title
-    for call in re.finditer(r"(?<!fun )(?:ColumnWithScrollbar|LazyColumnWithScrollbar)\(", text):
-        assert "DASHBOARD_SCROLLBAR_THUMB_LENGTH" in text[call.start():call.start()+280], path.name
+    # Settings can inherit the shared thumb length or pass it explicitly.
+    for override in re.findall(r"\bthumbLength\s*=\s*([^,\n)]+)", text):
+        assert override.strip().split(".")[-1] == "DASHBOARD_SCROLLBAR_THUMB_LENGTH", path.name
 picker = source("ui/component/patches/PathSelectorDialog.kt")
 assert "prefs.pathSelectorSearchQuery" not in picker
 assert 'var searchQuery by rememberSaveable { mutableStateOf("") }' in picker
@@ -67,19 +82,19 @@ print("Settings search, scrollbar, picker, expansion, channel and English resour
 
 prefs = method(source("domain/manager/PreferencesManager.kt"), "suspend fun setMinimalPatchSelectionView")
 provider_classes = ""
-for name in ("DownloaderPluginRepository", "PatcherRuntimePluginRepository"):
+for name, mutex in (("DownloaderPluginRepository", "updateCheckMutex"), ("PatcherRuntimePluginRepository", "sourceMutex")):
     text = source("domain/repository/"+name+".kt")
     methods = "\n".join(method(text, "suspend fun "+m) for m in ("setSourceLatest", "setSourcePrerelease"))
     provider_classes += """
 class %s {
-    val sourceMutex = Mutex()
+    val %s = Mutex()
     var entries = listOf(SourceEntry("target", true, false), SourceEntry("other", false, false))
     fun readSourceEntries() = entries
     fun writeSourceEntries(value: List<SourceEntry>) { entries = value }
     fun reload() {}
     %s
 }
-""" % (name, methods)
+""" % (name, mutex, methods)
 # Execute the actual persisted-settings projection used when rebuilding a remote source.
 # Storage-only tests cannot catch fields discarded by PatchBundleEntity.load().
 load_call = source("domain/repository/PatchBundleRepository.kt").split(
