@@ -1,5 +1,9 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import app.universal.patch.manager.ui.component.persistentControls
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -44,14 +48,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -129,6 +129,8 @@ fun AppSelectorScreen(
     vm: AppSelectorViewModel = koinViewModel()
 ) {
     val prefs = koinInject<PreferencesManager>()
+    val appNames = koinInject<app.universal.patch.manager.domain.repository.AppNameRepository>()
+    val cachedAppNames by appNames.names.collectAsStateWithLifecycle()
     val fs = koinInject<Filesystem>()
     val storageRoots = remember { fs.storageRoots() }
     val allowIncompatiblePatches by prefs.disablePatchVersionCompatCheck.getAsState()
@@ -240,12 +242,27 @@ fun AppSelectorScreen(
 
     val appList by vm.appList.collectAsStateWithLifecycle(initialValue = emptyList())
     val notInstalledLabel = stringResource(R.string.not_installed)
-    var appDisplayLabels by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    // Keep names for this list even after the bounded repository cache evicts them.
+    // Replacing the list or leaving the screen releases this screen-owned data.
+    var resolvedDisplayLabels by remember(appList) { mutableStateOf<Map<String, String>>(emptyMap()) }
+    val appDisplayLabels = remember(resolvedDisplayLabels, cachedAppNames) {
+        cachedAppNames + resolvedDisplayLabels.filter { (pkg, label) -> label != pkg }
+    }
     LaunchedEffect(appList) {
-        appDisplayLabels = appList.associate { it.packageName to it.packageName }
-        appDisplayLabels = withContext(Dispatchers.IO) {
-            appList.associate { app ->
-                app.packageName to (app.packageInfo?.let(vm::loadLabel) ?: app.packageName)
+        // Start remote lookups as each local batch is ready, rather than waiting
+        // for PackageManager to read every installed app in a large list first.
+        appList.chunked(32).forEach { batch ->
+            val localLabels = withContext(Dispatchers.IO) {
+                batch.associate { app ->
+                    app.packageName to (app.packageInfo?.let(vm::loadLabel) ?: app.packageName)
+                }
+            }
+            resolvedDisplayLabels = resolvedDisplayLabels + localLabels
+            batch.filter { localLabels[it.packageName] == it.packageName }.forEach { app ->
+                launch {
+                    val name = appNames.resolve(app.packageName)
+                    resolvedDisplayLabels = resolvedDisplayLabels + (app.packageName to name)
+                }
             }
         }
     }
@@ -280,12 +297,9 @@ fun AppSelectorScreen(
             }
             .filter { app ->
                 if (filterText.isBlank()) return@filter true
-                val searchableLabel = if (app.packageInfo == null) {
-                    notInstalledLabel
-                } else {
-                    appDisplayLabels.getOrElse(app.packageName) { app.packageName }
-                }
+                val searchableLabel = appDisplayLabels.getOrElse(app.packageName) { app.packageName }
                 searchableLabel.contains(filterText, true) ||
+                    (app.packageInfo == null && notInstalledLabel.contains(filterText, true)) ||
                     app.packageName.contains(filterText, true)
             }
             .sortedWith(
@@ -382,7 +396,7 @@ fun AppSelectorScreen(
             }
         }
 
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
 
     Scaffold(
         topBar = {
@@ -685,7 +699,7 @@ private enum class AppSelectorSortMode(
 private fun AppSelectorCardPlaceholder(modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
         tonalElevation = 2.dp
     ) {
         Column(
@@ -701,7 +715,7 @@ private fun AppSelectorCardPlaceholder(modifier: Modifier = Modifier) {
             ) {
                 ShimmerBox(
                     modifier = Modifier.size(48.dp),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = MaterialTheme.shapes.medium.withClassicCorner(12.dp)
                 )
                 Column(
                     modifier = Modifier.weight(1f),
@@ -728,7 +742,7 @@ private fun SelectFromStorageCard(
     Surface(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
         tonalElevation = 2.dp
     ) {
         Row(
@@ -741,7 +755,7 @@ private fun SelectFromStorageCard(
             Surface(
                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
                 contentColor = MaterialTheme.colorScheme.primary,
-                shape = RoundedCornerShape(12.dp)
+                shape = MaterialTheme.shapes.medium.withClassicCorner(12.dp)
             ) {
                 Box(
                     modifier = Modifier
@@ -790,7 +804,7 @@ private fun AppSelectorCard(
     Surface(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
         tonalElevation = 2.dp
     ) {
         Column(
@@ -806,6 +820,7 @@ private fun AppSelectorCard(
             ) {
                 AppIcon(
                     packageInfo = packageInfo,
+                    packageName = packageName,
                     contentDescription = null,
                     modifier = Modifier.size(44.dp)
                 )
@@ -1014,7 +1029,7 @@ private fun VersionSearchChip(
             context.openUrl(buildSearchUrl(packageName, version, versionCodes, searchEngineHost))
         },
         modifier = chipModifier,
-        shape = if (highlighted) RoundedCornerShape(999.dp) else RoundedCornerShape(6.dp),
+        shape = if (highlighted) RoundedCornerShape(999.dp) else MaterialTheme.shapes.small.withClassicCorner(6.dp),
         color = background,
         contentColor = contentColor,
         border = if (highlighted) {
@@ -1206,7 +1221,7 @@ private fun BundleSuggestionCard(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(18.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
         tonalElevation = 1.dp
     ) {
         Column(
@@ -1261,18 +1276,15 @@ private fun BundleSuggestionCard(
                 text = if (suggestion.supportsAllVersions) {
                     stringResource(R.string.other_supported_versions_all)
                 } else if (suggestion.recommendedVersionExperimental) {
-                    stringResource(R.string.bundle_version_dialog_recommended, versionLabel) +
+                    stringResource(R.string.app_selector_version, versionLabel) +
                         " • " + stringResource(R.string.patch_bundle_experimental_version_label)
                 } else {
-                    stringResource(R.string.bundle_version_dialog_recommended, versionLabel)
+                    stringResource(R.string.app_selector_version, versionLabel)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            val showOtherVersionsButton = !suggestion.supportsAllVersions ||
-                suggestion.recommendedVersion != null ||
-                suggestion.otherSupportedVersions.isNotEmpty()
-            if (showOtherVersionsButton) {
+            if (suggestion.otherSupportedVersions.isNotEmpty()) {
                 TextButton(
                     onClick = onShowOtherVersions,
                     enabled = enabled,

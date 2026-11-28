@@ -1,10 +1,13 @@
 package app.universal.patch.manager.ui.component
 
+import androidx.compose.ui.window.DialogProperties
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -37,6 +40,7 @@ fun CenteredDialogTitle(
 ) {
     Text(
         text = text,
+        style = if (LocalExpressiveDesign.current) MaterialTheme.typography.headlineSmall else LocalTextStyle.current,
         modifier = modifier.fillMaxWidth(),
         textAlign = TextAlign.Center
     )
@@ -60,11 +64,20 @@ fun AlertDialogExtended(
     textContentColor: Color = AlertDialogDefaults.textContentColor,
     tonalElevation: Dp = AlertDialogDefaults.TonalElevation,
     textHorizontalPadding: PaddingValues = TextHorizontalPadding,
-    textBottomPadding: Dp = 24.dp
+    textBottomPadding: Dp = 24.dp,
+    fillText: Boolean = false,
+    // Dialogs listing option cards use most of the screen width so their text does not wrap word by word.
+    wide: Boolean = false
 ) {
-    BasicAlertDialog(onDismissRequest = onDismissRequest) {
+    BasicAlertDialog(
+        onDismissRequest = onDismissRequest,
+        modifier = Modifier
+            .imePadding()
+            .then(if (wide) Modifier.padding(horizontal = 16.dp) else Modifier),
+        properties = DialogProperties(usePlatformDefaultWidth = !wide)
+    ) {
         Surface(
-            modifier = modifier.imePadding(),
+            modifier = modifier,
             shape = shape,
             color = containerColor,
             tonalElevation = tonalElevation,
@@ -114,7 +127,7 @@ fun AlertDialogExtended(
                     ) {
                         Box(
                             Modifier
-                                .weight(weight = 1f, fill = false)
+                                .weight(weight = 1f, fill = fillText)
                                 .padding(bottom = textBottomPadding)
                                 .padding(textHorizontalPadding)
                                 .align(Alignment.Start)
@@ -167,3 +180,22 @@ private fun ContentStyle(
 }
 
 val TextHorizontalPadding = PaddingValues(horizontal = 24.dp)
+
+/** Shared geometry for collection ordering and patch-profile creation dialogs. */
+@Composable
+fun CollectionDialog(
+    onDismissRequest: () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    dismissButton: @Composable () -> Unit,
+    title: @Composable () -> Unit,
+    text: @Composable () -> Unit
+) {
+    AlertDialogExtended(
+        modifier = Modifier.fillMaxWidth().heightIn(max = 560.dp),
+        onDismissRequest = onDismissRequest,
+        confirmButton = confirmButton,
+        dismissButton = dismissButton,
+        title = title,
+        text = text
+    )
+}

@@ -33,7 +33,17 @@ class RootModuleStore(
         ).requireSuccess("Verify rollback and staging space")
     }
 
-    override suspend fun snapshot(packageName: String, preferredPayload: RootBackupArtifact?): String? {
+    override suspend fun snapshot(packageName: String, preferredPayload: RootBackupArtifact?): String? =
+        snapshot(packageName, preferredPayload, inactive = null)
+
+    override suspend fun snapshotInactive(state: RootCommittedState): String? =
+        snapshot(state.packageName, preferredPayload = null, inactive = state)
+
+    private suspend fun snapshot(
+        packageName: String,
+        preferredPayload: RootBackupArtifact?,
+        inactive: RootCommittedState?
+    ): String? {
         val backupRoot = RootPaths.backup(packageName)
         val moduleBackup = "$backupRoot/module"
         val moduleNext = "$backupRoot/module.next"
@@ -43,13 +53,23 @@ class RootModuleStore(
         val preferredCopy = preferredPayload?.path?.let { payloadPath ->
             "cp -p ${shellQuote(payloadPath)} ${shellQuote("$moduleNext/$packageName.apk")}; "
         }.orEmpty()
+        val recoverInactivePayload = inactive?.let { state ->
+            val canonical = shellQuote(RootPaths.canonicalPatched(packageName))
+            val staged = shellQuote("$moduleNext/$packageName.apk")
+            val hash = shellQuote(state.patchedSha256)
+            "if [ \"${'$'}(sha256sum $staged 2>/dev/null | cut -d' ' -f1)\" != $hash ] && " +
+                "[ -f $canonical ] && [ ! -L $canonical ] && " +
+                "[ \"${'$'}(sha256sum $canonical | cut -d' ' -f1)\" = $hash ]; then " +
+                "rm -f $staged; cp $canonical $staged; fi; " +
+                "rm -f ${shellQuote("$moduleNext/disable")}; : > ${shellQuote("$moduleNext/disable")}; "
+        }.orEmpty()
         val result = runModuleCommand(
             "set -eu; mkdir -p ${shellQuote(backupRoot)}; chmod 700 ${shellQuote(backupRoot)}; " +
                 "rm -rf ${shellQuote(moduleNext)}; mkdir -p ${shellQuote(moduleNext)}; chmod 700 ${shellQuote(moduleNext)}; " +
                 "if [ -d ${shellQuote(module)} ]; then cp -a ${shellQuote("$module/.")} ${shellQuote(moduleNext)}; fi; " +
                 "if [ ! -f ${shellQuote("$moduleNext/$packageName.apk")} ] && [ -f ${shellQuote(legacyApk)} ]; then " +
                 "cp -p ${shellQuote(legacyApk)} ${shellQuote("$moduleNext/$packageName.apk")}; fi; " +
-                preferredCopy +
+                preferredCopy + recoverInactivePayload +
                 "if [ -f ${shellQuote("$moduleNext/$packageName.apk")} ]; then " +
                 "sha256sum ${shellQuote("$moduleNext/$packageName.apk")}; fi; " +
                 "rm -rf ${shellQuote(modulePrevious)}; " +
@@ -61,6 +81,44 @@ class RootModuleStore(
             ?.substringBefore(' ')
             ?.trim()
             ?.takeIf { it.length == 64 }
+    }
+
+    override suspend fun copyCommittedPayloads(
+        state: RootCommittedState,
+        directory: File,
+        installedStockPaths: List<String>
+    ): List<File> {
+        val packageName = state.packageName
+        val backup = RootPaths.backup(packageName)
+        val stockSplits = state.stockSplits.toSortedMap()
+        val archivedStockSources = listOf(
+            listOf(RootPaths.moduleStockApk(packageName), RootPaths.canonicalStock(packageName), "$backup/package/0.apk")
+        ) + stockSplits.keys.mapIndexed { index, _ ->
+            listOf("${RootPaths.canonicalPayload(packageName)}/split-$index.apk", "$backup/package/${index + 1}.apk")
+        }
+        val sources = listOf(listOf(RootPaths.moduleApk(packageName), RootPaths.canonicalPatched(packageName))) +
+            archivedStockSources.mapIndexed { index, candidates ->
+                candidates + listOfNotNull(installedStockPaths.getOrNull(index))
+            }
+        val hashes = listOf(state.patchedSha256, state.stockSha256) + stockSplits.values
+        val files = hashes.indices.map { directory.resolve("$it.apk") }
+        val commands = files.mapIndexed { index, file ->
+            val candidates = sources[index].joinToString(" ", transform = ::shellQuote)
+            val target = shellQuote(file.absolutePath)
+            val hash = shellQuote(hashes[index])
+            "found=0; for candidate in $candidates; do " +
+                "[ -f \"${'$'}candidate\" ] && [ ! -L \"${'$'}candidate\" ] || continue; " +
+                "[ \"${'$'}(sha256sum \"${'$'}candidate\" | cut -d' ' -f1)\" = $hash ] || continue; " +
+                "cat \"${'$'}candidate\" > $target; " +
+                "[ \"${'$'}(sha256sum $target | cut -d' ' -f1)\" = $hash ] || exit 1; " +
+                "found=1; break; done; [ \"${'$'}found\" = 1 ] || exit 2"
+        }
+        // Files are created by Manager so they stay readable with its UID and SELinux context.
+        files.forEach { check(it.createNewFile()) { "Could not prepare root restore file" } }
+        val result = runModuleCommand("set -eu; " + commands.joinToString("; "))
+        if (result.status == 2) return emptyList()
+        result.requireSuccess("Copy and verify saved root mount APKs")
+        return files
     }
 
     override suspend fun readLegacyPayload(packageName: String): RootBackupArtifact? {
@@ -227,6 +285,15 @@ class RootModuleStore(
             val stockApkName = "$packageName-stock.apk"
             val stockPath = requireNotNull(compatible.basePath)
             val stockHash = requireNotNull(compatible.baseSha256)
+            val preserveSplits = compatible.splitPaths.sortedBy { File(it).name }
+                .mapIndexed { index, path ->
+                    val source = shellQuote(path)
+                    val target = shellQuote("$canonicalNext/split-$index.apk")
+                    val hash = shellQuote(requireNotNull(compatible.splitSha256[path]))
+                    "cp $source $target; chmod 600 $target; " +
+                        "test \"${'$'}(sha256sum $target | cut -d' ' -f1)\" = $hash; " +
+                        "sync -f $target 2>/dev/null || sync; "
+                }.joinToString("")
             runModuleCommand(
                 "set -eu; rm -rf ${shellQuote(stage)} ${shellQuote(rollback)} ${shellQuote(canonicalNext)}; " +
                 "mkdir -p ${shellQuote(stage)}; chmod 700 ${shellQuote(stage)}; " +
@@ -240,6 +307,7 @@ class RootModuleStore(
                     "cp ${shellQuote(stockPath)} ${shellQuote("$stage/$stockApkName")}; " +
                     "cp ${shellQuote(patchedApk.absolutePath)} ${shellQuote(canonicalPatched)}; " +
                     "cp ${shellQuote(stockPath)} ${shellQuote(canonicalStock)}; " +
+                    preserveSplits +
                     "chmod 755 ${shellQuote("$stage/post-fs-data.sh")} ${shellQuote("$stage/service.sh")}; " +
                     "chmod 600 ${shellQuote("$stage/state.env")}; chmod 644 ${shellQuote("$stage/module.prop")} " +
                     "${shellQuote("$stage/$apkName")} ${shellQuote("$stage/$stockApkName")}; " +
@@ -414,6 +482,20 @@ class RootModuleStore(
         } finally {
             local.deleteRecursively()
         }
+    }
+
+    override suspend fun disableCompetingBootHooks(packageName: String) {
+        val script = shellQuote(RootPaths.competingService(packageName))
+        val backupTemplate = shellQuote("${RootPaths.transaction(packageName)}/revanced-service.XXXXXX")
+        val module = shellQuote(RootPaths.competingModule(packageName))
+        runModuleCommand(
+            "set -eu; if [ -f $script ] && [ ! -L $script ] && " +
+                "grep -Fq ${shellQuote(RootPaths.legacyPackage(packageName) + "/")} $script; then " +
+                "saved=\"${'$'}(mktemp $backupTemplate)\"; mv -f $script \"${'$'}saved\"; fi; " +
+                "if [ -d $module ] && [ ! -L $module ] && " +
+                "grep -Fx ${shellQuote("id=$packageName-ReVanced")} $module/module.prop >/dev/null 2>&1; then " +
+                "[ ! -L $module/disable ]; touch $module/disable; fi"
+        ).requireSuccess("Disable competing ReVanced boot hooks")
     }
 
     override suspend fun disable(packageName: String) {

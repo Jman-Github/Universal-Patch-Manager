@@ -48,6 +48,7 @@ import app.universal.patch.manager.util.savedApkAbiLabel
 import app.universal.patch.manager.util.simpleMessage
 import app.universal.patch.manager.util.supportsRootMount
 import app.universal.patch.manager.util.toast
+import app.universal.patch.manager.util.versionCodeFor
 import app.universal.patch.manager.patcher.patch.PatchBundleInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -535,6 +536,7 @@ class InstalledAppsViewModel(
                         }
                     }
                     val archiveVersion = archivePackageInfo?.versionName?.takeIf { it.isNotBlank() }
+                    val archiveVersionCode = archivePackageInfo?.versionCodeFor(archiveVersion ?: installedApp.version)
                     val resolvedInstallType = if (
                         installedApp.installType == InstallType.MOUNT && !supportsRootMount
                     ) {
@@ -544,7 +546,8 @@ class InstalledAppsViewModel(
                     }
                     if (
                         resolvedInstallType != installedApp.installType ||
-                        (archiveVersion != null && archiveVersion != installedApp.version)
+                        (archiveVersion != null && archiveVersion != installedApp.version) ||
+                        (archiveVersionCode != null && archiveVersionCode != installedApp.versionCode)
                     ) {
                         val selection = installedAppsRepository.getAppliedPatches(packageName)
                         installedAppsRepository.addOrUpdate(
@@ -556,7 +559,9 @@ class InstalledAppsViewModel(
                             selectionPayload = installedApp.selectionPayload,
                             useMount = installedApp.useMount,
                             updateUseMount = true,
-                            createdAtOverride = installedApp.createdAt
+                            createdAtOverride = installedApp.createdAt,
+                            versionCode = archiveVersionCode,
+                            updateVersionCode = archivePackageInfo != null
                         )
                     }
                     archivePackageInfo ?: installedInfo

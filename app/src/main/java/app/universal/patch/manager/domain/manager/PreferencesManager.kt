@@ -3,7 +3,10 @@ package app.universal.patch.manager.domain.manager
 import android.content.ComponentName
 import android.content.Context
 import android.util.Log
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import app.universal.patch.manager.R
+import app.universal.patch.manager.domain.bundles.BundleDiscoveryState
 import app.universal.patch.manager.domain.manager.base.BasePreferencesManager
 import app.universal.patch.manager.domain.manager.base.EditorContext
 import app.universal.patch.manager.patcher.logger.PatcherLogMode
@@ -92,6 +95,8 @@ class PreferencesManager(
     val hideMainTabLabels = booleanPreference("hide_main_tab_labels", false)
     val showAppsTabUpdateCount = booleanPreference("show_apps_tab_update_count", true)
     val showBundlesTabUpdateCount = booleanPreference("show_bundles_tab_update_count", true)
+    val appsTabLayout = enumPreference("apps_tab_layout", DashboardListLayout.CARDS)
+    val bundlesTabLayout = enumPreference("bundles_tab_layout", DashboardListLayout.CARDS)
     val disableMainTabSwipe = booleanPreference("disable_main_tab_swipe", false)
     val disablePatchSelectionTabSwipe = booleanPreference("disable_patch_selection_tab_swipe", false)
     val preventAccidentalTouching = booleanPreference("prevent_accidental_touching", true)
@@ -100,6 +105,7 @@ class PreferencesManager(
     val showLsposedTab = booleanPreference("show_lsposed_tab", false)
     val appSelectorSortMode = stringPreference("app_selector_sort_mode", "NAME_ASC")
     val batchQueueAppSelectorSortMode = stringPreference("batch_queue_app_selector_sort_mode", "NAME_ASC")
+    val expressiveDesign = booleanPreference("expressive_design", false)
     val theme = enumPreference("theme", Theme.SYSTEM)
     val appLanguage = stringPreference("app_language", "system")
 
@@ -116,6 +122,7 @@ class PreferencesManager(
     val skipSplitMergeSigning = booleanPreference("skip_split_merge_signing", false)
     val disableApkSignatureChecks = booleanPreference("disable_apk_signature_checks", false)
     val injectSignatureMetadataAfterPatching = booleanPreference("inject_signature_metadata_after_patching", false)
+    val artMemoryLimit = intPreference("patcher_art_memory_mb", 1024)
     val useJvmRuntime = booleanPreference("patcher_jvm", true)
     val morpheBytecodeMode = enumPreference("morphe_bytecode_mode", MorpheBytecodeMode.FAST)
     val patcherLogMode = enumPreference("patcher_log_mode", PatcherLogMode.DEFAULT)
@@ -150,6 +157,7 @@ class PreferencesManager(
         booleanPreference("dashboard_bundle_update_banner_collapsed", false)
     val autoCollapsePatcherSteps = booleanPreference("auto_collapse_patcher_steps", false)
     val showPatcherMemoryUsageGraph = booleanPreference("show_patcher_memory_usage_graph", true)
+    val pinPatcherResourceGraphs = booleanPreference("pin_patcher_resource_graphs", false)
     val compactPatcherResourceGraphs = booleanPreference("compact_patcher_resource_graphs", false)
     val showPatcherResourceGraphExtraInfo = booleanPreference("show_patcher_resource_graph_extra_info", false)
     val showCompactPatcherResourceGraphExtraInfo = booleanPreference("show_compact_patcher_resource_graph_extra_info", false)
@@ -306,6 +314,13 @@ class PreferencesManager(
         }
     }
 
+    val runtimeSetupDownloading = booleanPreference("runtime_setup_downloading", false)
+    val runtimeSetupVersion = intPreference("runtime_setup_version", 0)
+    // Local restore state is deliberately excluded from exported settings.
+    val runtimeSetupFromBackup = booleanPreference("runtime_setup_from_backup", false)
+    val runtimeRestorePending = booleanPreference("runtime_restore_pending", false)
+    val runtimeRestoreRequest = stringPreference("runtime_restore_request", "")
+    val runtimeSetupSelection = stringSetPreference("runtime_setup_selection", emptySet())
     val firstLaunch = booleanPreference("first_launch", true)
     val managerAutoUpdates = booleanPreference("manager_auto_updates", false)
     val showManagerUpdateDialogOnLaunch = booleanPreference("show_manager_update_dialog_on_launch", true)
@@ -343,6 +358,22 @@ class PreferencesManager(
         "background_bundle_update_time",
         SearchForUpdatesBackgroundInterval.NEVER
     )
+    val backgroundRuntimeUpdateInterval = enumPreference(
+        "background_runtime_update_time",
+        SearchForUpdatesBackgroundInterval.NEVER
+    )
+    internal val pendingRuntimeUpdatesJson = stringPreference("pending_runtime_updates", "")
+
+    suspend fun migrateBackgroundRuntimeUpdateInterval() {
+        dataStore.edit { settings ->
+            val runtimeKey = stringPreferencesKey("background_runtime_update_time")
+            if (settings[runtimeKey] == null) {
+                settings[runtimeKey] = settings[stringPreferencesKey("background_bundle_update_time")]
+                    ?: SearchForUpdatesBackgroundInterval.NEVER.name
+            }
+        }
+    }
+
     val searchForManagerUpdatesBackgroundInterval = enumPreference(
         "background_manager_update_time",
         SearchForUpdatesBackgroundInterval.NEVER
@@ -370,6 +401,9 @@ class PreferencesManager(
     val collapsePatchActionsOnSelection = booleanPreference("collapse_patch_actions_on_selection", true)
     val patchSelectionFilterFlags = intPreference("patch_selection_filter_flags", -1)
     val patchSelectionShowNewPatches = booleanPreference("patch_selection_show_new_patches", true)
+    val patchSelectionShowCustomSections = booleanPreference("patch_selection_show_custom_sections", true)
+    val patchSelectionExpandCategories = booleanPreference("patch_selection_expand_categories", false)
+    val patchSelectionSectionOverrides = stringSetPreference("patch_selection_section_overrides", emptySet())
     val patchSelectionSortAlphabetical = booleanPreference("patch_selection_sort_alphabetical", false)
     val patchSelectionSortDescending = booleanPreference("patch_selection_sort_descending", false)
     val patchSelectionSortSettingsMode = stringPreference("patch_selection_sort_settings_mode", "None")
@@ -402,9 +436,22 @@ class PreferencesManager(
     val patchSelectionShowOptionPreviews =
         booleanPreference("patch_selection_show_option_previews", true)
 
+    private val patchSelectionDisplayRestoreFlags = intPreference("patch_selection_display_restore_flags", 0)
+
     suspend fun setMinimalPatchSelectionView(enabled: Boolean) = edit {
-        patchSelectionShowVersionTags.value = !enabled
-        patchSelectionShowOptionPreviews.value = !enabled
+        if (enabled) {
+            val flags = (if (patchSelectionShowVersionTags.value) 1 else 0) or
+                (if (patchSelectionShowOptionPreviews.value) 2 else 0)
+            if (flags != 0) patchSelectionDisplayRestoreFlags.value = flags
+            patchSelectionShowVersionTags.value = false
+            patchSelectionShowOptionPreviews.value = false
+        } else {
+            // Zero means minimal view was reached by disabling both details separately.
+            val flags = patchSelectionDisplayRestoreFlags.value.takeIf { it in 1..3 } ?: 3
+            patchSelectionShowVersionTags.value = flags and 1 != 0
+            patchSelectionShowOptionPreviews.value = flags and 2 != 0
+            patchSelectionDisplayRestoreFlags.value = 0
+        }
     }
 
     val pathSelectorFavorites = stringSetPreference("path_selector_favorites", emptySet())
@@ -435,6 +482,10 @@ class PreferencesManager(
         stringPreference("file_picker_patch_profiles_import_directory", "")
     val managerSettingsImportLastDirectory =
         stringPreference("file_picker_manager_settings_import_directory", "")
+    val appEntriesImportLastDirectory =
+        stringPreference("file_picker_app_entries_import_directory", "")
+    val appEntriesExportLastDirectory =
+        stringPreference("file_picker_app_entries_export_directory", "")
     val everythingImportLastDirectory =
         stringPreference("file_picker_everything_import_directory", "")
     val patchSelectionImportLastDirectory =
@@ -505,6 +556,8 @@ class PreferencesManager(
             "patchBundlesImportLastDirectory" to patchBundlesImportLastDirectory,
             "patchProfilesImportLastDirectory" to patchProfilesImportLastDirectory,
             "managerSettingsImportLastDirectory" to managerSettingsImportLastDirectory,
+            "appEntriesImportLastDirectory" to appEntriesImportLastDirectory,
+            "appEntriesExportLastDirectory" to appEntriesExportLastDirectory,
             "everythingImportLastDirectory" to everythingImportLastDirectory,
             "patchSelectionImportLastDirectory" to patchSelectionImportLastDirectory,
             "patchBundlesExportLastDirectory" to patchBundlesExportLastDirectory,
@@ -541,6 +594,10 @@ class PreferencesManager(
 
     val pathSelectorSortMode = stringPreference("path_selector_sort_mode", "MODIFIED_DESC")
     val pathSelectorSearchQuery = stringPreference("path_selector_search_query", "")
+    val minimalActionButtonGroups = stringSetPreference("minimal_action_button_groups", emptySet())
+    val dashboardAppsActionOrder = stringPreference("dashboard_apps_action_order", "storage,add,batch")
+    val dashboardBundlesActionOrder = stringPreference("dashboard_bundles_action_order", "discovery,add")
+    val dashboardHiddenActions = stringSetPreference("dashboard_hidden_actions", emptySet())
     // Code adapted from Morphe, see third-party/NOTICE for more information
     // https://github.com/MorpheApp/morphe-manager/commit/205956fa9c9bdf6b4ab13cc2d1880077936bc436
     val pathSelectorShowHiddenFiles = booleanPreference("path_selector_show_hidden_files", false)
@@ -560,10 +617,12 @@ class PreferencesManager(
     val splitMergeInstalledFilterSingleApks = booleanPreference("split_merge_installed_filter_single_apks", false)
     val splitMergeAutoCollapseSteps = booleanPreference("split_merge_auto_collapse_steps", false)
     val showSplitMergeMemoryUsageGraph = booleanPreference("show_split_merge_memory_usage_graph", true)
+    val pinSplitMergeResourceGraphs = booleanPreference("pin_split_merge_resource_graphs", false)
     val compactSplitMergeResourceGraphs = booleanPreference("compact_split_merge_resource_graphs", false)
     val showSplitMergeResourceGraphExtraInfo = booleanPreference("show_split_merge_resource_graph_extra_info", false)
     val showCompactSplitMergeResourceGraphExtraInfo = booleanPreference("show_compact_split_merge_resource_graph_extra_info", false)
     val splitMergeInformationExpanded = booleanPreference("split_merge_information_expanded", true)
+    val splitInstallerLogExpanded = booleanPreference("split_installer_log_expanded", true)
     val splitMergeAutoExpandRunningSteps =
         booleanPreference("split_merge_auto_expand_running_steps", true)
     val splitMergeAutoExpandRunningStepsExclusive =
@@ -621,6 +680,9 @@ class PreferencesManager(
         val hideMainTabLabels: Boolean? = null,
         val showAppsTabUpdateCount: Boolean? = null,
         val showBundlesTabUpdateCount: Boolean? = null,
+        // Saved by name, so a backup naming a layout this version lacks still imports the rest.
+        val appsTabLayout: String? = null,
+        val bundlesTabLayout: String? = null,
         val disableMainTabSwipe: Boolean? = null,
         val disablePatchSelectionTabSwipe: Boolean? = null,
         val preventAccidentalTouching: Boolean? = null,
@@ -639,11 +701,13 @@ class PreferencesManager(
         val skipSplitMergeSigning: Boolean? = null,
         val disableApkSignatureChecks: Boolean? = null,
         val injectSignatureMetadataAfterPatching: Boolean? = null,
+        val artMemoryLimit: Int? = null,
         val useJvmRuntime: Boolean? = null,
         val morpheBytecodeMode: String? = null,
         val patcherLogMode: PatcherLogMode? = null,
         val patchAvailabilityEnabled: Boolean? = null,
         val removeGmsCoreForPrimaryMount: Boolean? = null,
+        val expressiveDesign: Boolean? = null,
         val theme: Theme? = null,
         val appLanguage: String? = null,
         val api: String? = null,
@@ -651,6 +715,7 @@ class PreferencesManager(
         val includeGitHubPatInExports: Boolean? = null,
         val autoCollapsePatcherSteps: Boolean? = null,
         val showPatcherMemoryUsageGraph: Boolean? = null,
+        val pinPatcherResourceGraphs: Boolean? = null,
         val compactPatcherResourceGraphs: Boolean? = null,
         val showPatcherResourceGraphExtraInfo: Boolean? = null,
         val showCompactPatcherResourceGraphExtraInfo: Boolean? = null,
@@ -707,6 +772,7 @@ class PreferencesManager(
         val showBatteryOptimizationBanner: Boolean? = null,
         val allowPatchProfileBundleOverride: Boolean? = null,
         val searchForUpdatesBackgroundInterval: SearchForUpdatesBackgroundInterval? = null,
+        val backgroundRuntimeUpdateInterval: SearchForUpdatesBackgroundInterval? = null,
         val searchForManagerUpdatesBackgroundInterval: SearchForUpdatesBackgroundInterval? = null,
         val bundleUpdateDeliveryMode: BundleUpdateDeliveryMode? = null,
         val bundleChangelogFetchLimit: Int? = null,
@@ -728,6 +794,9 @@ class PreferencesManager(
         val patchSelectionHiddenActions: Set<String>? = null,
         val patchSelectionShowVersionTags: Boolean? = null,
         val patchSelectionShowOptionPreviews: Boolean? = null,
+        val patchSelectionShowCustomSections: Boolean? = null,
+        val patchSelectionExpandCategories: Boolean? = null,
+        val patchSelectionDisplayRestoreFlags: Int? = null,
         val patchBundleActionOrder: String? = null,
         val patchBundleHiddenActions: Set<String>? = null,
         val batchResultActionOrder: String? = null,
@@ -752,6 +821,10 @@ class PreferencesManager(
         // https://github.com/MorpheApp/morphe-manager/commit/46e37e2915dc92b6a655127155935e63c0b04efc
         val pathSelectorSortMode: String? = null,
         val pathSelectorSearchQuery: String? = null,
+        val minimalActionButtonGroups: Set<String>? = null,
+        val dashboardAppsActionOrder: String? = null,
+        val dashboardBundlesActionOrder: String? = null,
+        val dashboardHiddenActions: Set<String>? = null,
         val pathSelectorShowHiddenFiles: Boolean? = null,
         val filePickerLastDirectories: Map<String, String>? = null,
         val appSelectorFilterInstalledOnly: Boolean? = null,
@@ -768,10 +841,12 @@ class PreferencesManager(
         val splitMergeInstalledFilterSingleApks: Boolean? = null,
         val splitMergeAutoCollapseSteps: Boolean? = null,
         val showSplitMergeMemoryUsageGraph: Boolean? = null,
+        val pinSplitMergeResourceGraphs: Boolean? = null,
         val compactSplitMergeResourceGraphs: Boolean? = null,
         val showSplitMergeResourceGraphExtraInfo: Boolean? = null,
         val showCompactSplitMergeResourceGraphExtraInfo: Boolean? = null,
         val splitMergeInformationExpanded: Boolean? = null,
+        val splitInstallerLogExpanded: Boolean? = null,
         val splitMergeAutoExpandRunningSteps: Boolean? = null,
         val splitMergeAutoExpandRunningStepsExclusive: Boolean? = null,
         val useCustomFilePicker: Boolean? = null,
@@ -780,8 +855,58 @@ class PreferencesManager(
         val patchBundleDiscoveryShowPrerelease: Boolean? = null,
         val patchBundleDiscoveryLatest: Boolean? = null,
         val patchBundleDiscoverySortMode: String? = null,
+        val patchBundleDiscoveryFiltersExpanded: Boolean? = null,
         val searchEngineHost: String? = null,
     )
+
+    /**
+     * Sets whether patch categories open expanded. Category sections opened or closed by hand were
+     * remembered relative to the old default, so they reset to the new one.
+     */
+    suspend fun setPatchCategoriesExpanded(expanded: Boolean) = edit {
+        applyPatchCategoriesExpanded(expanded)
+    }
+
+    private fun EditorContext.applyPatchCategoriesExpanded(expanded: Boolean) {
+        if (patchSelectionExpandCategories.value == expanded) return
+        patchSelectionExpandCategories.value = expanded
+        patchSelectionSectionOverrides.value =
+            patchSelectionSectionOverrides.value.withoutPatchCategoryOverrides()
+    }
+
+    /**
+     * Restores patch selection section states from a backup for the bundles in [restoredBundleUids],
+     * which take the backup's [overrides]; other bundles keep theirs. The backup was made while
+     * bundle categories defaulted to expanded when [backupExpandsCategories].
+     */
+    suspend fun importPatchSectionOverrides(
+        overrides: Set<String>,
+        restoredBundleUids: Set<Int>,
+        backupExpandsCategories: Boolean
+    ) = edit {
+        patchSelectionSectionOverrides.value = mergedSectionOverrides(
+            current = patchSelectionSectionOverrides.value,
+            imported = importedSectionOverrides(
+                overrides,
+                backupExpandsCategories = backupExpandsCategories,
+                expandsCategories = patchSelectionExpandCategories.value
+            ),
+            restoredBundleUids = restoredBundleUids
+        )
+    }
+
+    suspend fun resetThemeSettings() = edit {
+        expressiveDesign.value = expressiveDesign.default
+        theme.value = theme.default
+        dynamicColor.value = dynamicColor.default
+        pureBlackTheme.value = pureBlackTheme.default
+        materialYouPureBlackTheme.value = materialYouPureBlackTheme.default
+        pureBlackOnSystemDark.value = pureBlackOnSystemDark.default
+        themePresetSelectionEnabled.value = themePresetSelectionEnabled.default
+        themePresetSelectionName.value = themePresetSelectionName.default
+        customAccentColor.value = customAccentColor.default
+        customThemeColor.value = customThemeColor.default
+    }
 
     suspend fun exportSettings(): SettingsSnapshot = readSnapshot {
         var snapshot = SettingsSnapshot()
@@ -793,7 +918,13 @@ class PreferencesManager(
         snapshot
     }
 
-    suspend fun importSettings(snapshot: SettingsSnapshot) = edit {
+    suspend fun importSettings(snapshot: SettingsSnapshot, restoreRuntimes: Boolean = false) = edit {
+        if (restoreRuntimes) {
+            runtimeSetupFromBackup.value = true
+            runtimeRestorePending.value = true
+            runtimeRestoreRequest.value = java.util.UUID.randomUUID().toString()
+            runtimeSetupDownloading.value = false
+        }
         val imported = normalizeImportedManagerSettings(snapshot)
         importAppearanceSettings(imported)
         importCoreUpdateSettings(imported)
@@ -853,6 +984,8 @@ class PreferencesManager(
             hideMainTabLabels = hideMainTabLabels.value,
             showAppsTabUpdateCount = showAppsTabUpdateCount.value,
             showBundlesTabUpdateCount = showBundlesTabUpdateCount.value,
+            appsTabLayout = appsTabLayout.value.name,
+            bundlesTabLayout = bundlesTabLayout.value.name,
             disableMainTabSwipe = disableMainTabSwipe.value,
             disablePatchSelectionTabSwipe = disablePatchSelectionTabSwipe.value,
             preventAccidentalTouching = preventAccidentalTouching.value,
@@ -863,6 +996,7 @@ class PreferencesManager(
             batchQueueAppSelectorSortMode = batchQueueAppSelectorSortMode.value,
             themePresetSelectionName = themePresetSelectionName.value,
             themePresetSelectionEnabled = themePresetSelectionEnabled.value,
+            expressiveDesign = expressiveDesign.value,
             theme = theme.value,
             appLanguage = appLanguage.value
         )
@@ -888,6 +1022,7 @@ class PreferencesManager(
             showBatteryOptimizationBanner = showBatteryOptimizationBanner.value,
             allowPatchProfileBundleOverride = allowPatchProfileBundleOverride.value,
             searchForUpdatesBackgroundInterval = searchForUpdatesBackgroundInterval.value,
+            backgroundRuntimeUpdateInterval = backgroundRuntimeUpdateInterval.value,
             searchForManagerUpdatesBackgroundInterval = searchForManagerUpdatesBackgroundInterval.value,
             bundleUpdateDeliveryMode = bundleUpdateDeliveryMode.value,
             bundleChangelogFetchLimit = bundleChangelogFetchLimit.value,
@@ -920,6 +1055,7 @@ class PreferencesManager(
             skipSplitMergeSigning = skipSplitMergeSigning.value,
             disableApkSignatureChecks = disableApkSignatureChecks.value,
             injectSignatureMetadataAfterPatching = injectSignatureMetadataAfterPatching.value,
+            artMemoryLimit = artMemoryLimit.value,
             useJvmRuntime = useJvmRuntime.value,
             morpheBytecodeMode = morpheBytecodeMode.value.runtimeValue,
             patcherLogMode = patcherLogMode.value,
@@ -927,6 +1063,7 @@ class PreferencesManager(
             removeGmsCoreForPrimaryMount = removeGmsCoreForPrimaryMount.value,
             autoCollapsePatcherSteps = autoCollapsePatcherSteps.value,
             showPatcherMemoryUsageGraph = showPatcherMemoryUsageGraph.value,
+            pinPatcherResourceGraphs = pinPatcherResourceGraphs.value,
             compactPatcherResourceGraphs = compactPatcherResourceGraphs.value,
             showPatcherResourceGraphExtraInfo = showPatcherResourceGraphExtraInfo.value,
             showCompactPatcherResourceGraphExtraInfo = showCompactPatcherResourceGraphExtraInfo.value,
@@ -988,6 +1125,9 @@ class PreferencesManager(
             patchSelectionHiddenActions = patchSelectionHiddenActions.value,
             patchSelectionShowVersionTags = patchSelectionShowVersionTags.value,
             patchSelectionShowOptionPreviews = patchSelectionShowOptionPreviews.value,
+            patchSelectionShowCustomSections = patchSelectionShowCustomSections.value,
+            patchSelectionExpandCategories = patchSelectionExpandCategories.value,
+            patchSelectionDisplayRestoreFlags = patchSelectionDisplayRestoreFlags.value,
             patchBundleActionOrder = patchBundleActionOrder.value,
             patchBundleHiddenActions = patchBundleHiddenActions.value,
             batchResultActionOrder = batchResultActionOrder.value,
@@ -1020,6 +1160,10 @@ class PreferencesManager(
             // https://github.com/MorpheApp/morphe-manager/commit/46e37e2915dc92b6a655127155935e63c0b04efc
             pathSelectorSortMode = pathSelectorSortMode.value,
             pathSelectorSearchQuery = pathSelectorSearchQuery.value,
+            minimalActionButtonGroups = minimalActionButtonGroups.value,
+            dashboardAppsActionOrder = dashboardAppsActionOrder.value,
+            dashboardBundlesActionOrder = dashboardBundlesActionOrder.value,
+            dashboardHiddenActions = dashboardHiddenActions.value,
             pathSelectorShowHiddenFiles = pathSelectorShowHiddenFiles.value,
             filePickerLastDirectories = filePickerDirectoryPreferences.mapValues { (_, preference) ->
                 preference.value
@@ -1038,10 +1182,12 @@ class PreferencesManager(
             splitMergeInstalledFilterSingleApks = splitMergeInstalledFilterSingleApks.value,
             splitMergeAutoCollapseSteps = splitMergeAutoCollapseSteps.value,
             showSplitMergeMemoryUsageGraph = showSplitMergeMemoryUsageGraph.value,
+            pinSplitMergeResourceGraphs = pinSplitMergeResourceGraphs.value,
             compactSplitMergeResourceGraphs = compactSplitMergeResourceGraphs.value,
             showSplitMergeResourceGraphExtraInfo = showSplitMergeResourceGraphExtraInfo.value,
             showCompactSplitMergeResourceGraphExtraInfo = showCompactSplitMergeResourceGraphExtraInfo.value,
             splitMergeInformationExpanded = splitMergeInformationExpanded.value,
+            splitInstallerLogExpanded = splitInstallerLogExpanded.value,
             splitMergeAutoExpandRunningSteps = splitMergeAutoExpandRunningSteps.value,
             splitMergeAutoExpandRunningStepsExclusive = splitMergeAutoExpandRunningStepsExclusive.value,
             useCustomFilePicker = useCustomFilePicker.value,
@@ -1050,6 +1196,8 @@ class PreferencesManager(
             patchBundleDiscoveryShowPrerelease = patchBundleDiscoveryShowPrerelease.value,
             patchBundleDiscoveryLatest = patchBundleDiscoveryLatest.value,
             patchBundleDiscoverySortMode = patchBundleDiscoverySortMode.value,
+            patchBundleDiscoveryFiltersExpanded =
+                BundleDiscoveryState.decode(patchBundleDiscoveryState.value).filtersExpanded,
             searchEngineHost = searchEngineHost.value
         )
     }
@@ -1081,6 +1229,8 @@ class PreferencesManager(
         snapshot.hideMainTabLabels?.let { hideMainTabLabels.value = it }
         snapshot.showAppsTabUpdateCount?.let { showAppsTabUpdateCount.value = it }
         snapshot.showBundlesTabUpdateCount?.let { showBundlesTabUpdateCount.value = it }
+        snapshot.appsTabLayout?.let(DashboardListLayout::fromName)?.let { appsTabLayout.value = it }
+        snapshot.bundlesTabLayout?.let(DashboardListLayout::fromName)?.let { bundlesTabLayout.value = it }
         snapshot.disableMainTabSwipe?.let { disableMainTabSwipe.value = it }
         snapshot.disablePatchSelectionTabSwipe?.let { disablePatchSelectionTabSwipe.value = it }
         snapshot.preventAccidentalTouching?.let { preventAccidentalTouching.value = it }
@@ -1093,6 +1243,7 @@ class PreferencesManager(
         }
         snapshot.themePresetSelectionName?.let { themePresetSelectionName.value = it }
         snapshot.themePresetSelectionEnabled?.let { themePresetSelectionEnabled.value = it }
+        snapshot.expressiveDesign?.let { expressiveDesign.value = it }
         snapshot.theme?.let { theme.value = it }
         snapshot.appLanguage?.let { appLanguage.value = it }
     }
@@ -1134,6 +1285,7 @@ class PreferencesManager(
         snapshot.searchForUpdatesBackgroundInterval?.let {
             searchForUpdatesBackgroundInterval.value = it
         }
+        snapshot.backgroundRuntimeUpdateInterval?.let { backgroundRuntimeUpdateInterval.value = it }
         snapshot.searchForManagerUpdatesBackgroundInterval?.let {
             searchForManagerUpdatesBackgroundInterval.value = it
         }
@@ -1159,6 +1311,7 @@ class PreferencesManager(
         snapshot.skipSplitMergeSigning?.let { skipSplitMergeSigning.value = it }
         snapshot.disableApkSignatureChecks?.let { disableApkSignatureChecks.value = it }
         snapshot.injectSignatureMetadataAfterPatching?.let { injectSignatureMetadataAfterPatching.value = it }
+        snapshot.artMemoryLimit?.let { artMemoryLimit.value = it.coerceIn(512, 2048) }
         snapshot.useJvmRuntime?.let { useJvmRuntime.value = it }
         snapshot.morpheBytecodeMode?.let {
             morpheBytecodeMode.value = MorpheBytecodeMode.fromRuntimeValue(it)
@@ -1168,6 +1321,7 @@ class PreferencesManager(
         snapshot.removeGmsCoreForPrimaryMount?.let { removeGmsCoreForPrimaryMount.value = it }
         snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }
         snapshot.showPatcherMemoryUsageGraph?.let { showPatcherMemoryUsageGraph.value = it }
+        snapshot.pinPatcherResourceGraphs?.let { pinPatcherResourceGraphs.value = it }
         snapshot.compactPatcherResourceGraphs?.let { compactPatcherResourceGraphs.value = it }
         snapshot.showPatcherResourceGraphExtraInfo?.let { showPatcherResourceGraphExtraInfo.value = it }
         snapshot.showCompactPatcherResourceGraphExtraInfo?.let { showCompactPatcherResourceGraphExtraInfo.value = it }
@@ -1262,7 +1416,13 @@ class PreferencesManager(
         snapshot.patchSelectionSortSelectionMode?.let { patchSelectionSortSelectionMode.value = it }
         snapshot.patchSelectionActionOrder?.let { patchSelectionActionOrder.value = it }
         snapshot.patchSelectionHiddenActions?.let { patchSelectionHiddenActions.value = it }
+        if (snapshot.patchSelectionShowVersionTags != null || snapshot.patchSelectionShowOptionPreviews != null) {
+            patchSelectionDisplayRestoreFlags.value =
+                snapshot.patchSelectionDisplayRestoreFlags?.takeIf { it in 0..3 } ?: 0
+        }
         snapshot.patchSelectionShowVersionTags?.let { patchSelectionShowVersionTags.value = it }
+        snapshot.patchSelectionShowCustomSections?.let { patchSelectionShowCustomSections.value = it }
+        snapshot.patchSelectionExpandCategories?.let { applyPatchCategoriesExpanded(it) }
         snapshot.patchSelectionShowOptionPreviews?.let {
             patchSelectionShowOptionPreviews.value = it
         }
@@ -1280,6 +1440,10 @@ class PreferencesManager(
 
     private fun EditorContext.importDiscoverySettings(snapshot: SettingsSnapshot) {
         snapshot.patchBundleDiscoverySortMode?.let { patchBundleDiscoverySortMode.value = it }
+        snapshot.patchBundleDiscoveryFiltersExpanded?.let {
+            patchBundleDiscoveryState.value =
+                BundleDiscoveryState.withFiltersExpanded(patchBundleDiscoveryState.value, it)
+        }
         snapshot.youtubeAssetsSyncHeaderTransforms?.let { youtubeAssetsSyncHeaderTransforms.value = it }
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
         snapshot.downloaderPluginSourcesJson?.let { downloaderPluginSourcesJson.value = it }
@@ -1317,6 +1481,10 @@ class PreferencesManager(
             val preference = filePickerDirectoryPreferences[name] ?: return@forEach
             sanitizeImportedPickerDirectory(directory)?.let { preference.value = it }
         }
+        snapshot.minimalActionButtonGroups?.let { minimalActionButtonGroups.value = it }
+        snapshot.dashboardAppsActionOrder?.let { dashboardAppsActionOrder.value = it }
+        snapshot.dashboardBundlesActionOrder?.let { dashboardBundlesActionOrder.value = it }
+        snapshot.dashboardHiddenActions?.let { dashboardHiddenActions.value = it }
         snapshot.pathSelectorShowHiddenFiles?.let { pathSelectorShowHiddenFiles.value = it }
         snapshot.appSelectorFilterInstalledOnly?.let { appSelectorFilterInstalledOnly.value = it }
         snapshot.appSelectorFilterPatchesAvailable?.let { appSelectorFilterPatchesAvailable.value = it }
@@ -1347,10 +1515,12 @@ class PreferencesManager(
         snapshot.splitMergeInstalledFilterSingleApks?.let { splitMergeInstalledFilterSingleApks.value = it }
         snapshot.splitMergeAutoCollapseSteps?.let { splitMergeAutoCollapseSteps.value = it }
         snapshot.showSplitMergeMemoryUsageGraph?.let { showSplitMergeMemoryUsageGraph.value = it }
+        snapshot.pinSplitMergeResourceGraphs?.let { pinSplitMergeResourceGraphs.value = it }
         snapshot.compactSplitMergeResourceGraphs?.let { compactSplitMergeResourceGraphs.value = it }
         snapshot.showSplitMergeResourceGraphExtraInfo?.let { showSplitMergeResourceGraphExtraInfo.value = it }
         snapshot.showCompactSplitMergeResourceGraphExtraInfo?.let { showCompactSplitMergeResourceGraphExtraInfo.value = it }
         snapshot.splitMergeInformationExpanded?.let { splitMergeInformationExpanded.value = it }
+        snapshot.splitInstallerLogExpanded?.let { splitInstallerLogExpanded.value = it }
         snapshot.splitMergeAutoExpandRunningSteps?.let { splitMergeAutoExpandRunningSteps.value = it }
         snapshot.splitMergeAutoExpandRunningStepsExclusive?.let {
             splitMergeAutoExpandRunningStepsExclusive.value = it

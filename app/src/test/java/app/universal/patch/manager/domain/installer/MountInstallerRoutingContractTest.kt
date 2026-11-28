@@ -283,12 +283,22 @@ class MountInstallerRoutingContractTest {
     fun `renamed packages cannot resolve to mount`() {
         val manager = source("domain/installer/InstallerManager.kt")
         assertTrue(manager.contains("buildSequence(target, sourceFile, allowMount)"))
-        assertTrue(
-            manager.contains(
-                "if (!allowMount && baseInstallerToken(token) == Token.AutoSaved)"
-            )
-        )
+        assertTrue(manager.contains("if (rejectMountToken(token, target, allowMount))"))
         assertTrue(manager.contains("allowMount = false"))
+        assertTrue(rejectMountToken(InstallerManager.Token.AutoSaved, InstallerManager.InstallTarget.PATCHER, false))
+        assertTrue(rejectMountToken(InstallerManager.Token.RootPlayStore, InstallerManager.InstallTarget.PATCHER, false))
+    }
+
+    @Test
+    fun `stock installs reject root mount tokens even when mounting is allowed by default`() {
+        val stock = InstallerManager.InstallTarget.UNPATCHED_APP
+        val patcher = InstallerManager.InstallTarget.PATCHER
+        for (token in listOf(InstallerManager.Token.AutoSaved, InstallerManager.Token.RootPlayStore)) {
+            assertTrue(rejectMountToken(token, stock, allowMount = true))
+            assertFalse(rejectMountToken(token, patcher, allowMount = true))
+        }
+        assertFalse(rejectMountToken(InstallerManager.Token.Internal, stock, allowMount = true))
+        assertFalse(rejectMountToken(InstallerManager.Token.PlayStore, stock, allowMount = true))
     }
 
     @Test
@@ -312,8 +322,7 @@ class MountInstallerRoutingContractTest {
             .substringBefore("private fun availabilityFor(")
             .replace(Regex("\\s+"), " ")
         val rejectedPrimary = sequence.indexOf(
-            "val rejectedPrimaryMount = " +
-                "!allowMount && baseInstallerToken(primary) == Token.AutoSaved"
+            "val rejectedPrimaryMount = rejectMountToken(primary, target, allowMount)"
         )
         val earlyFallback = sequence.indexOf(
             "if (rejectedPrimaryMount && fallback != primary) add(fallback)"
@@ -545,7 +554,8 @@ class MountInstallerRoutingContractTest {
         assertTrue(batchActions.contains("installerTokenSelectableForPatchedOutput("))
         assertTrue(batchActions.contains("withContext(Dispatchers.IO)"))
         assertFalse(batchActions.contains("patchAvailabilityEnabled"))
-        assertTrue(batchActions.contains("val requestedPackageName = requestedItem.packageName"))
+        assertTrue(batchActions.contains("viewModel.supportsRootMountPackage(requestedItem.key)"))
+        assertTrue(batchActions.contains("viewModel.supportsRootMount(requestedItem.key)"))
         assertTrue(batchActions.contains("val requestedItemKey = Triple("))
         assertTrue(batchActions.contains("if (currentInstallerPickerItemKey != requestedItemKey) return false"))
         assertTrue(batchActions.contains("installerPickerSupportsRootMount = supportsRootMount"))
@@ -556,9 +566,9 @@ class MountInstallerRoutingContractTest {
         assertTrue(batchActions.contains("!requestedItem.useMount &&"))
         assertTrue(batchActions.contains("supportsRootMount = installerPickerSupportsRootMount"))
         assertTrue(batchActions.contains("!installerPickerSupportsRootMountPackage"))
-        assertTrue(batchViewModel.contains("suspend fun supportsRootMount(packageName: String)"))
-        assertTrue(batchViewModel.contains("coordinator.supportsRootMountModeOverride(packageName)"))
-        assertTrue(batchViewModel.contains("fun supportsRootMountPackage(packageName: String)"))
+        assertTrue(batchViewModel.contains("suspend fun supportsRootMount(key: String)"))
+        assertTrue(batchViewModel.contains("coordinator.supportsRootMountModeOverride(key)"))
+        assertTrue(batchViewModel.contains("fun supportsRootMountPackage(key: String)"))
         assertTrue(batchCoordinator.contains("private suspend fun patchSelectionSupportsRootMountModeOverride("))
         assertTrue(batchCoordinator.contains("if (item.hadPatchFailures) return false"))
         assertTrue(batchCoordinator.contains("item.selection.isCompatibleWithInstallerRules("))
@@ -593,7 +603,7 @@ class MountInstallerRoutingContractTest {
         assertTrue(batchCoordinator.contains("verifiedStockSet(extracted.map(packageStateReader::inspect))"))
         assertTrue(batchCoordinator.contains("hasStockSource = stockCandidates.isNotEmpty() || hasSplitStockSource"))
         assertTrue(batchCoordinator.contains("stockIdentityCompatible = stockSource != null || splitStockIdentityCompatible"))
-        assertTrue(batchCoordinator.contains("suspend fun supportsRootMountModeOverride(packageName: String)"))
+        assertTrue(batchCoordinator.contains("suspend fun supportsRootMountModeOverride(key: String)"))
         assertTrue(batchCoordinator.contains("patchedArtifact.splitName == null && patchedArtifact.topology == \"SINGLE\""))
         assertTrue(batchCoordinator.contains("patchedArtifact.splitName == null && patchedArtifact.topology == \"SPLIT\""))
         assertTrue(batchCoordinator.contains("patchedHasSigningCertificate = !patchedArtifact.signerSha256.isNullOrBlank()"))

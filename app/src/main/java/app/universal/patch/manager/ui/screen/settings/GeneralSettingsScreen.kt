@@ -1,5 +1,10 @@
 package app.universal.patch.manager.ui.screen.settings
 
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.FilledTonalButton
+import app.universal.patch.manager.ui.component.design.OutlinedButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Build
@@ -16,6 +21,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
@@ -39,19 +45,17 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -77,10 +81,14 @@ import androidx.compose.ui.unit.dp
 import app.universal.patch.manager.R
 import app.universal.patch.manager.data.platform.Filesystem
 import app.universal.patch.manager.domain.installer.RootInstaller
+import app.universal.patch.manager.domain.manager.DashboardListLayout
+import app.universal.patch.manager.ui.component.ConfirmDialog
 import app.universal.patch.manager.ui.component.AlertDialogExtended
 import app.universal.patch.manager.ui.component.AppTopBar
 import app.universal.patch.manager.ui.component.ColumnWithScrollbar
 import app.universal.patch.manager.ui.component.GroupHeader
+import app.universal.patch.manager.ui.component.ManagerIconImage
+import app.universal.patch.manager.ui.component.rememberSelectedManagerIcon
 import app.universal.patch.manager.ui.component.SettingsSectionIcons
 import app.universal.patch.manager.ui.component.patches.PathSelectorDialog
 import app.universal.patch.manager.ui.component.RememberedGetContent
@@ -95,6 +103,7 @@ import app.universal.patch.manager.ui.component.settings.SettingsSearchHighlight
 import app.universal.patch.manager.ui.model.navigation.Settings
 import app.universal.patch.manager.ui.viewmodel.AdvancedSettingsViewModel
 import app.universal.patch.manager.ui.viewmodel.GeneralSettingsViewModel
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
 import app.universal.patch.manager.ui.viewmodel.ThemePreset
 import app.universal.patch.manager.ui.screen.settings.SettingsSearchState
 import app.universal.patch.manager.util.toColorOrNull
@@ -115,16 +124,46 @@ import java.nio.file.Path
 import kotlin.math.roundToInt
 import app.universal.patch.manager.ui.component.CenteredDialogTitle
 
+internal enum class DesignChange(val expressive: Boolean) {
+    Classic(false), Expressive(true), ResetTheme(false)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GeneralSettingsScreen(
+internal fun GeneralSettingsScreen(
     onBackClick: () -> Unit,
+    onConfirmDesignChange: (DesignChange) -> Unit,
     viewModel: GeneralSettingsViewModel = koinViewModel(),
     actionButtonsViewModel: AdvancedSettingsViewModel = koinViewModel()
 ) {
     val prefs = viewModel.prefs
+    val expressive = LocalExpressiveDesign.current
+    var pendingDesignChange by rememberSaveable { mutableStateOf<DesignChange?>(null) }
+    pendingDesignChange?.let { change ->
+        val target = if (change.expressive) R.string.design_language_expressive else R.string.design_language_classic
+        ConfirmDialog(
+            onDismiss = { pendingDesignChange = null },
+            onConfirm = {
+                pendingDesignChange = null
+                onConfirmDesignChange(change)
+            },
+            title = stringResource(R.string.language_restart_title),
+            description = if (change == DesignChange.ResetTheme) {
+                stringResource(R.string.design_language_reset_restart_message)
+            } else {
+                stringResource(R.string.design_language_restart_message, stringResource(target))
+            },
+            icon = SettingsSectionIcons.Theme,
+            confirmLabelRes = R.string.language_restart_confirm
+        )
+    }
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
+    var showAppIconPicker by rememberSaveable { mutableStateOf(false) }
+    val managerIcon = rememberSelectedManagerIcon()
+    if (showAppIconPicker) {
+        ManagerAppIconDialog(onDismiss = { showAppIconPicker = false })
+    }
     var showAccentPicker by rememberSaveable { mutableStateOf(false) }
     var showThemeColorPicker by rememberSaveable { mutableStateOf(false) }
 
@@ -299,7 +338,7 @@ fun GeneralSettingsScreen(
             onDismiss = { showAccentPicker = false }
         )
     }
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
 
     Scaffold(
         topBar = {
@@ -312,18 +351,60 @@ fun GeneralSettingsScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         ColumnWithScrollbar(
+            thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            GroupHeader(
-                stringResource(R.string.navigation_tabs_section),
-                icon = SettingsSectionIcons.NavigationTabs
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.navigation_tabs_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.navigation_tabs_section),
+                    icon = SettingsSectionIcons.NavigationTabs,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
+                val appsTabLayout by prefs.appsTabLayout.getAsState()
+                val bundlesTabLayout by prefs.bundlesTabLayout.getAsState()
+                SettingsSearchHighlight(
+                    targetKey = R.string.apps_tab_layout,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    DashboardLayoutSetting(
+                        modifier = highlightModifier,
+                        title = R.string.apps_tab_layout,
+                        description = R.string.apps_tab_layout_description,
+                        value = appsTabLayout,
+                        onSelect = { layout ->
+                            viewModel.viewModelScope.launch { prefs.appsTabLayout.update(layout) }
+                        }
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.bundles_tab_layout,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    DashboardLayoutSetting(
+                        modifier = highlightModifier,
+                        title = R.string.bundles_tab_layout,
+                        description = R.string.bundles_tab_layout_description,
+                        value = bundlesTabLayout,
+                        onSelect = { layout ->
+                            viewModel.viewModelScope.launch { prefs.bundlesTabLayout.update(layout) }
+                        }
+                    )
+                }
+                ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
                     targetKey = R.string.hide_main_tab_labels,
                     activeKey = highlightTarget,
@@ -467,10 +548,17 @@ fun GeneralSettingsScreen(
                 }
             }
 
-            GroupHeader(
-                stringResource(R.string.action_buttons_section),
-                icon = SettingsSectionIcons.ActionButtonsPatchList
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.action_buttons_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.action_buttons_section),
+                    icon = SettingsSectionIcons.ActionButtonsPatchList,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -482,10 +570,27 @@ fun GeneralSettingsScreen(
                 )
             }
 
-            GroupHeader(
-                stringResource(R.string.theme_section),
-                icon = SettingsSectionIcons.Theme
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.theme_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.theme_section),
+                    icon = SettingsSectionIcons.Theme,
+                    modifier = highlightModifier
+                )
+            }
+
+            SettingsSearchHighlight(
+                targetKey = R.string.design_language,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                DesignLanguageSetting(modifier = highlightModifier) { useExpressive ->
+                    pendingDesignChange = if (useExpressive) DesignChange.Expressive else DesignChange.Classic
+                }
+            }
 
             val baseThemeSwatches = remember(supportsDynamicColor) {
                 buildList {
@@ -571,13 +676,13 @@ fun GeneralSettingsScreen(
                             Box(
                                 modifier = Modifier
                                     .size(32.dp)
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                                     .border(
                                         width = 1.dp,
                                         color = MaterialTheme.colorScheme.outline,
-                                        shape = RoundedCornerShape(12.dp)
+                                        shape = MaterialTheme.shapes.medium.withClassicCorner(12.dp)
                                     )
-                                    .background(previewColor, RoundedCornerShape(12.dp))
+                                    .background(previewColor, MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                             )
                         },
                         enabled = canAdjustThemeColor,
@@ -604,13 +709,13 @@ fun GeneralSettingsScreen(
                             Box(
                                 modifier = Modifier
                                     .size(32.dp)
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                                     .border(
                                         width = 1.dp,
                                         color = MaterialTheme.colorScheme.outline,
-                                        shape = RoundedCornerShape(12.dp)
+                                        shape = MaterialTheme.shapes.medium.withClassicCorner(12.dp)
                                     )
-                                    .background(previewColor, RoundedCornerShape(12.dp))
+                                    .background(previewColor, MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                             )
                         },
                         enabled = canAdjustAccentColor,
@@ -738,13 +843,13 @@ fun GeneralSettingsScreen(
                         Box(
                             modifier = Modifier
                                 .size(swatchSize)
-                                .clip(RoundedCornerShape(14.dp))
+                                .clip(MaterialTheme.shapes.medium.withClassicCorner(14.dp))
                                 .border(
                                     width = if (isSelected) 3.dp else 1.dp,
                                     color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                    shape = RoundedCornerShape(14.dp)
+                                    shape = MaterialTheme.shapes.medium.withClassicCorner(14.dp)
                                 )
-                                .background(preset, RoundedCornerShape(12.dp))
+                                .background(preset, MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                                 .clickable(enabled = canAdjustAccentColor) {
                                     viewModel.setCustomAccentColor(
                                         if (isSelected) null else preset
@@ -814,7 +919,10 @@ fun GeneralSettingsScreen(
                 onHighlightComplete = { highlightTarget = null }
             ) { highlightModifier ->
                 FilledTonalButton(
-                    onClick = { viewModel.resetThemeSettings() },
+                    onClick = {
+                        if (expressive) pendingDesignChange = DesignChange.ResetTheme
+                        else viewModel.resetThemeSettings()
+                    },
                     modifier = highlightModifier
                         .padding(horizontal = 16.dp)
                         .fillMaxWidth()
@@ -824,9 +932,39 @@ fun GeneralSettingsScreen(
             }
 
             GroupHeader(
-                stringResource(R.string.background_section),
-                icon = SettingsSectionIcons.Background
+                title = stringResource(R.string.manager_app_icons_section),
+                icon = SettingsSectionIcons.AppIcons
             )
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.manager_app_icon,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        headlineContent = stringResource(R.string.manager_app_icon),
+                        supportingContent = stringResource(managerIcon.titleRes),
+                        leadingContent = { ManagerIconImage(null, Modifier.size(32.dp), managerIcon) },
+                        modifier = highlightModifier,
+                        onClick = { showAppIconPicker = true }
+                    )
+                }
+            }
+
+            SettingsSearchHighlight(
+                targetKey = R.string.background_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.background_section),
+                    icon = SettingsSectionIcons.Background,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -881,7 +1019,7 @@ fun GeneralSettingsScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                                    shape = RoundedCornerShape(16.dp),
+                                    shape = MaterialTheme.shapes.large.withClassicCorner(16.dp),
                                     color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
                                 ) {
                                     AsyncImage(
@@ -970,6 +1108,74 @@ fun GeneralSettingsScreen(
                             }
                         }
                     )
+                }
+            }
+        }
+    }
+}
+
+/** Picks how a dashboard tab lists its entries: cards, compact rows or a grid. */
+@Composable
+private fun DashboardLayoutSetting(
+    modifier: Modifier,
+    @StringRes title: Int,
+    @StringRes description: Int,
+    value: DashboardListLayout,
+    onSelect: (DashboardListLayout) -> Unit
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(stringResource(title), style = MaterialTheme.typography.titleMedium)
+        Text(
+            stringResource(description),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(4.dp))
+        val options = DashboardListLayout.entries
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            options.forEachIndexed { index, option ->
+                val label = when (option) {
+                    DashboardListLayout.CARDS -> R.string.dashboard_layout_cards
+                    DashboardListLayout.COMPACT -> R.string.dashboard_layout_compact
+                    DashboardListLayout.GRID -> R.string.dashboard_layout_grid
+                }
+                SegmentedButton(
+                    selected = option == value,
+                    onClick = { if (option != value) onSelect(option) },
+                    shape = SegmentedButtonDefaults.itemShape(index, count = options.size)
+                ) {
+                    Text(stringResource(label), maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DesignLanguageSetting(modifier: Modifier, onSelect: (Boolean) -> Unit) {
+    val expressive = LocalExpressiveDesign.current
+    ExpressiveSettingsCard(
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(16.dp)
+    ) {
+        Column(modifier) {
+            Text(stringResource(R.string.design_language), style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                listOf(false, true).forEachIndexed { index, option ->
+                    val label = if (option) R.string.design_language_expressive else R.string.design_language_classic
+                    SegmentedButton(
+                        selected = option == expressive,
+                        onClick = { if (option != expressive) onSelect(option) },
+                        shape = SegmentedButtonDefaults.itemShape(index, count = 2)
+                    ) {
+                        Text(stringResource(label), textAlign = TextAlign.Center)
+                    }
                 }
             }
         }

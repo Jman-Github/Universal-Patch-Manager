@@ -6,18 +6,21 @@ package app.universal.patch.manager.patcher.runtime.jvm
 
 // Code adapted from Morphe, see third-party/NOTICE for more information.
 // https://github.com/MorpheApp/morphe-manager/commit/76b5477eca7a97b393a95cc5880d90d1ab47354a
+// https://github.com/MorpheApp/morphe-manager/pull/1474
 
 import android.app.Service
+import android.util.Log
 import android.content.Intent
 import android.os.ParcelFileDescriptor
 import android.os.Process
 import app.universal.patch.manager.patcher.host.RuntimeProtocol
-import app.universal.patch.manager.patcher.runtime.JvmHeapPolicy
+import java.util.concurrent.CompletableFuture
+import kotlin.system.exitProcess
 import kotlin.concurrent.thread
 
 /** Disposable worker: one ART or embedded JVM run, isolated from the manager. */
 open class PatcherService : Service() {
-    private var events: ParcelFileDescriptor? = null
+    private var running = false
     private var launch: JvmLaunch? = null
     private val binder = object : IPatcherService.Stub() {
         @Synchronized
@@ -28,42 +31,14 @@ open class PatcherService : Service() {
         }
 
         @Synchronized
-        override fun run(requestFile: String, events: ParcelFileDescriptor) {
+        override fun run(requestFile: String, events: ParcelFileDescriptor): Int {
             val launch = checkNotNull(this@PatcherService.launch) { "The runtime was not prepared" }
-            check(this@PatcherService.events == null) { "The worker runs once per process" }
-            this@PatcherService.events = events
+            check(!running) { "The worker runs once per process" }
+            running = true
+            if (launch.command.isNotEmpty()) {
+                return startJvm(launch, requestFile, events)
+            }
             thread(name = "BoundPatcherRuntime") {
-                if (launch.libjvm.isNotEmpty()) {
-                    try {
-                        // Reserve in the worker's address space, not in the manager's.
-                        val capacity = if (Process.is64Bit()) 0 else EmbeddedJvm.largestReservationMb(1152)
-                        val options = launch.options.map { option ->
-                            if (!Process.is64Bit() && option.startsWith("-Xmx") && option.endsWith("m")) {
-                                val requested = option.removePrefix("-Xmx").removeSuffix("m").toInt()
-                                val heap = JvmHeapPolicy.fit32Bit(requested, capacity)
-                                check(heap >= 512) { "Insufficient contiguous address space for the embedded JVM" }
-                                "-Xmx${heap}m"
-                            } else option
-                        }
-                        val code = EmbeddedJvm.start(launch.copy(options = options),
-                            listOf(requestFile, "/proc/self/fd/" + events.fd, launch.entryClass))
-                        check(code == 0) { "The embedded JVM could not start ($code)" }
-                        // HostMain exits this worker after completion or GC exhaustion.
-                        return@thread
-                    } catch (error: Throwable) {
-                        try {
-                            ParcelFileDescriptor.AutoCloseOutputStream(events).bufferedWriter().use { writer ->
-                                writer.write(RuntimeProtocol.encode(mapOf(
-                                    "type" to "startup_failed",
-                                    "error" to (error.message ?: error.javaClass.simpleName)
-                                )).toString())
-                                writer.newLine()
-                                writer.flush()
-                            }
-                        } finally { Process.killProcess(Process.myPid()) }
-                        return@thread
-                    }
-                }
                 try {
                     RuntimeProtocol.run(requestFile, "/proc/self/fd/" + events.fd) { params, send ->
                         android.system.Os.setenv("TMPDIR", params["cacheDir"] as? String ?: cacheDir.path, true)
@@ -80,8 +55,81 @@ open class PatcherService : Service() {
                     }
                 } finally { Process.killProcess(Process.myPid()) }
             }
+            return Process.myPid()
         }
     }
+
+    // Adapted from Morphe PR #1474 for UPM's file-based requests and JSON event pipe.
+    private fun startJvm(launch: JvmLaunch, requestFile: String, events: ParcelFileDescriptor): Int {
+        val (output, outputSink) = try {
+            ParcelFileDescriptor.createPipe()
+        } catch (error: Exception) {
+            events.close()
+            throw error
+        }
+        val tail = ArrayDeque<String>()
+        val reader = thread(isDaemon = true, name = "PatcherJvmOutput") {
+            runCatching {
+                ParcelFileDescriptor.AutoCloseInputStream(output).bufferedReader().useLines { lines ->
+                    lines.forEach { line ->
+                        Log.i(JVM_TAG, line.takeLast(MAX_OUTPUT_CHARS))
+                        synchronized(tail) {
+                            if (tail.size == MAX_OUTPUT_LINES) tail.removeFirst()
+                            tail.addLast(line.takeLast(MAX_OUTPUT_CHARS))
+                        }
+                    }
+                }
+            }
+        }
+        val started = CompletableFuture<Int>()
+        thread(name = "PatcherJvm") {
+            val pid = try {
+                outputSink.use { sink ->
+                    val command = launch.command + launch.options +
+                        listOf(launch.mainClass, requestFile, "/proc/self/fd/${events.fd}", launch.entryClass)
+                    EmbeddedJvm.spawn(command, events.fd, sink.fd)
+                }
+            } catch (error: Throwable) {
+                writeJvmEvent(events, "startup_failed", mapOf("error" to (error.message ?: error.javaClass.simpleName)))
+                started.complete(0)
+                return@thread
+            }
+            if (pid <= 0) {
+                writeJvmEvent(events, "startup_failed", mapOf("error" to "Could not fork the JVM (errno ${-pid})"))
+                started.complete(0)
+                return@thread
+            }
+            started.complete(pid)
+
+            // The child dies with this thread, including when cancellation unbinds the service.
+            val status = EmbeddedJvm.waitProcess(pid)
+            try {
+                reader.join(1000)
+                val diagnostics = synchronized(tail) { tail.toList() }
+                writeJvmEvent(events, "jvm_ended", mapOf("status" to status, "output" to diagnostics))
+            } finally {
+                exitProcess(status)
+            }
+        }
+        return started.get()
+    }
+
+    private fun writeJvmEvent(events: ParcelFileDescriptor, type: String, values: Map<String, Any?>) {
+        // The manager can close its end after cancellation or after reading "finished".
+        runCatching {
+            ParcelFileDescriptor.AutoCloseOutputStream(events).bufferedWriter().use {
+                it.write(RuntimeProtocol.encode(values + ("type" to type)).toString())
+                it.newLine()
+            }
+        }
+    }
+
+    private companion object {
+        const val JVM_TAG = "EmbeddedJvm"
+        const val MAX_OUTPUT_LINES = 30
+        const val MAX_OUTPUT_CHARS = 4096
+    }
+
     override fun onBind(intent: Intent) = binder
     override fun onUnbind(intent: Intent): Boolean {
         Process.killProcess(Process.myPid())

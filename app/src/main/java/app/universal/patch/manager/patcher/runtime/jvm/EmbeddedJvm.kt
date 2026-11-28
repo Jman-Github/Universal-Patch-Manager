@@ -4,22 +4,18 @@
  */
 package app.universal.patch.manager.patcher.runtime.jvm
 
-// Code adapted from Morphe, see third-party/NOTICE for more information.
-// https://github.com/MorpheApp/morphe-manager/pull/1223
+// Code adapted from Morphe, see third-party/NOTICE.txt for more information.
+// https://github.com/MorpheApp/morphe-manager/pull/1474
 
-/** One HotSpot VM lives alongside ART until the app process ends. */
 internal object EmbeddedJvm {
     init { System.loadLibrary("jvm_launcher") }
 
-    fun start(launch: JvmLaunch, args: List<String>) = startJvm(
-        launch.libjvm, launch.preload.toTypedArray(), launch.options.toTypedArray(),
-        launch.mainClass, args.toTypedArray()
-    )
+    /** Start the child on the same thread that will wait for it. */
+    fun spawn(command: List<String>, eventsFd: Int, outputFd: Int): Int =
+        spawnProcess(command.toTypedArray(), intArrayOf(eventsFd), outputFd)
 
-    external fun largestReservationMb(limitMb: Int): Int
+    /** Returns the exit code, 128 plus the terminating signal, or a negative errno. */
+    external fun waitProcess(pid: Int): Int
 
-    private external fun startJvm(
-        libjvm: String, preload: Array<String>, options: Array<String>,
-        mainClass: String, args: Array<String>
-    ): Int
+    private external fun spawnProcess(command: Array<String>, keepFds: IntArray, outputFd: Int): Int
 }

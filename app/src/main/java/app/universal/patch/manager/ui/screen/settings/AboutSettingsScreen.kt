@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.screen.settings
 
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.view.HapticFeedbackConstants
@@ -17,6 +19,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.Icons
@@ -28,8 +35,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -67,6 +72,7 @@ import app.universal.patch.manager.util.toast
 import app.universal.patch.manager.util.withHapticFeedback
 import app.universal.patch.manager.BuildConfig
 import app.universal.patch.manager.R
+import app.universal.patch.manager.ui.component.ManagerIconImage
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -86,10 +92,6 @@ fun AboutSettingsScreen(
     val managerVersionLabel = remember(managerVersion) {
         "v${managerVersion.removePrefix("v").removePrefix("V")}"
     }
-    // painterResource() is broken on release builds for some reason.
-    val icon = rememberDrawablePainter(drawable = remember {
-        AppCompatResources.getDrawable(context, R.drawable.ic_launcher_foreground)
-    })
 
     val githubButtons = remember(context) {
         listOf(
@@ -151,7 +153,7 @@ fun AboutSettingsScreen(
         }
     }
 
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
     Scaffold(
         topBar = {
             AppTopBar(
@@ -163,10 +165,11 @@ fun AboutSettingsScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         val scrollState = rememberScrollState()
-        Column(
+        app.universal.patch.manager.ui.component.ColumnWithScrollbar(
+            state = scrollState,
+            thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(scrollState)
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -188,9 +191,8 @@ fun AboutSettingsScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Image(
+                        ManagerIconImage(
                             modifier = Modifier.size(92.dp),
-                            painter = icon,
                             contentDescription = stringResource(R.string.app_name)
                         )
                         Text(
@@ -246,6 +248,57 @@ fun AboutSettingsScreen(
                             )
                         )
                     }
+                }
+            }
+
+            SettingsSearchHighlight(
+                targetKey = R.string.about_donate,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                ExpressiveSettingsCard(
+                    modifier = Modifier.fillMaxWidth().then(highlightModifier),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    ExpressiveSettingsItem(
+                        headlineContent = stringResource(R.string.about_donate),
+                        supportingContent = stringResource(R.string.about_donate_description),
+                        leadingContent = {
+                            Box(Modifier.size(56.dp)) {
+                                Surface(
+                                    modifier = Modifier.size(48.dp),
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.secondaryContainer
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Filled.Favorite, contentDescription = null,
+                                            modifier = Modifier.size(24.dp),
+                                            tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                                        AsyncImage(
+                                            model = "https://github.com/Jman-Github.png?size=128",
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize().clip(CircleShape)
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    modifier = Modifier.size(24.dp).align(Alignment.BottomEnd),
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primaryContainer
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Filled.Favorite, contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                            tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                                    }
+                                }
+                            }
+                        },
+                        onClick = {
+                            context.openUrl("https://github.com/sponsors/Jman-Github?frequency=one-time&sponsor=Jman-Github")
+                        }
+                    )
                 }
             }
 
@@ -328,9 +381,11 @@ fun AboutSettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(0.dp)
             ) {
+                // Expressive matches the Credits card: a title segment, then full-width rows.
+                val expressive = LocalExpressiveDesign.current
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = if (expressive) Modifier else Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(if (expressive) 0.dp else 4.dp)
                 ) {
                     SettingsSearchHighlight(
                         targetKey = R.string.licensing,
@@ -340,9 +395,10 @@ fun AboutSettingsScreen(
                         Text(
                             text = stringResource(R.string.licensing),
                             style = MaterialTheme.typography.titleMedium,
-                            modifier = highlightModifier
+                            modifier = (if (expressive) Modifier.padding(16.dp) else Modifier).then(highlightModifier)
                         )
                     }
+                    if (expressive) ExpressiveSettingsDivider()
                     licensingItems.forEachIndexed { index, item ->
                         SettingsSearchHighlight(
                             targetKey = item.titleRes,

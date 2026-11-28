@@ -16,6 +16,8 @@ import app.universal.patch.manager.R
 internal fun catalogRuntimeNotice(bundleType: String): Int? = when {
     bundleType.equals("ReVanced:v21", true) -> R.string.catalog_requires_v21
     bundleType.equals("ReVanced:v22", true) -> R.string.catalog_requires_v22
+    bundleType.equals("Morphe", true) -> R.string.catalog_requires_morphe
+    bundleType.equals("Reseam", true) -> R.string.catalog_requires_reseam
     else -> null
 }
 

@@ -1,8 +1,13 @@
 package app.universal.patch.manager.ui.component.patcher
 
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.ListItem
+import app.universal.patch.manager.ui.component.design.ListItemRadioButton
+import app.universal.patch.manager.ui.component.design.FilledTonalButton
+import app.universal.patch.manager.ui.component.design.OutlinedButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import android.graphics.drawable.Drawable
 import androidx.annotation.StringRes
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,20 +19,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Android
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,6 +38,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -46,11 +47,16 @@ import app.universal.patch.manager.R
 import app.universal.patch.manager.domain.installer.InstallerManager
 import app.universal.patch.manager.domain.manager.PreferencesManager
 import app.universal.patch.manager.util.toast
-import app.universal.patch.manager.util.transparentListItemColors
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import app.universal.patch.manager.ui.component.CenteredDialogTitle
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+
+@Composable
+internal fun installerOptionRowColors(enabled: Boolean) = ListItemDefaults.colors(
+    containerColor = Color.Transparent,
+    contentColor = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+)
 
 @Composable
 fun InstallerPickerDialog(
@@ -176,14 +182,16 @@ fun InstallerPickerDialog(
                     }
 
                     ListItem(
-                        modifier = Modifier.clickable(enabled = enabled) {
+                        selected = selected,
+                        enabled = enabled,
+                        onClick = {
                             if (enabled) {
                                 selectedToken = option.token
                                 installAsPlayStore =
                                     installerManager.usesPlayStoreSource(option.token)
                             }
                         },
-                        colors = transparentListItemColors,
+                        colors = installerOptionRowColors(enabled),
                         leadingContent = {
                             val iconDrawable = option.icon
                             val useInstallerIcon = iconDrawable != null && when (option.token) {
@@ -201,35 +209,21 @@ fun InstallerPickerDialog(
                                     enabled = enabled || selected
                                 )
                             } else {
-                                RadioButton(
-                                    selected = selected,
-                                    onClick = null,
-                                    enabled = enabled
-                                )
+                                ListItemRadioButton(selected = selected, enabled = enabled)
                             }
                         },
                         headlineContent = {
-                            Text(
-                                text = option.label,
-                                color = if (enabled) {
-                                    MaterialTheme.colorScheme.onSurface
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                }
-                            )
+                            Text(option.label)
                         },
                         supportingContent = {
                             if (desc != null || statusBadges.isNotEmpty()) {
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     desc?.let { line ->
-                                        Text(
-                                            text = line,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                        Text(line)
                                     }
                                     statusBadges.forEach { status ->
                                         Surface(
-                                            shape = RoundedCornerShape(8.dp),
+                                            shape = MaterialTheme.shapes.small.withClassicCorner(8.dp),
                                             color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
                                             tonalElevation = 0.dp
                                         ) {
@@ -353,12 +347,12 @@ private fun InstallerIcon(
     Box(
         modifier = Modifier
             .size(40.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
             .background(background)
             .border(
                 width = if (selected) 2.dp else 1.dp,
                 color = borderColor,
-                shape = RoundedCornerShape(12.dp)
+                shape = MaterialTheme.shapes.medium.withClassicCorner(12.dp)
             ),
         contentAlignment = Alignment.Center
     ) {

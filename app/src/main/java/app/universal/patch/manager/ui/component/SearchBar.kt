@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.component
 
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -92,7 +94,9 @@ fun SearchBar(
         SearchBar(
             modifier = Modifier
                 .align(Alignment.Center)
-                .statusBarsPadding(),
+                .statusBarsPadding()
+                // The pill keeps clear of the screen edges instead of running into them.
+                .padding(horizontal = 12.dp),
             state = searchBarState,
             inputField = collapsedInputField,
             colors = colors

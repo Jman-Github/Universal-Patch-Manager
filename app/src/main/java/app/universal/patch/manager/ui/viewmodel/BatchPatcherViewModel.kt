@@ -195,8 +195,12 @@ class BatchPatcherViewModel(
     val state = coordinator.state
     val plugins = pluginsRepository.loadedPluginsFlow
     val downloadedApps = downloadedAppRepository.getAll()
+    /** Key of the queue item an APK is being attached to. */
     var attachTarget: String? by mutableStateOf(null)
         private set
+
+    /** Key of the queue item whose patches are open for editing. */
+    var editingItemKey: String? = null
     private var pluginAction: ActiveBatchPluginAction? by mutableStateOf(null)
     private var pluginActivityRequestId: String? = null
     val activePluginAction get() = pluginAction?.plugin?.id
@@ -591,9 +595,9 @@ class BatchPatcherViewModel(
         }
     }
 
-    fun requestAttach(packageName: String) {
+    fun requestAttach(key: String) {
         cancelPluginAction()
-        attachTarget = packageName
+        attachTarget = key
     }
 
     fun dismissAttachSelector() {
@@ -606,7 +610,7 @@ class BatchPatcherViewModel(
     }
 
     fun onApkPicked(uri: Uri?) {
-        val packageName = attachTarget ?: return
+        val key = attachTarget ?: return
         if (uri == null) return
         viewModelScope.launch {
             val copied = withContext(Dispatchers.IO) { copyToWorkspace(uri) }
@@ -615,9 +619,9 @@ class BatchPatcherViewModel(
                 return@launch
             }
             val previousInput = state.value?.items
-                ?.firstOrNull { it.packageName == packageName }
+                ?.firstOrNull { it.key == key }
                 ?.input
-            val resolved = coordinator.attachApk(packageName, copied)
+            val resolved = coordinator.attachApk(key, copied)
             resolved?.let { syncManualQueueEntry(it, copied) }
             deleteOwnedInput(previousInput, except = copied)
             dismissAttachSelector()
@@ -625,7 +629,7 @@ class BatchPatcherViewModel(
     }
 
     fun onApkFilePicked(file: File?) {
-        val packageName = attachTarget ?: return
+        val key = attachTarget ?: return
         if (file == null) return
         viewModelScope.launch {
             val copied = withContext(Dispatchers.IO) { copyToWorkspace(file) }
@@ -634,9 +638,9 @@ class BatchPatcherViewModel(
                 return@launch
             }
             val previousInput = state.value?.items
-                ?.firstOrNull { it.packageName == packageName }
+                ?.firstOrNull { it.key == key }
                 ?.input
-            val resolved = coordinator.attachApk(packageName, copied)
+            val resolved = coordinator.attachApk(key, copied)
             resolved?.let { syncManualQueueEntry(it, copied) }
             deleteOwnedInput(previousInput, except = copied)
             dismissAttachSelector()
@@ -644,12 +648,16 @@ class BatchPatcherViewModel(
     }
 
     fun selectDownloadedApp(downloadedApp: DownloadedApp) {
-        val packageName = attachTarget ?: return
+        val key = attachTarget ?: return
+        val packageName = state.value?.items
+            ?.firstOrNull { it.key == key }
+            ?.packageName
+            ?: return
         if (downloadedApp.packageName != packageName) return
         cancelPluginAction()
         viewModelScope.launch {
             val previousInput = state.value?.items
-                ?.firstOrNull { it.packageName == packageName }
+                ?.firstOrNull { it.key == key }
                 ?.input
             runCatching {
                 val file = downloadedAppRepository.getApkFileForApp(downloadedApp)
@@ -676,7 +684,7 @@ class BatchPatcherViewModel(
                     }
                 }
                 val resolved = coordinator.attachSource(
-                    packageName,
+                    key,
                     SelectedApp.Local(
                         packageName = packageName,
                         version = packageInfo?.versionName
@@ -711,15 +719,15 @@ class BatchPatcherViewModel(
     }
 
     fun searchUsingPlugin(plugin: LoadedDownloaderPlugin) {
-        val packageName = attachTarget ?: return
-        val requestedVersion = state.value?.items
-            ?.firstOrNull { it.packageName == packageName }
-            ?.version
+        val key = attachTarget ?: return
+        val target = state.value?.items?.firstOrNull { it.key == key } ?: return
+        val packageName = target.packageName
+        val requestedVersion = target.version
         cancelPluginAction()
         val actionToken = Any()
         val actionJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             val previousInput = state.value?.items
-                ?.firstOrNull { it.packageName == packageName }
+                ?.firstOrNull { it.key == key }
                 ?.input
             try {
                 val scope = object : GetScope {
@@ -753,7 +761,7 @@ class BatchPatcherViewModel(
                     requestedVersion = requestedVersion
                 )
                 val resolved = coordinator.attachSource(
-                    packageName,
+                    key,
                     SelectedApp.Download(
                         packageName = packageName,
                         version = metadata.versionName,
@@ -817,40 +825,41 @@ class BatchPatcherViewModel(
         request.completion.complete(false)
     }
 
-    fun toggleExcluded(packageName: String) = coordinator.toggleExcluded(packageName)
-    fun forceVersion(packageName: String) = coordinator.forceVersion(packageName)
+    // Item actions take the queue item's key, which tells apart entries for the same app.
+    fun toggleExcluded(key: String) = coordinator.toggleExcluded(key)
+    fun forceVersion(key: String) = coordinator.forceVersion(key)
     fun setPolicy(policy: BatchInstallPolicy) = coordinator.setPolicy(policy)
-    fun reorder(packageNames: List<String>) {
-        coordinator.reorder(packageNames)
-        if (manualPlan) manualQueue.reorder(packageNames)
+    fun reorder(keys: List<String>) {
+        coordinator.reorder(keys)
+        if (manualPlan) manualQueue.reorder(keys)
     }
     fun start() = coordinator.start()
-    fun install(packageName: String) = coordinator.install(packageName)
-    fun installWithToken(packageName: String, token: InstallerManager.Token) =
-        coordinator.install(packageName, token)
+    fun install(key: String) = coordinator.install(key)
+    fun installWithToken(key: String, token: InstallerManager.Token) =
+        coordinator.install(key, token)
     fun installAll() = coordinator.installAll()
-    suspend fun supportsRootMount(packageName: String): Boolean =
-        coordinator.supportsRootMountModeOverride(packageName)
-    fun supportsRootMountPackage(packageName: String): Boolean {
-        val item = state.value?.items?.firstOrNull { it.packageName == packageName }
+    suspend fun supportsRootMount(key: String): Boolean =
+        coordinator.supportsRootMountModeOverride(key)
+    fun supportsRootMountPackage(key: String): Boolean {
+        val item = state.value?.items?.firstOrNull { it.key == key }
             ?: return false
         return item.patchedFile
             ?.takeIf(File::isFile)
             ?.let(pm::getPackageInfo)
             ?.packageName == item.packageName
     }
-    fun open(packageName: String) {
+    fun open(key: String) {
         state.value?.items
-            ?.firstOrNull { it.packageName == packageName }
+            ?.firstOrNull { it.key == key }
             ?.installedPackageName
             ?.let(pm::launch)
     }
 
     fun savePatchedAppForLater(
-        packageName: String,
+        key: String,
         onResult: (Boolean) -> Unit = {}
     ) = viewModelScope.launch {
-        val success = coordinator.saveForLater(packageName)
+        val success = coordinator.saveForLater(key)
         app.toast(
             app.getString(
                 if (success) R.string.patched_app_saved_toast
@@ -874,7 +883,7 @@ class BatchPatcherViewModel(
     }
 
     fun exportPatchedAppToUri(
-        packageName: String,
+        key: String,
         target: Uri?,
         onResult: (Boolean) -> Unit = {}
     ) = viewModelScope.launch {
@@ -882,7 +891,7 @@ class BatchPatcherViewModel(
             onResult(false)
             return@launch
         }
-        val source = patchedFile(packageName)
+        val source = patchedFile(key)
         val success = source != null && runCatching {
             withContext(Dispatchers.IO) {
                 app.contentResolver.openOutputStream(target)
@@ -900,11 +909,11 @@ class BatchPatcherViewModel(
     }
 
     fun exportPatchedAppToPath(
-        packageName: String,
+        key: String,
         target: Path,
         onResult: (Boolean) -> Unit = {}
     ) = viewModelScope.launch {
-        val source = patchedFile(packageName)
+        val source = patchedFile(key)
         val success = source != null && runCatching {
             withContext(Dispatchers.IO) {
                 target.parent?.let { Files.createDirectories(it) }
@@ -924,8 +933,8 @@ class BatchPatcherViewModel(
         onResult(success)
     }
 
-    fun getLogContent(context: Context, packageName: String): String {
-        val item = state.value?.items?.firstOrNull { it.packageName == packageName }
+    fun getLogContent(context: Context, key: String): String {
+        val item = state.value?.items?.firstOrNull { it.key == key }
             ?: return context.getString(R.string.batch_patch_details_unavailable)
         val selectedPatches = item.selection.values.flatten().sorted()
         val logMessages = item.logLines.map { line -> line.substringAfter("]: ", line) }
@@ -992,7 +1001,7 @@ class BatchPatcherViewModel(
 
     fun exportLogsToUri(
         context: Context,
-        packageName: String,
+        key: String,
         target: Uri?,
         onResult: (Boolean) -> Unit = {}
     ) = viewModelScope.launch {
@@ -1000,7 +1009,7 @@ class BatchPatcherViewModel(
             onResult(false)
             return@launch
         }
-        val content = getLogContent(context, packageName)
+        val content = getLogContent(context, key)
         val success = runCatching {
             withContext(Dispatchers.IO) {
                 app.contentResolver.openOutputStream(target, "wt")
@@ -1020,11 +1029,11 @@ class BatchPatcherViewModel(
 
     fun exportLogsToPath(
         context: Context,
-        packageName: String,
+        key: String,
         target: Path,
         onResult: (Boolean) -> Unit = {}
     ) = viewModelScope.launch {
-        val content = getLogContent(context, packageName)
+        val content = getLogContent(context, key)
         val success = runCatching {
             withContext(Dispatchers.IO) {
                 target.parent?.let { Files.createDirectories(it) }
@@ -1045,21 +1054,21 @@ class BatchPatcherViewModel(
         onResult(success)
     }
 
-    private fun patchedFile(packageName: String): File? =
+    private fun patchedFile(key: String): File? =
         state.value?.items
-            ?.firstOrNull { it.packageName == packageName }
+            ?.firstOrNull { it.key == key }
             ?.patchedFile
             ?.takeIf(File::isFile)
 
     fun updateConfiguration(
-        packageName: String,
+        key: String,
         patches: PatchSelection?,
         options: Options
     ) {
         val selection = patches.orEmpty()
-        coordinator.updateConfiguration(packageName, selection, options)
+        coordinator.updateConfiguration(key, selection, options)
         if (manualPlan) {
-            manualQueue.updateConfiguration(packageName, selection, options)
+            manualQueue.updateConfiguration(key, selection, options)
         }
     }
 
@@ -1160,11 +1169,15 @@ class BatchPatcherViewModel(
         } else {
             input
         }
+        // Replace this item's own entry, keeping its signature workflow and saved-app source.
         manualQueue.upsert(
             input = queueInput,
             selection = item.selection,
             options = item.options,
             useMount = item.useMount,
+            signatureWorkflow = item.signatureWorkflow,
+            sourceEntryKey = item.sourceEntryKey,
+            key = item.key,
         )
     }
 

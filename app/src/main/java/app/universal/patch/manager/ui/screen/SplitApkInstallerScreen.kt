@@ -1,5 +1,11 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.theme.restingShadow
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.OutlinedButton
+import app.universal.patch.manager.ui.component.design.Button
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentResolver
@@ -22,10 +28,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import app.universal.patch.manager.ui.component.Scrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.Storage
@@ -40,15 +46,11 @@ import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -63,7 +65,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -96,6 +97,7 @@ import java.nio.file.Path
 import kotlin.io.path.isDirectory
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import app.universal.patch.manager.ui.component.CenteredDialogTitle
 
@@ -362,7 +364,6 @@ fun SplitApkInstallerScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.75f)
-                            .height(4.dp)
                     )
                 }
             }
@@ -392,12 +393,12 @@ fun SplitApkInstallerScreen(
             )
         }
     ) { paddingValues ->
-        Column(
+        app.universal.patch.manager.ui.component.ColumnWithScrollbar(
+            state = contentScrollState,
             modifier = Modifier
                 .padding(paddingValues)
-                .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-                .verticalScroll(contentScrollState),
+                .fillMaxSize(),
+            contentModifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Card(
@@ -468,7 +469,6 @@ fun SplitApkInstallerScreen(
 
             SplitInstallerRawLog(
                 entries = state.logEntries,
-                logRevision = state.logRevision,
                 logSessionId = state.logSessionId,
                 scrollState = logScrollState,
                 showActions = state.logComplete &&
@@ -503,7 +503,6 @@ fun SplitApkInstallerScreen(
 @Composable
 private fun SplitInstallerRawLog(
     entries: List<String>,
-    logRevision: Long,
     logSessionId: Long,
     scrollState: ScrollState,
     showActions: Boolean,
@@ -511,8 +510,10 @@ private fun SplitInstallerRawLog(
     onExport: () -> Unit
 ) {
     var followLatest by remember(logSessionId) { mutableStateOf(true) }
-    var logExpanded by rememberSaveable(logSessionId) { mutableStateOf(true) }
-    val latestLogRevision by rememberUpdatedState(logRevision)
+    val prefs = koinInject<PreferencesManager>()
+    val coroutineScope = rememberCoroutineScope()
+    // Saved, so the log stays open or closed across installs and goes into settings backups.
+    val logExpanded by prefs.splitInstallerLogExpanded.getAsState()
     val hasLogEntries by rememberUpdatedState(entries.isNotEmpty())
     val isLogDragged by scrollState.interactionSource.collectIsDraggedAsState()
     val showJumpToLatest by remember(scrollState, logSessionId) {
@@ -536,13 +537,16 @@ private fun SplitInstallerRawLog(
     }
 
     LaunchedEffect(scrollState, logSessionId) {
-        snapshotFlow { Triple(latestLogRevision, followLatest, logExpanded) }
-            .collect { (_, shouldFollowLatest, expanded) ->
-                if (shouldFollowLatest && expanded && hasLogEntries) {
-                    withFrameNanos { }
-                    scrollState.scrollTo(scrollState.maxValue)
-                }
+        // The scroll limit is updated by layout after new lines wrap or the viewport changes.
+        snapshotFlow {
+            scrollState.maxValue.takeIf {
+                it != Int.MAX_VALUE && followLatest && logExpanded && hasLogEntries && !isLogDragged
             }
+        }.collectLatest { end ->
+            if (end != null && scrollState.value != end) {
+                scrollState.scrollTo(end)
+            }
+        }
     }
 
     Card(
@@ -558,7 +562,7 @@ private fun SplitInstallerRawLog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(enabled = hasLogEntries) {
-                        logExpanded = !logExpanded
+                        coroutineScope.launch { prefs.splitInstallerLogExpanded.update(!logExpanded) }
                     },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
@@ -597,7 +601,8 @@ private fun SplitInstallerRawLog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 96.dp, max = 220.dp)
-                                .verticalScroll(scrollState),
+                                .verticalScroll(scrollState)
+                                .padding(end = 8.dp),
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 11.sp,
@@ -605,6 +610,9 @@ private fun SplitInstallerRawLog(
                             ),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                    Box(Modifier.matchParentSize()) {
+                        Scrollbar(scrollState, Modifier.align(Alignment.CenterEnd))
                     }
                     if (showJumpToLatest) {
                         SmallFloatingActionButton(
@@ -770,9 +778,9 @@ private fun SplitInstallerModeCard(
     onClick: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
         tonalElevation = 2.dp,
-        shadowElevation = 6.dp,
+        shadowElevation = 6.dp.restingShadow(),
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = enabled, onClick = onClick)
@@ -785,7 +793,7 @@ private fun SplitInstallerModeCard(
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Surface(
-                shape = RoundedCornerShape(14.dp),
+                shape = MaterialTheme.shapes.medium.withClassicCorner(14.dp),
                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (enabled) 0.5f else 0.3f),
                 modifier = Modifier.size(52.dp)
             ) {

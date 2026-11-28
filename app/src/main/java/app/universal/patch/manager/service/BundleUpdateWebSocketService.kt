@@ -1,5 +1,6 @@
 package app.universal.patch.manager.service
 
+import app.universal.patch.manager.util.applyManagerNotificationIcon
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,7 +8,6 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.graphics.drawable.Icon
 import android.os.IBinder
 import app.universal.patch.manager.R
 import app.universal.patch.manager.MainActivity
@@ -85,7 +85,7 @@ class BundleUpdateWebSocketService : Service() {
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.bundle_update_websocket_notification_title))
             .setContentText(body)
-            .setSmallIcon(Icon.createWithResource(this, R.drawable.ic_notification_status))
+            .applyManagerNotificationIcon(this)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setAutoCancel(false)

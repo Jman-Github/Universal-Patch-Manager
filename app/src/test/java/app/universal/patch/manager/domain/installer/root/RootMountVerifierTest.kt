@@ -61,6 +61,21 @@ class RootMountVerifierTest {
     }
 
     @Test
+    fun `competing ReVanced mount is cleared only when adopting its stock target`() = runBlocking {
+        val source = "${RootPaths.competingModule(PACKAGE)}/$PACKAGE.apk"
+        val shell = MountShell(TARGET, source = source)
+        val verifier = verifier(shell)
+
+        verifier.removeAllUrvMounts(PACKAGE, setOf(TARGET), allowLazyRecovery = true)
+        assertTrue(shell.mounted)
+
+        verifier.removeAllUrvMounts(
+            PACKAGE, setOf(TARGET), allowLazyRecovery = true, includeCompeting = true
+        )
+        assertFalse(shell.mounted)
+    }
+
+    @Test
     fun `normal unmount is verified without lazy fallback`() = runBlocking {
         val target = "/data/app/com.example.app/base.apk"
         val shell = MountShell(target)
@@ -395,8 +410,12 @@ class RootMountVerifierTest {
         assertTrue(command.contains("pidof zygote64 2>/dev/null || true"))
         assertTrue(command.contains("pidof zygote 2>/dev/null || true"))
         assertTrue(command.contains("validate_zygote \"${'$'}pid\" || continue"))
-        assertTrue(command.contains("namespace_has_owned_layer"))
-        assertTrue(command.contains("if namespace_has_owned_layer \"${'$'}pid\" \"${'$'}target\"; then"))
+        assertTrue(command.contains("namespace_layer_counts"))
+        assertTrue(
+            command.contains(
+                """if ! visible_layer_is_owned "${'$'}pid" "${'$'}target" "${'$'}counts" "${'$'}@"; then"""
+            )
+        )
         assertTrue(command.contains("Foreign ${'$'}namespace_label mount covers a UPM layer"))
         assertTrue(command.contains("Failed to unmount ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid"))
         assertTrue(command.contains("nsenter --mount=\"/proc/${'$'}pid/ns/mnt\" -- umount"))
@@ -412,7 +431,7 @@ class RootMountVerifierTest {
         RootMountNamespaces(shell, managerPid = 4242).removeOwned(PACKAGE, setOf(TARGET))
 
         val command = shell.commands.single()
-        assertTrue(command.contains("if [ -r /proc/4242/ns/mnt ]; then cleanup_namespace 4242 Manager; fi"))
+        assertTrue(command.contains("if [ -r /proc/4242/ns/mnt ]; then cleanup_namespace 4242 Manager ${shellQuote(TARGET)}; fi"))
         assertTrue(command.contains("cleanup_namespace \"${'$'}pid\" Zygote"))
     }
 
@@ -425,7 +444,7 @@ class RootMountVerifierTest {
         val command = shell.commands.single()
         assertTrue(command.contains("if [ 1 = 1 ]; then"))
         assertTrue(command.contains("max_attempts=16"))
-        assertTrue(command.contains("Failed to re-inspect ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid"))
+        assertTrue(command.contains("visible_layer_is_owned \"${'$'}pid\" \"${'$'}target\" \"${'$'}counts\" \"${'$'}@\" ||"))
         assertTrue(command.contains("${'$'}namespace_label mount ownership changed before lazy unmount"))
         assertTrue(command.contains("nsenter --mount=\"/proc/${'$'}pid/ns/mnt\" -- umount -l"))
         assertTrue(command.contains("URV_LAZY_UNMOUNT:%s"))

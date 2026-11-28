@@ -1,11 +1,18 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.ListItem
+import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsDivider
+import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsCard
+import app.universal.patch.manager.ui.component.design.ListItemRadioButton
+import app.universal.patch.manager.ui.component.design.TextButton
+import app.universal.patch.manager.util.openUrl
 import android.content.pm.PackageInfo
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -35,7 +42,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -43,9 +49,6 @@ import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -102,6 +105,7 @@ import androidx.compose.ui.Alignment
 import app.universal.patch.manager.util.EventEffect
 import app.universal.patch.manager.util.Options
 import app.universal.patch.manager.util.PatchSelection
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
 import app.universal.patch.manager.util.enabled
 import app.universal.patch.manager.util.isAllowedApkFile
 import app.universal.patch.manager.util.toast
@@ -162,10 +166,12 @@ fun SelectedAppInfoScreen(
                             notice.patchNames.size
                         )
                     )
-                    LazyColumn(
+                    app.universal.patch.manager.ui.component.LazyColumnWithScrollbar(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(max = 280.dp),
+                        thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+                        reserveScrollbarSpace = true,
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(notice.patchNames) { patchName ->
@@ -313,9 +319,8 @@ fun SelectedAppInfoScreen(
         patches.entries.mapNotNull { (bundleUid, patchNames) ->
             if (patchNames.isEmpty()) return@mapNotNull null
             val bundle = bundles.firstOrNull { it.uid == bundleUid }
-            val patchInfos = bundle?.patches
+            val patchInfos = bundle?.forSelection()?.patches
                 ?.filter { it.name in patchNames }
-                ?.distinctBy { it.name }
                 ?.sortedBy { it.name }
                 ?: emptyList()
             val missingNames = patchNames
@@ -396,7 +401,7 @@ fun SelectedAppInfoScreen(
         )
     }
 
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
 
     LaunchedEffect(profileLaunchState, vm.selectedApp) {
         val launchState = profileLaunchState ?: return@LaunchedEffect
@@ -490,6 +495,7 @@ fun SelectedAppInfoScreen(
                 labelOverride = vm.selectedAppInfoLabelOverride,
                 iconOverride = vm.selectedAppInfoIconOverride,
                 placeholderLabel = packageName,
+                packageName = packageName,
                 placeholderMetaLines = 0,
                 showExtraContentWhenLoading = true
             ) {
@@ -498,6 +504,7 @@ fun SelectedAppInfoScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
+                val concreteVersion = version?.takeUnless { bundleTargetsAllVersions && selectedBundleUid != null }
                 val versionLabel = when {
                     bundleTargetsAllVersions && selectedBundleUid != null ->
                         stringResource(R.string.bundle_version_all_versions)
@@ -507,136 +514,155 @@ fun SelectedAppInfoScreen(
                 AppVersion(
                     appInfo = vm.selectedAppInfo,
                     versionName = versionLabel,
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
+                    prefixVersion = concreteVersion != null,
+                    copyVersionOnLongPress = concreteVersion != null
                 )
             }
 
-            PageItem(
-                R.string.patch_selector_item,
-                stringResource(
-                    R.string.patch_selector_item_description,
-                    selectedPatchCount
-                ),
-                useCardStyle = useCardStylePageItems,
-                onClick = {
-                    composableScope.launch {
-                        val optionsSnapshot = vm.awaitOptions()
-                        onPatchSelectorClick(
-                            resolveNavigationVersion(vm.selectedApp),
-                            vm.getCustomPatches(
-                                bundles,
-                                allowIncompatiblePatches
-                            ),
-                            optionsSnapshot
-                        )
-                    }
-                }
-            )
-            if (vm.hasRoot && patchAvailabilityEnabled) {
-                PageItem(
-                    R.string.patch_mode_title,
-                    stringResource(
-                        if (vm.usingMountInstall) R.string.patch_mode_mount
-                        else R.string.patch_mode_standard
-                    ),
-                    useCardStyle = useCardStylePageItems,
-                    onClick = { showPatchModeDialog = true }
-                )
-            }
-            if (bundleRecommendationDetails.isNotEmpty()) {
-                val selectedDetail = bundleRecommendationDetails.firstOrNull { it.bundleUid == selectedBundleUid }
-                val overrideVersion = selectedBundleOverride
-                val bundleSummary = if (selectedDetail != null) {
-                    var versionIsExperimental = false
-                    val versionLabel = when {
-                        overrideVersion != null ->
-                            suggestedVersionLabel(
-                                versionName = overrideVersion,
-                                versionCodes = selectedDetail.versionCodesFor(overrideVersion),
-                                displayVersion = stringResource(R.string.version_label, overrideVersion)
-                            ).also {
-                                versionIsExperimental = selectedDetail.otherSupportedVersions
-                                    .firstOrNull { info -> info.version == overrideVersion }
-                                    ?.experimental == true
-                            }
-
-                        selectedDetail.recommendedVersion != null ->
-                            suggestedVersionLabel(
-                                versionName = selectedDetail.recommendedVersion,
-                                versionCodes = selectedDetail.recommendedVersionCodes,
-                                displayVersion = stringResource(
-                                    R.string.version_label,
-                                    selectedDetail.recommendedVersion
+            // Expressive groups the patch setup rows into one segmented card.
+            val pageItems = buildList<@Composable () -> Unit> {
+                add {
+                    PageItem(
+                        R.string.patch_selector_item,
+                        stringResource(
+                            R.string.patch_selector_item_description,
+                            selectedPatchCount
+                        ),
+                        useCardStyle = useCardStylePageItems,
+                        onClick = {
+                            composableScope.launch {
+                                val optionsSnapshot = vm.awaitOptions()
+                                onPatchSelectorClick(
+                                    resolveNavigationVersion(vm.selectedApp),
+                                    vm.getCustomPatches(
+                                        bundles,
+                                        allowIncompatiblePatches
+                                    ),
+                                    optionsSnapshot
                                 )
-                            ).also {
-                                versionIsExperimental = selectedDetail.recommendedVersionExperimental
                             }
-
-                        selectedDetail.supportsAllVersions ->
-                            stringResource(R.string.bundle_version_all_versions)
-
-                        selectedDetail.otherSupportedVersions.isNotEmpty() -> {
-                            val firstVersion = selectedDetail.otherSupportedVersions.first()
-                            versionIsExperimental = firstVersion.experimental
-                            suggestedVersionLabel(
-                                versionName = firstVersion.version,
-                                versionCodes = firstVersion.versionCodes,
-                                displayVersion = stringResource(
-                                    R.string.version_label,
-                                    firstVersion.version
-                                )
-                            )
                         }
-
-                        else -> stringResource(R.string.bundle_version_no_version)
-                    }
-                    val displayVersionLabel = if (versionIsExperimental) {
-                        "$versionLabel (${stringResource(R.string.patch_bundle_experimental_version_label)})"
-                    } else {
-                        versionLabel
-                    }
-                    stringResource(
-                        R.string.bundle_version_item_description_selected,
-                        selectedDetail.name,
-                        displayVersionLabel
                     )
-                } else {
-                    stringResource(R.string.bundle_version_item_description_default)
                 }
-                PageItem(
-                    R.string.bundle_version_item,
-                    bundleSummary,
-                    useCardStyle = useCardStylePageItems,
-                    onClick = { showBundleRecommendationDialog = true }
-                )
-            }
-            PageItem(
-                R.string.apk_source_selector_item,
-                when (val app = vm.selectedApp) {
-                    is SelectedApp.Search -> stringResource(R.string.apk_source_auto)
-                    is SelectedApp.Installed -> stringResource(R.string.apk_source_installed)
-                    is SelectedApp.Download -> stringResource(
-                        R.string.apk_source_downloader,
-                        plugins.firstOrNull { it.id == app.data.pluginId }?.name
-                            ?: plugins.firstOrNull {
-                                it.packageName == app.data.pluginPackageName &&
-                                    (app.data.pluginClassName == null || it.className == app.data.pluginClassName)
+                if (vm.hasRoot && patchAvailabilityEnabled) add {
+                    PageItem(
+                        R.string.patch_mode_title,
+                        stringResource(
+                            if (vm.usingMountInstall) R.string.patch_mode_mount
+                            else R.string.patch_mode_standard
+                        ),
+                        useCardStyle = useCardStylePageItems,
+                        onClick = { showPatchModeDialog = true }
+                    )
+                }
+                if (bundleRecommendationDetails.isNotEmpty()) add {
+                    val selectedDetail = bundleRecommendationDetails.firstOrNull { it.bundleUid == selectedBundleUid }
+                    val overrideVersion = selectedBundleOverride
+                    val bundleSummary = if (selectedDetail != null) {
+                        var versionIsExperimental = false
+                        val versionLabel = when {
+                            overrideVersion != null ->
+                                suggestedVersionLabel(
+                                    versionName = overrideVersion,
+                                    versionCodes = selectedDetail.versionCodesFor(overrideVersion),
+                                    displayVersion = stringResource(R.string.version_label, overrideVersion)
+                                ).also {
+                                    versionIsExperimental = selectedDetail.otherSupportedVersions
+                                        .firstOrNull { info -> info.version == overrideVersion }
+                                        ?.experimental == true
+                                }
+
+                            selectedDetail.recommendedVersion != null ->
+                                suggestedVersionLabel(
+                                    versionName = selectedDetail.recommendedVersion,
+                                    versionCodes = selectedDetail.recommendedVersionCodes,
+                                    displayVersion = stringResource(
+                                        R.string.version_label,
+                                        selectedDetail.recommendedVersion
+                                    )
+                                ).also {
+                                    versionIsExperimental = selectedDetail.recommendedVersionExperimental
+                                }
+
+                            selectedDetail.supportsAllVersions ->
+                                stringResource(R.string.bundle_version_all_versions)
+
+                            selectedDetail.otherSupportedVersions.isNotEmpty() -> {
+                                val firstVersion = selectedDetail.otherSupportedVersions.first()
+                                versionIsExperimental = firstVersion.experimental
+                                suggestedVersionLabel(
+                                    versionName = firstVersion.version,
+                                    versionCodes = firstVersion.versionCodes,
+                                    displayVersion = stringResource(
+                                        R.string.version_label,
+                                        firstVersion.version
+                                    )
+                                )
                             }
-                            ?.name
-                            ?: app.data.pluginPackageName
-                    )
 
-                    is SelectedApp.Local ->
-                        if (app.temporary)
-                            stringResource(R.string.apk_source_local)
-                        else
-                            stringResource(R.string.apk_source_downloaded)
-                },
-                useCardStyle = useCardStylePageItems,
-                onClick = {
-                    vm.showSourceSelector()
+                            else -> stringResource(R.string.bundle_version_no_version)
+                        }
+                        val displayVersionLabel = if (versionIsExperimental) {
+                            "$versionLabel (${stringResource(R.string.patch_bundle_experimental_version_label)})"
+                        } else {
+                            versionLabel
+                        }
+                        stringResource(
+                            R.string.bundle_version_item_description_selected,
+                            selectedDetail.name,
+                            displayVersionLabel
+                        )
+                    } else {
+                        stringResource(R.string.bundle_version_item_description_default)
+                    }
+                    PageItem(
+                        R.string.bundle_version_item,
+                        bundleSummary,
+                        useCardStyle = useCardStylePageItems,
+                        onClick = { showBundleRecommendationDialog = true }
+                    )
                 }
-            )
+                add {
+                    PageItem(
+                        R.string.apk_source_selector_item,
+                        when (val app = vm.selectedApp) {
+                            is SelectedApp.Search -> stringResource(R.string.apk_source_auto)
+                            is SelectedApp.Installed -> stringResource(R.string.apk_source_installed)
+                            is SelectedApp.Download -> stringResource(
+                                R.string.apk_source_downloader,
+                                plugins.firstOrNull { it.id == app.data.pluginId }?.name
+                                    ?: plugins.firstOrNull {
+                                        it.packageName == app.data.pluginPackageName &&
+                                            (app.data.pluginClassName == null || it.className == app.data.pluginClassName)
+                                    }
+                                    ?.name
+                                    ?: app.data.pluginPackageName
+                            )
+
+                            is SelectedApp.Local ->
+                                if (app.temporary)
+                                    stringResource(R.string.apk_source_local)
+                                else
+                                    stringResource(R.string.apk_source_downloaded)
+                        },
+                        useCardStyle = useCardStylePageItems,
+                        onClick = {
+                            vm.showSourceSelector()
+                        }
+                    )
+                }
+            }
+            if (LocalExpressiveDesign.current) {
+                ExpressiveSettingsCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    pageItems.forEachIndexed { index, item ->
+                        if (index > 0) ExpressiveSettingsDivider()
+                        item()
+                    }
+                }
+            } else {
+                pageItems.forEach { it() }
+            }
             error?.let {
                 Text(
                     stringResource(it.resourceId),
@@ -768,14 +794,12 @@ private fun PatchModeDialog(
                     true to R.string.patch_mode_mount
                 ).forEach { (mount, label) ->
                     ListItem(
+                        selected = useMount == mount,
                         headlineContent = { Text(stringResource(label)) },
                         leadingContent = {
-                            RadioButton(
-                                selected = useMount == mount,
-                                onClick = null
-                            )
+                            ListItemRadioButton(selected = useMount == mount)
                         },
-                        modifier = Modifier.clickable {
+                        onClick = {
                             onSelect(mount)
                             onDismissRequest()
                         }
@@ -806,6 +830,7 @@ private fun BundleVersionSelectionDialog(
     var otherVersionsTarget by rememberSaveable { mutableStateOf<BundleRecommendationDetail?>(null) }
 
     AlertDialogExtended(
+        wide = true,
         onDismissRequest = onDismissRequest,
         confirmButton = {
             TextButton(onClick = onDismissRequest) {
@@ -920,7 +945,7 @@ private fun BundleRecommendationCard(
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
             .alpha(if (enabled) 1f else 0.5f),
-        shape = RoundedCornerShape(20.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
         color = containerColor,
         tonalElevation = if (isActive) 6.dp else 2.dp
     ) {
@@ -1159,7 +1184,7 @@ private fun BundleVersionOptionRow(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
         enabled = enabled,
-        shape = RoundedCornerShape(18.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
         colors = CardDefaults.cardColors(
             containerColor = containerColor,
             contentColor = primaryContentColor
@@ -1231,16 +1256,25 @@ private fun PageItem(
     useCardStyle: Boolean = false,
     onClick: () -> Unit
 ) {
-    if (useCardStyle) {
+    if (LocalExpressiveDesign.current) {
+        ListItem(
+            onClick = onClick,
+            headlineContent = { Text(stringResource(title), style = MaterialTheme.typography.titleMedium) },
+            supportingContent = {
+                Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            },
+            trailingContent = { Icon(Icons.AutoMirrored.Outlined.ArrowRight, null) }
+        )
+    } else if (useCardStyle) {
         Surface(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-            shape = RoundedCornerShape(16.dp),
+            shape = MaterialTheme.shapes.large.withClassicCorner(16.dp),
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.68f),
             tonalElevation = 0.dp,
             shadowElevation = 0.dp
         ) {
             ListItem(
-                modifier = Modifier.clickable(onClick = onClick),
+                onClick = onClick,
                 headlineContent = {
                     Text(
                         stringResource(title),
@@ -1263,12 +1297,11 @@ private fun PageItem(
         }
     } else {
         ListItem(
-            modifier = Modifier
-                .clickable(onClick = onClick)
-                .padding(start = 8.dp),
+            onClick = onClick,
             headlineContent = {
                 Text(
                     stringResource(title),
+                    modifier = Modifier.padding(start = 8.dp),
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.titleLarge
                 )
@@ -1276,6 +1309,7 @@ private fun PageItem(
             supportingContent = {
                 Text(
                     description,
+                    modifier = Modifier.padding(start = 8.dp),
                     color = MaterialTheme.colorScheme.outline,
                     style = MaterialTheme.typography.bodyMedium
                 )
@@ -1305,6 +1339,9 @@ internal fun AppSourceSelectorDialog(
     onSelectLocal: (() -> Unit)?,
     onSelect: (SelectedApp) -> Unit,
 ) {
+    val browserContext = LocalContext.current
+    val browserPrefs: app.universal.patch.manager.domain.manager.PreferencesManager = org.koin.compose.koinInject()
+    val browserSearchHost by browserPrefs.searchEngineHost.getAsState()
     val canSelect = activeSearchJob == null
     val hasDownloadedApps = downloadedApps.isNotEmpty()
     val hasPlugins = plugins.isNotEmpty()
@@ -1326,9 +1363,7 @@ internal fun AppSourceSelectorDialog(
                     item(key = "downloaded_header") {
                         val icon = if (showDownloadedApps) Icons.Outlined.UnfoldLess else Icons.Outlined.UnfoldMore
                         ListItem(
-                            modifier = Modifier
-                                .clickable { showDownloadedApps = !showDownloadedApps }
-                                .enabled(downloadedApps.isNotEmpty()),
+                            onClick = { showDownloadedApps = !showDownloadedApps },
                             headlineContent = { Text(stringResource(R.string.downloaded_apps)) },
                             trailingContent = { Icon(icon, null) },
                             colors = transparentListItemColors
@@ -1340,11 +1375,10 @@ internal fun AppSourceSelectorDialog(
                             key = { "downloaded_${it.packageName}_${it.version}" }
                         ) { downloadedApp ->
                             ListItem(
-                                modifier = Modifier
-                                    .clickable(enabled = canSelect) { onSelectDownloaded(downloadedApp) }
-                                    .padding(start = 16.dp),
-                                headlineContent = { Text(downloadedApp.version) },
-                                supportingContent = { Text(downloadedApp.packageName) },
+                                enabled = canSelect,
+                                onClick = { onSelectDownloaded(downloadedApp) },
+                                headlineContent = { Text(downloadedApp.version, Modifier.padding(start = 16.dp)) },
+                                supportingContent = { Text(downloadedApp.packageName, Modifier.padding(start = 16.dp)) },
                                 colors = transparentListItemColors
                             )
                         }
@@ -1354,11 +1388,9 @@ internal fun AppSourceSelectorDialog(
                 if (includeAutoOption) {
                     item(key = "auto") {
                         ListItem(
-                            modifier = Modifier
-                                .clickable(enabled = canSelect && hasAutoChoice) {
-                                    onSelect(searchApp)
-                                }
-                                .enabled(hasAutoChoice),
+                            modifier = Modifier.enabled(hasAutoChoice || LocalExpressiveDesign.current),
+                            enabled = canSelect && hasAutoChoice,
+                            onClick = { onSelect(searchApp) },
                             headlineContent = { Text(stringResource(R.string.app_source_dialog_option_auto)) },
                             supportingContent = {
                                 Text(
@@ -1394,9 +1426,9 @@ internal fun AppSourceSelectorDialog(
                             else -> true to app.version
                         }
                         ListItem(
-                            modifier = Modifier
-                                .clickable(enabled = canSelect && usable) { onSelect(app) }
-                                .enabled(usable),
+                            modifier = Modifier.enabled(usable || LocalExpressiveDesign.current),
+                            enabled = canSelect && usable,
+                            onClick = { onSelect(app) },
                             headlineContent = { Text(stringResource(R.string.installed)) },
                             supportingContent = { Text(text) },
                             colors = transparentListItemColors
@@ -1407,7 +1439,8 @@ internal fun AppSourceSelectorDialog(
                 onSelectLocal?.let { selectLocal ->
                     item(key = "storage") {
                         ListItem(
-                            modifier = Modifier.clickable(enabled = canSelect) { selectLocal() },
+                            enabled = canSelect,
+                            onClick = { selectLocal() },
                             headlineContent = { Text(stringResource(R.string.app_source_dialog_option_storage)) },
                             supportingContent = {
                                 Text(stringResource(R.string.app_source_dialog_option_storage_description))
@@ -1417,9 +1450,33 @@ internal fun AppSourceSelectorDialog(
                     }
                 }
 
+                item(key = "browser_search") {
+                    ListItem(
+                        enabled = canSelect,
+                        onClick = {
+                            val query = listOfNotNull(
+                                searchApp.packageName,
+                                (requiredVersion ?: searchApp.version)?.takeIf { it.isNotBlank() }?.let {
+                                    if (it.startsWith("v", ignoreCase = true)) it else "v$it"
+                                },
+                                android.os.Build.SUPPORTED_ABIS.firstOrNull()
+                            ).joinToString(" ")
+                            val host = browserSearchHost.trim().removePrefix("https://")
+                                .removePrefix("http://").substringBefore('/').substringBefore('?')
+                                .substringBefore('#').trim().ifBlank { "google.com" }
+                            browserContext.openUrl("https://$host/search?q=" + android.net.Uri.encode(query))
+                            onDismissRequest()
+                        },
+                        headlineContent = { Text(stringResource(R.string.source_search_browser)) },
+                        supportingContent = { Text(stringResource(R.string.source_search_browser_description)) },
+                        colors = transparentListItemColors
+                    )
+                }
+
                 items(apkDownloadHelpers, key = { it.id }) { helper ->
                     ListItem(
-                        modifier = Modifier.clickable(enabled = canSelect) {
+                        enabled = canSelect,
+                        onClick = {
                             onSelectApkDownloadHelper(helper)
                         },
                         headlineContent = { Text(helper.label) },
@@ -1432,7 +1489,8 @@ internal fun AppSourceSelectorDialog(
 
                 items(plugins, key = { "plugin_${it.id}" }) { plugin ->
                     ListItem(
-                        modifier = Modifier.clickable(enabled = canSelect) { onSelectPlugin(plugin) },
+                        enabled = canSelect,
+                        onClick = { onSelectPlugin(plugin) },
                         headlineContent = { Text(plugin.shortDisplayName) },
                         trailingContent = (@Composable { LoadingIndicator() }).takeIf { activeSearchJob == plugin.id },
                         colors = transparentListItemColors

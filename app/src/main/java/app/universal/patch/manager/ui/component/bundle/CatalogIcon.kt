@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.component.bundle
 
+import app.universal.patch.manager.ui.component.design.FilledTonalButton
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
@@ -25,21 +26,28 @@ fun CatalogIcon(
     description: String? = null,
     modifier: Modifier = Modifier.size(40.dp),
     isOfficial: Boolean = false,
+    onUnavailable: ((Throwable) -> Unit)? = null,
 ) {
     var model by remember(iconUrl, fallbackUrl) {
         mutableStateOf(iconUrl?.takeIf { it.isNotBlank() } ?: fallbackUrl)
     }
+    var imageLoaded by remember(iconUrl, fallbackUrl) { mutableStateOf(false) }
     val shape = CircleShape
     Box(modifier.clip(shape)) {
         Surface(shape = shape, color = if (isOfficial) Color(0xFF1B1B1B) else MaterialTheme.colorScheme.surfaceVariant,
             modifier = Modifier.fillMaxSize()) {
-            if (!isOfficial) Icon(Icons.Outlined.Source, contentDescription = null, modifier = Modifier.padding(8.dp))
+            if (!isOfficial && !imageLoaded) Icon(Icons.Outlined.Source, contentDescription = null, modifier = Modifier.padding(8.dp))
         }
         if (!model.isNullOrBlank()) {
             AsyncImage(model = model, contentDescription = description,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit,
-                onError = { model = fallbackUrl?.takeUnless { it == model } })
+                onSuccess = { imageLoaded = true },
+                onError = { state ->
+                    imageLoaded = false
+                    model = fallbackUrl?.takeIf { it.isNotBlank() && it != model }
+                    if (model == null) onUnavailable?.invoke(state.result.throwable)
+                })
         }
     }
 }

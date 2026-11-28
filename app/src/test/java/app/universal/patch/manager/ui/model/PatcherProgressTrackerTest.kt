@@ -8,6 +8,178 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PatcherProgressTrackerTest {
+    @Test fun strippingDisplaysPercentageAndVisibleInitialActivity() {
+        val percentage = isPercentageProgress("Stripping native libraries")
+        assertEquals(null to "0%", (0L to 100L).asDisplayProgress(percentage = percentage))
+        assertEquals(0.5f to "50%", (50L to 100L).asDisplayProgress(percentage = percentage))
+        assertEquals(1f to "100%", (100L to 100L).asDisplayProgress(percentage = percentage))
+        assertEquals(null to null, (0L to null).asDisplayProgress(percentage = percentage))
+        val absent: Pair<Long, Long?>? = null
+        assertEquals(null to null, absent.asDisplayProgress(percentage = percentage))
+        assertEquals(0.5f to "1.0/2.0 MB",
+            (1_000_000L to 2_000_000L).asDisplayProgress())
+    }
+
+    @Test fun strippingPercentageDoesNotLosePrecision() {
+        for (percent in 0L..100L) {
+            assertEquals("$percent%",
+                (percent to 100L).asDisplayProgress(percentage = true).second)
+        }
+        assertEquals("53%", (106L to 200L).asDisplayProgress(percentage = true).second)
+        assertEquals("59%", (118L to 200L).asDisplayProgress(percentage = true).second)
+        assertEquals("100%", (200L to 100L).asDisplayProgress(percentage = true).second)
+        assertEquals("0%", (-1L to 100L).asDisplayProgress(percentage = true).second)
+    }
+
+    @Test fun unsignedAndStrippingProgressRemainSeparateAndOrdered() {
+        val tracker = tracker(StepId.WriteAPK)
+        val titles = listOf("Writing patched APKs", "Preparing unsigned APKs", "Stripping native libraries", "Finalizing output")
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.WriteAPK, titles))
+        tracker.processProgressEventLocked(ProgressEvent.Progress(StepId.WriteAPK, 1, 2, titles[1], titles))
+        var rows = tracker.stepSubSteps.getValue(StepId.WriteAPK)
+        assertEquals(State.RUNNING, rows[1].state)
+        assertEquals(1L to 2L, rows[1].progress)
+        assertEquals(State.WAITING, rows[2].state)
+        tracker.processProgressEventLocked(ProgressEvent.Progress(StepId.WriteAPK, 0, 2, titles[2], titles))
+        rows = tracker.stepSubSteps.getValue(StepId.WriteAPK)
+        assertEquals(State.COMPLETED, rows[1].state)
+        assertEquals(State.RUNNING, rows[2].state)
+        assertEquals(0L to 2L, rows[2].progress)
+        tracker.processProgressEventLocked(ProgressEvent.Progress(StepId.WriteAPK, message = titles[3], subSteps = titles))
+        rows = tracker.stepSubSteps.getValue(StepId.WriteAPK)
+        assertEquals(State.COMPLETED, rows[2].state)
+        assertEquals(State.RUNNING, rows[3].state)
+        assertTrue(isPercentageProgress(titles[2]))
+    }
+
+    @Test fun terminalFailureSettlesRunningParentsEvenWhenAPatchAlreadyFailed() {
+        val tracker = patchTracker()
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.ReadAPK))
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.ExecutePatches))
+        val error = RemoteError("PatchError", "Failed A", "original stack")
+        tracker.processProgressEventLocked(ProgressEvent.Failed(StepId.ExecutePatch(0), error))
+        tracker.reconcileFailureState("Worker stopped")
+        assertTrue(tracker.steps.none { it.state == State.RUNNING })
+        assertEquals(State.FAILED, tracker.steps.first { it.id == StepId.ExecutePatches }.state)
+        assertEquals("original stack", tracker.steps.first { it.id == StepId.ExecutePatch(0) }.message)
+        assertEquals(State.WAITING, tracker.steps.first { it.id == StepId.WriteAPK }.state)
+    }
+
+    @Test fun duplicateFailureWrapperStopsTheParentWithoutOverwritingThePatchError() {
+        val tracker = patchTracker()
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.ReadAPK))
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.ExecutePatches))
+        val error = RemoteError("PatchError", "Failed A", "original stack")
+        tracker.processProgressEventLocked(ProgressEvent.Failed(StepId.ExecutePatch(0), error))
+        tracker.processProgressEventLocked(ProgressEvent.Failed(StepId.ExecutePatches, error))
+        assertTrue(tracker.steps.none { it.state == State.RUNNING })
+        assertEquals("original stack", tracker.steps.first { it.id == StepId.ExecutePatch(0) }.message)
+    }
+
+    @Test fun individualPatchFailureStillAllowsTheNextPatchToRun() {
+        val tracker = patchTracker()
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.ExecutePatches))
+        tracker.processProgressEventLocked(ProgressEvent.Failed(StepId.ExecutePatch(0),
+            RemoteError("PatchError", "Failed A", "original stack")))
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.ExecutePatch(1)))
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.ExecutePatch(1)))
+        assertEquals(State.RUNNING, tracker.steps.first { it.id == StepId.ExecutePatches }.state)
+        assertEquals(State.COMPLETED, tracker.steps.first { it.id == StepId.ExecutePatch(1) }.state)
+    }
+
+    @Test fun terminalFailureSettlesNestedWorkWithoutChangingFinishedOrUnstartedChildren() {
+        val tracker = tracker(StepId.WriteAPK)
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.WriteAPK))
+        tracker.stepSubSteps[StepId.WriteAPK] = mutableStateListOf(
+            StepDetail("DEX", State.RUNNING, children = listOf(
+                StepDetail("classes.dex", State.COMPLETED),
+                StepDetail("classes2.dex", State.RUNNING, progress = 1L to 2L),
+                StepDetail("classes3.dex", State.WAITING)
+            )))
+        tracker.reconcileFailureState("Out of memory")
+        val group = tracker.stepSubSteps.getValue(StepId.WriteAPK).single()
+        assertEquals(State.FAILED, group.state)
+        assertEquals(listOf(State.COMPLETED, State.FAILED, State.WAITING), group.children.map { it.state })
+        assertTrue(group.children.all { it.progress == null })
+        tracker.reconcileFailureState("Out of memory")
+        assertEquals(group, tracker.stepSubSteps.getValue(StepId.WriteAPK).single())
+    }
+
+    @Test fun failureAfterCompletedSubStepsDoesNotRelabelThemAsFailed() {
+        val tracker = tracker(StepId.WriteAPK)
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.WriteAPK))
+        tracker.stepSubSteps[StepId.WriteAPK] = mutableStateListOf(
+            StepDetail("Output written", State.COMPLETED))
+        tracker.processProgressEventLocked(ProgressEvent.Failed(StepId.WriteAPK,
+            RemoteError("IOException", "Cleanup failed", "cleanup stack")))
+        tracker.reconcileFailureState("Cleanup failed")
+        assertEquals(State.FAILED, tracker.steps.first { it.id == StepId.WriteAPK }.state)
+        assertEquals(State.COMPLETED, tracker.stepSubSteps.getValue(StepId.WriteAPK).single().state)
+    }
+
+    @Test fun automaticRetryCanRestartAfterAnAggregateFailure() {
+        val tracker = patchTracker()
+        tracker.steps.add(0, Step(StepId.LoadPatches, "Load", StepCategory.PREPARING))
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.LoadPatches))
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.ReadAPK))
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.ExecutePatches))
+        val error = RemoteError("PatchError", "Failed A", "original stack")
+        tracker.processProgressEventLocked(ProgressEvent.Failed(StepId.ExecutePatch(0), error))
+        tracker.processProgressEventLocked(ProgressEvent.Failed(StepId.ExecutePatches, error))
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.LoadPatches))
+        assertTrue(tracker.steps.none { it.state == State.FAILED })
+        assertEquals(State.RUNNING, tracker.steps.first { it.id == StepId.LoadPatches }.state)
+        assertEquals(State.WAITING, tracker.steps.first { it.id == StepId.ExecutePatch(0) }.state)
+    }
+
+    @Test fun terminalFailureIgnoresLateSavingLogs() {
+        val tracker = patchTracker()
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.ExecutePatches))
+        tracker.processProgressEventLocked(ProgressEvent.Failed(StepId.ExecutePatch(0),
+            RemoteError("PatchError", "Failed A", "original stack")))
+        tracker.reconcileFailureState("Worker stopped")
+        val stopped = tracker.snapshot()
+        tracker.handleDexCompileLine("Writing output APK")
+        assertEquals(stopped, tracker.snapshot())
+        assertFalse(tracker.writeApkStepStarted)
+    }
+
+    @Test fun terminalFailureDiscardsAlreadyQueuedLogUpdates() {
+        val pending = mutableListOf<() -> Unit>()
+        val tracker = tracker(StepId.WriteAPK, dispatch = { pending += it })
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.WriteAPK, v21WriteStages()))
+        tracker.report(StepId.WriteAPK, "Applying patched changes")
+        tracker.handleDexCompileLine("Compiling modified resources")
+        assertEquals(1, pending.size)
+        tracker.reconcileFailureState("Worker stopped")
+        val stopped = tracker.snapshot()
+        pending.forEach { it() }
+        assertEquals(stopped, tracker.snapshot())
+    }
+
+    @Test fun retryDropsOldLogCallbacksAndAcceptsItsOwnLogUpdates() {
+        val pending = mutableListOf<() -> Unit>()
+        val tracker = tracker(StepId.WriteAPK, dispatch = { pending += it })
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.LoadPatches))
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.WriteAPK, v21WriteStages()))
+        tracker.report(StepId.WriteAPK, "Applying patched changes")
+        tracker.handleDexCompileLine("Compiling modified resources")
+        assertEquals(1, pending.size)
+        tracker.reconcileFailureState("Worker stopped")
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.LoadPatches))
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.LoadPatches))
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.WriteAPK, v21WriteStages()))
+        tracker.report(StepId.WriteAPK, "Applying patched changes")
+        val retry = tracker.snapshot()
+        pending.single().invoke()
+        assertEquals(retry, tracker.snapshot())
+        tracker.handleDexCompileLine("Compiling modified resources")
+        assertEquals(2, pending.size)
+        pending.last().invoke()
+        assertEquals(State.RUNNING, tracker.stepSubSteps.getValue(StepId.WriteAPK)
+            .first { it.title == "Compiling modified resources" }.state)
+    }
+
     private fun patchTracker() = PatcherProgressTracker(
         steps = mutableStateListOf(
             Step(StepId.ReadAPK, "Read", StepCategory.PREPARING),
@@ -71,7 +243,10 @@ class PatcherProgressTrackerTest {
         }
     }
 
-    private fun tracker(id: StepId) = PatcherProgressTracker(
+    private fun tracker(
+        id: StepId,
+        dispatch: (() -> Unit) -> Unit = { it() }
+    ) = PatcherProgressTracker(
         steps = mutableStateListOf(
             Step(StepId.DownloadAPK, "Download", StepCategory.PREPARING, State.COMPLETED),
             Step(StepId.LoadPatches, "Load", StepCategory.PREPARING),
@@ -79,7 +254,8 @@ class PatcherProgressTrackerTest {
         ),
         stepSubSteps = mutableMapOf(),
         isMorpheSelection = { false },
-        morpheBytecodeMode = { null }
+        morpheBytecodeMode = { null },
+        dispatch = dispatch
     )
 
     private fun PatcherProgressTracker.report(id: StepId, title: String, current: Long? = null, total: Long? = null) =
@@ -264,6 +440,66 @@ class PatcherProgressTrackerTest {
 
     private fun v21WriteStages() = listOf("Validating resources", "Copying base APK", "Applying patched changes",
         "Compiling DEX files", "Compiling modified resources", "Writing patched APK", "Writing output APK", "Finalizing output")
+
+    @Test fun manualSplitMergeStrippingCountersReachTheVisibleRow() {
+        val id = StepId.PrepareSplitApk
+        val tracker = tracker(id)
+        tracker.processProgressEventLocked(ProgressEvent.Started(id, listOf(
+            "Extracting split APKs", "Merging base.apk", "Writing merged APK",
+            "Stripping native libraries", "Finalizing merged APK"
+        )))
+        tracker.report(id, "Writing merged APK")
+        for (percent in listOf(0, 25, 53, 59, 99, 100)) {
+            app.universal.patch.manager.patcher.split.dispatchSplitMergeProgress(
+                mapOf("message" to "Stripping native libraries",
+                    "current" to percent, "total" to 100),
+                { tracker.report(id, it) }, {},
+                { current, total -> tracker.report(id, "Stripping native libraries", current, total) }
+            )
+            val row = tracker.stepSubSteps.getValue(id).single { it.title == "Stripping native libraries" }
+            assertEquals(State.RUNNING, row.state)
+            assertEquals("$percent%", row.progress.asDisplayProgress(percentage = true).second)
+        }
+        tracker.report(id, "Finalizing merged APK")
+        assertEquals(State.COMPLETED,
+            tracker.stepSubSteps.getValue(id).single { it.title == "Stripping native libraries" }.state)
+    }
+
+    @Test fun fastStrippingKeepsItsCompletedPercentageVisible() {
+        val id = StepId.WriteAPK
+        val tracker = tracker(id)
+        tracker.processProgressEventLocked(ProgressEvent.Started(id,
+            v21WriteStages() + "Stripping native libraries"))
+        tracker.report(id, "Stripping native libraries", 0, 100)
+        tracker.report(id, "Stripping native libraries", 100, 100)
+        tracker.processProgressEventLocked(ProgressEvent.Completed(id))
+        val row = tracker.stepSubSteps.getValue(id).single { it.title == "Stripping native libraries" }
+        assertNull(row.progress)
+        assertEquals(1f to "100%", row.displayProgress())
+        assertEquals(null to null, row.copy(state = State.FAILED).displayProgress())
+        assertEquals(null to null, row.copy(skipped = true).displayProgress())
+    }
+
+    @Test fun revancedStrippingProgressRemainsVisibleAfterFinalizing() {
+        val id = StepId.WriteAPK
+        val v22 = listOf("Copying base APK", "Applying patched changes",
+            "Compiling DEX files", "Compiling modified resources",
+            "Writing output APK", "Finalizing output")
+        for (stages in listOf(v21WriteStages(), v22)) for (announced in listOf(false, true)) {
+            val tracker = tracker(id)
+            val titles = stages + if (announced) listOf("Stripping native libraries") else emptyList()
+            tracker.processProgressEventLocked(ProgressEvent.Started(id, titles))
+            for (stage in stages) tracker.report(id, stage)
+            tracker.report(id, "Stripping native libraries")
+            for (percent in listOf(0L, 25L, 53L, 59L, 99L, 100L)) {
+                tracker.report(id, "Stripping native libraries", percent, 100)
+                val row = tracker.stepSubSteps.getValue(id).single { it.title == "Stripping native libraries" }
+                assertEquals(State.RUNNING, row.state)
+                assertEquals("$percent%",
+                    row.progress.asDisplayProgress(percentage = isPercentageProgress(row.title)).second)
+            }
+        }
+    }
 
     @Test fun v21ValidationFailureIsAttachedToValidationRatherThanCopying() {
         val id = StepId.WriteAPK

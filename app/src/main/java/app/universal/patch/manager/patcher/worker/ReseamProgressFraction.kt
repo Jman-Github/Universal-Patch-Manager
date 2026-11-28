@@ -21,11 +21,12 @@ internal fun reseamStageFraction(event: ProgressEvent.Progress, splitSubSteps: L
             }
             else -> return null
         }
-        StepId.WriteAPK -> when (message) {
-            "Writing patched APKs" -> fraction / 3
-            "Preparing unsigned APKs" -> (1 + fraction) / 3
-            "Finalizing output" -> (2 + fraction) / 3
-            else -> return null
+        StepId.WriteAPK -> {
+            val phases = event.subSteps?.takeIf { it.isNotEmpty() }
+                ?: listOf("Writing patched APKs", "Preparing unsigned APKs", "Finalizing output")
+            val index = phases.indexOf(message)
+            if (index < 0) return null
+            (index + fraction) / phases.size
         }
         else -> return null
     }

@@ -18,6 +18,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 
 internal val DASHBOARD_SCROLLBAR_THUMB_LENGTH = 64.dp
+
+/** Bottom list padding that lets the last dashboard card scroll above the floating action buttons. */
+internal val DashboardFabClearance = 96.dp
 internal val LAZY_SCROLLBAR_TOUCH_WIDTH = 24.dp
 
 @Composable
@@ -31,7 +34,7 @@ fun LazyColumnWithScrollbar(
     horizontalAlignment: Alignment.Horizontal = Alignment.Start,
     flingBehavior: FlingBehavior = ScrollableDefaults.flingBehavior(),
     userScrollEnabled: Boolean = true,
-    thumbLength: Dp? = null,
+    thumbLength: Dp? = DASHBOARD_SCROLLBAR_THUMB_LENGTH,
     reserveScrollbarSpace: Boolean = false,
     content: LazyListScope.() -> Unit
 ) {
@@ -48,10 +51,14 @@ fun LazyColumnWithScrollbar(
             userScrollEnabled = userScrollEnabled,
             content = content
         )
-        Scrollbar(
-            state,
-            Modifier.align(Alignment.CenterEnd),
-            thumbLength = thumbLength
-        )
+        // The overlay must follow the measured list, rather than force it to
+        // fill all available height when this list is inside a wrapping dialog.
+        Box(Modifier.matchParentSize()) {
+            Scrollbar(
+                state,
+                Modifier.align(Alignment.CenterEnd),
+                thumbLength = thumbLength
+            )
+        }
     }
 }

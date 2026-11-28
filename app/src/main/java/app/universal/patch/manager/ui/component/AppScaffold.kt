@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.component
 
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
@@ -22,22 +24,32 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import app.universal.patch.manager.R
+
+/**
+ * Every bar is a single row with the title beside the back button, so it stays pinned and only
+ * picks up its scrolled container tone once content moves under it.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun rememberAppBarScrollBehavior(): TopAppBarScrollBehavior =
+    TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppScaffold(
-    topBar: @Composable (TopAppBarScrollBehavior) -> Unit = {},
+    topBar: (@Composable (TopAppBarScrollBehavior) -> Unit)? = null,
     bottomBar: @Composable () -> Unit = {},
     floatingActionButton: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
     content: @Composable (PaddingValues) -> Unit
 ) {
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
 
     Scaffold(
-        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = { topBar(scrollBehavior) },
+        modifier = if (topBar == null) modifier else modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        topBar = { topBar?.invoke(scrollBehavior) },
         bottomBar = bottomBar,
         floatingActionButton = floatingActionButton,
         content = content
@@ -62,39 +74,10 @@ fun AppTopBar(
     applyContainerColor: Boolean = false,
     onHelpClick: (() -> Unit)? = null // From PR #37: https://github.com/Jman-Github/Universal-Patch-Manager/pull/37
 ) {
-    val containerColor = if (applyContainerColor) {
-        MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp)
-    } else {
-        Color.Unspecified
-    }
-
-    TopAppBar(
-        title = { Text(title) },
-        scrollBehavior = scrollBehavior,
-        navigationIcon = {
-            if (onBackClick != null) {
-                TopBarBackButton(
-                    onBackClick = onBackClick,
-                    onBackLongClick = onBackLongClick,
-                    backIcon = backIcon
-                )
-            }
-        },
-        actions = {
-            // From PR #37: https://github.com/Jman-Github/Universal-Patch-Manager/pull/37
-            if (onHelpClick != null) {
-                IconButton(onClick = onHelpClick) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.HelpOutline,
-                        contentDescription = stringResource(R.string.help)
-                    )
-                }
-            }
-            actions()
-        },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = containerColor
-        )
+    AppTopBarContent(
+        title = { AppBarTitle(title) }, onBackClick = onBackClick,
+        onBackLongClick = onBackLongClick, backIcon = backIcon, actions = actions,
+        scrollBehavior = scrollBehavior, applyContainerColor = applyContainerColor, onHelpClick = onHelpClick
     )
 }
 
@@ -116,40 +99,55 @@ fun AppTopBar(
     applyContainerColor: Boolean = false,
     onHelpClick: (() -> Unit)? = null // From PR #37: https://github.com/Jman-Github/Universal-Patch-Manager/pull/37
 ) {
-    val containerColor = if (applyContainerColor) {
-        MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp)
-    } else {
-        Color.Unspecified
-    }
-
-    TopAppBar(
-        title = title,
-        scrollBehavior = scrollBehavior,
-        navigationIcon = {
-            if (onBackClick != null) {
-                TopBarBackButton(
-                    onBackClick = onBackClick,
-                    onBackLongClick = onBackLongClick,
-                    backIcon = backIcon
-                )
-            }
-        },
-        actions = {
-            // From PR #37: https://github.com/Jman-Github/Universal-Patch-Manager/pull/37
-            if (onHelpClick != null) {
-                IconButton(onClick = onHelpClick) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.HelpOutline,
-                        contentDescription = stringResource(R.string.help)
-                    )
-                }
-            }
-            actions()
-        },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = containerColor
-        )
+    AppTopBarContent(
+        title = title, onBackClick = onBackClick,
+        onBackLongClick = onBackLongClick, backIcon = backIcon, actions = actions,
+        scrollBehavior = scrollBehavior, applyContainerColor = applyContainerColor, onHelpClick = onHelpClick
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppTopBarContent(
+    title: @Composable () -> Unit,
+    onBackClick: (() -> Unit)?,
+    onBackLongClick: (() -> Unit)?,
+    backIcon: @Composable () -> Unit,
+    actions: @Composable RowScope.() -> Unit,
+    scrollBehavior: TopAppBarScrollBehavior?,
+    applyContainerColor: Boolean,
+    onHelpClick: (() -> Unit)?
+) {
+    val expressive = LocalExpressiveDesign.current
+    // Expressive bars sit on the page color and only pick up a container tone once content scrolls under them.
+    val colors = when {
+        expressive -> TopAppBarDefaults.topAppBarColors()
+        applyContainerColor -> TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
+        )
+        else -> TopAppBarDefaults.topAppBarColors(containerColor = Color.Unspecified)
+    }
+    val navigation: @Composable () -> Unit = {
+        if (onBackClick != null) TopBarBackButton(onBackClick, onBackLongClick, backIcon)
+    }
+    val barActions: @Composable RowScope.() -> Unit = {
+        if (onHelpClick != null) {
+            IconButton(onClick = onHelpClick) {
+                Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = stringResource(R.string.help))
+            }
+        }
+        actions()
+    }
+    TopAppBar(
+        title = title, navigationIcon = navigation, actions = barActions,
+        colors = colors, scrollBehavior = scrollBehavior
+    )
+}
+
+/** Long titles stay on the back button's row as one ellipsized line. */
+@Composable
+private fun AppBarTitle(title: String) {
+    Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
 
 @Composable

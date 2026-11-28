@@ -7,7 +7,10 @@ enum class PatcherRuntimeKind(
     val displayName: String
 ) {
     REVANCED_V21("revanced-v21", "ReVanced v21"),
-    REVANCED_V22("revanced-v22", "ReVanced v22");
+    REVANCED_V22("revanced-v22", "ReVanced v22"),
+    MORPHE("morphe", "Morphe"),
+    RESEAM("reseam", "Reseam"),
+    SHARED_SUPPORT("shared-support", "UPM runtime support");
 
     companion object {
         fun fromId(value: String?): PatcherRuntimeKind? =
@@ -22,7 +25,7 @@ fun PatchBundleType.requiredRuntimeKinds(useRevancedPatcher22: Boolean): List<Pa
         } else {
             listOf(PatcherRuntimeKind.REVANCED_V22)
         }
-        PatchBundleType.RESEAM -> emptyList()
-        PatchBundleType.MORPHE -> emptyList()
+        PatchBundleType.RESEAM -> listOf(PatcherRuntimeKind.RESEAM)
+        PatchBundleType.MORPHE -> listOf(PatcherRuntimeKind.MORPHE)
         PatchBundleType.AMPLE -> emptyList()
     }

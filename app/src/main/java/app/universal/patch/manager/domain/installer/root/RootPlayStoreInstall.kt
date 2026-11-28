@@ -9,7 +9,9 @@ import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -110,31 +112,26 @@ internal suspend fun suspendRootMountForPackageInstall(
         rootMountCoordinator.hasActiveMountState(packageName)
     if (!shouldRestore) return null
 
-    val stateIdentity = rootMountCoordinator.suspendForExternalInstall(
-        RootMountRequest(
-            packageName = packageName,
-            userId = userId,
-            operation = RootMountOperation.UNMOUNT
+    currentCoroutineContext().ensureActive()
+    // Keep the committed unmount result even if cancellation arrives while
+    // the coordinator is returning from its I/O dispatcher.
+    val suspension = withContext(NonCancellable) {
+        val stateIdentity = rootMountCoordinator.suspendForExternalInstall(
+            RootMountRequest(packageName, userId, RootMountOperation.UNMOUNT)
         )
-    )
-    val suspension = RootMountSuspension(
-        rootMountCoordinator,
-        packageName,
-        userId,
-        stateIdentity
-    )
-    if (recoveryContext != null) {
-        try {
-            suspension.enableProcessDeathRecovery(recoveryContext)
-        } catch (error: Throwable) {
-            val restoreError = withContext(NonCancellable) {
-                runCatching { suspension.restore() }.exceptionOrNull()
-            }
-            restoreError?.let(error::addSuppressed)
-            throw error
-        }
+        RootMountSuspension(rootMountCoordinator, packageName, userId, stateIdentity)
     }
-    return suspension
+    return try {
+        if (recoveryContext != null) suspension.enableProcessDeathRecovery(recoveryContext)
+        currentCoroutineContext().ensureActive()
+        suspension
+    } catch (error: Throwable) {
+        val restoreError = withContext(NonCancellable) {
+            runCatching { suspension.restore() }.exceptionOrNull()
+        }
+        restoreError?.let(error::addSuppressed)
+        throw error
+    }
 }
 
 internal suspend fun RootMountSuspension.restore() = restoreMount()

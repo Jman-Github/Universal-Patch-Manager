@@ -25,7 +25,13 @@ interface RootTransactionStorage {
 interface RootModuleStorage {
     suspend fun ensureRollbackSpace(packageName: String, stockPaths: List<String>, incomingBytes: Long)
     suspend fun snapshot(packageName: String, preferredPayload: RootBackupArtifact? = null): String?
+    suspend fun snapshotInactive(state: RootCommittedState): String? = snapshot(state.packageName)
     suspend fun readLegacyPayload(packageName: String): RootBackupArtifact?
+    suspend fun copyCommittedPayloads(
+        state: RootCommittedState,
+        directory: File,
+        installedStockPaths: List<String>
+    ): List<File> = emptyList()
     suspend fun readCommittedState(packageName: String): RootCommittedState?
     suspend fun snapshotStock(packageName: String, paths: List<String>): List<RootBackupArtifact>
     suspend fun commitSnapshot(packageName: String)
@@ -41,6 +47,7 @@ interface RootModuleStorage {
     suspend fun updateState(state: RootCommittedState)
     suspend fun restorePrevious(packageName: String): Boolean
     suspend fun enable(packageName: String, repairPayloads: Boolean = true)
+    suspend fun disableCompetingBootHooks(packageName: String) {}
     suspend fun disable(packageName: String)
     suspend fun removeActive(packageName: String)
     suspend fun purgeBackups(packageName: String)
@@ -89,7 +96,8 @@ interface RootMountVerification {
     suspend fun removeAllUrvMounts(
         packageName: String,
         extraTargets: Set<String>,
-        allowLazyRecovery: Boolean
+        allowLazyRecovery: Boolean,
+        includeCompeting: Boolean = false
     ): List<String>
     suspend fun verifyRootMounted(expected: RootCommittedState): RootPackageState
     suspend fun verifyMounted(expected: RootCommittedState): RootPackageState

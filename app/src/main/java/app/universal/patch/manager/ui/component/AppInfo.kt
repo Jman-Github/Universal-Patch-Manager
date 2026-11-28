@@ -1,7 +1,10 @@
 package app.universal.patch.manager.ui.component
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.pm.PackageInfo
 import android.graphics.drawable.Drawable
+import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,11 +20,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
-import androidx.core.content.pm.PackageInfoCompat
 import app.universal.patch.manager.R
+import app.universal.patch.manager.domain.repository.appNamePackagePattern
+import app.universal.patch.manager.util.longPressOnly
+import app.universal.patch.manager.util.toast
+import app.universal.patch.manager.util.versionCodeFor
+import app.universal.patch.manager.util.withHapticFeedback
 
 @Composable
 fun AppInfo(
@@ -32,6 +40,7 @@ fun AppInfo(
     placeholderMetaLines: Int = 1,
     showExtraContentWhenLoading: Boolean = false,
     isLoading: Boolean = appInfo == null,
+    packageName: String? = appInfo?.packageName ?: placeholderLabel?.takeIf(appNamePackagePattern::matches),
     extraContent: @Composable () -> Unit = {}
 ) {
     Column(
@@ -41,7 +50,16 @@ fun AppInfo(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         if (appInfo == null && !isLoading) {
-            Icon(
+            if (packageName != null || iconOverride != null) {
+                AppIcon(null, null, Modifier.size(100.dp).padding(bottom = 5.dp),
+                    iconOverride = iconOverride, packageName = packageName)
+                if (packageName != null) {
+                    AppLabel(null, labelOverride = labelOverride, packageName = packageName,
+                        defaultText = placeholderLabel ?: packageName,
+                        modifier = Modifier.padding(top = 16.dp),
+                        style = MaterialTheme.typography.titleLarge, centered = true)
+                }
+            } else Icon(
                 imageVector = Icons.Default.Close,
                 contentDescription = stringResource(R.string.app_info_unavailable),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -50,19 +68,24 @@ fun AppInfo(
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
                     .padding(20.dp)
             )
+            extraContent()
         } else if (appInfo == null) {
-            ShimmerBox(
-                modifier = Modifier
-                    .size(100.dp)
-                    .padding(bottom = 5.dp),
-                shape = CircleShape
-            )
-            ShimmerBox(
-                modifier = Modifier
-                    .padding(top = 16.dp)
-                    .width(200.dp)
-                    .height(22.dp)
-            )
+            if (packageName != null || iconOverride != null) {
+                AppIcon(null, null, Modifier.size(100.dp).padding(bottom = 5.dp),
+                    iconOverride = iconOverride, packageName = packageName)
+            } else {
+                ShimmerBox(Modifier.size(100.dp).padding(bottom = 5.dp), shape = CircleShape)
+            }
+            if (packageName != null) {
+                AppLabel(null, labelOverride = labelOverride, packageName = packageName,
+                    defaultText = placeholderLabel ?: packageName,
+                    modifier = Modifier.padding(top = 16.dp),
+                    style = MaterialTheme.typography.titleLarge, centered = true)
+            } else {
+                ShimmerBox(
+                    modifier = Modifier.padding(top = 16.dp).width(200.dp).height(22.dp)
+                )
+            }
             val placeholderLineCount = if (showExtraContentWhenLoading) {
                 placeholderMetaLines.coerceAtLeast(0)
             } else {
@@ -122,15 +145,11 @@ fun appVersionLabel(
             versionCode
         )
     }
-    if (appInfo == null) return displayVersion
-
-    val versionCode = PackageInfoCompat.getLongVersionCode(appInfo)
-    val matchesPackage = appInfo.versionName == versionName || versionCode.toString() == versionName
-    if (!matchesPackage) return displayVersion
+    val versionCode = appInfo?.versionCodeFor(versionName) ?: return displayVersion
 
     return stringResource(
         R.string.app_version_with_code,
-        appInfo.versionName?.takeIf { it.isNotBlank() } ?: displayVersion,
+        displayVersion,
         versionCode
     )
 }
@@ -156,19 +175,35 @@ fun AppVersion(
     versionName: String? = appInfo?.versionName,
     modifier: Modifier = Modifier,
     style: TextStyle? = null,
-    prefixVersion: Boolean = false
+    prefixVersion: Boolean = false,
+    versionCodeOverride: Long? = null,
+    copyVersionOnLongPress: Boolean = false
 ) {
-    val displayVersion = versionName?.takeIf { it.isNotBlank() } ?: return
+    val rawVersion = versionName?.takeIf { it.isNotBlank() } ?: return
+    val displayVersion = if (prefixVersion) "v${rawVersion.removePrefix("v").removePrefix("V")}" else rawVersion
 
+    val clipboardModifier = if (copyVersionOnLongPress) {
+        val context = LocalContext.current
+        val copyLabel = stringResource(R.string.copy_to_clipboard)
+        val copiedMessage = stringResource(R.string.toast_copied_to_clipboard)
+        Modifier.longPressOnly(label = copyLabel, onLongPress = {
+            context.getSystemService(ClipboardManager::class.java)?.let { clipboard ->
+                clipboard.setPrimaryClip(ClipData.newPlainText(copyLabel, displayVersion))
+                context.toast(copiedMessage)
+            }
+            Unit
+        }.withHapticFeedback(HapticFeedbackConstants.LONG_PRESS))
+    } else {
+        Modifier
+    }
     ExpandableText(
         text = appVersionLabel(
-            versionName = displayVersion,
+            versionName = rawVersion,
             appInfo = appInfo,
-            displayVersion = displayVersion
-        ).let { label ->
-            if (prefixVersion) "v${label.removePrefix("v").removePrefix("V")}" else label
-        },
-        modifier = modifier,
+            displayVersion = displayVersion,
+            versionCodeOverride = versionCodeOverride
+        ),
+        modifier = modifier.then(clipboardModifier),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = style ?: MaterialTheme.typography.bodySmall
     )

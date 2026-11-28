@@ -1,5 +1,13 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.DashboardFabClearance
+import app.universal.patch.manager.ui.component.DashboardGrid
+import app.universal.patch.manager.ui.component.design.horizontalScrollFade
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.TextButton
+import app.universal.patch.manager.ui.component.CollectionDialog
+import app.universal.patch.manager.ui.component.minimalActionButtons
 import android.content.pm.PackageInfo
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -15,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.height
@@ -23,6 +32,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -33,17 +43,16 @@ import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.InstallMobile
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -58,11 +67,13 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.patch.manager.data.room.apps.installed.InstallType
 import app.universal.patch.manager.data.room.apps.installed.InstalledApp
+import app.universal.patch.manager.domain.manager.DashboardListLayout
 import app.universal.patch.manager.domain.manager.PreferencesManager
 import app.universal.patch.manager.ui.component.AppIcon
 import app.universal.patch.manager.ui.component.AppLabel
@@ -104,6 +115,7 @@ fun InstalledAppsScreen(
     val savedActionOrderPref by prefs.savedAppActionOrder.getAsState()
     val savedHiddenActionsPref by prefs.savedAppHiddenActions.getAsState()
     val showSavedAppBundleUpdateBadges by prefs.showSavedAppBundleUpdateBadges.getAsState()
+    val appsLayout by prefs.appsTabLayout.getAsState()
     val savedActionOrderList = remember(savedActionOrderPref) {
         val parsed = savedActionOrderPref
             .split(',')
@@ -150,15 +162,25 @@ fun InstalledAppsScreen(
 
     when {
         installedApps == null -> {
-            LazyColumnWithScrollbar(
-                thumbLength = DASHBOARD_SCROLLBAR_THUMB_LENGTH,
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Top,
-                contentPadding = PaddingValues(bottom = 12.dp)
-            ) {
-                items(4) {
-                    InstalledAppCardPlaceholder()
+            // Loading skeletons follow the chosen layout, so the tab doesn't jump once apps arrive.
+            if (appsLayout == DashboardListLayout.GRID) {
+                DashboardGrid {
+                    items(6) { InstalledAppCardPlaceholder(appsLayout) }
+                }
+            } else {
+                LazyColumnWithScrollbar(
+                    thumbLength = DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Top,
+                    contentPadding = PaddingValues(
+                        top = if (appsLayout == DashboardListLayout.COMPACT) 5.dp else 0.dp,
+                        bottom = 12.dp
+                    )
+                ) {
+                    items(if (appsLayout == DashboardListLayout.COMPACT) 8 else 4) {
+                        InstalledAppCardPlaceholder(appsLayout)
+                    }
                 }
             }
         }
@@ -188,79 +210,94 @@ fun InstalledAppsScreen(
         }
 
         else -> {
-            LazyColumnWithScrollbar(
-                thumbLength = DASHBOARD_SCROLLBAR_THUMB_LENGTH,
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Top,
-                contentPadding = PaddingValues(bottom = 12.dp)
-            ) {
-                items(
-                    filteredApps.orEmpty(),
-                    key = { it.currentPackageName }
-                ) { installedApp ->
-                        val packageName = installedApp.currentPackageName
-                        val packageInfo = viewModel.packageInfoMap[packageName]
-                        val hasPackageInfo = viewModel.packageInfoMap.containsKey(packageName)
-                        val supportsRootMount = installedApp.supportsRootMount(packageInfo?.packageName)
-                        val isSaved = installedApp.installType == InstallType.SAVED ||
-                            (installedApp.installType == InstallType.MOUNT && !supportsRootMount)
-                        val isBundleMetaLoaded = !isSaved || packageName in viewModel.bundleSummaryLoaded
-                        val showPlaceholder = !hasPackageInfo || !isBundleMetaLoaded
-                        val isMissingInstall = packageName in viewModel.missingPackages
-                        val isSelectable = true
-                        val isSelected = packageName in viewModel.selectedApps
-                        val isInstalledOnDevice = viewModel.installedOnDeviceMap[packageName] == true
-                        val hasSavedCopy = viewModel.savedCopyMap[packageName] == true
-                        val savedApkAbiLabel = viewModel.savedApkAbiLabelMap[packageName]
-                        val isMounted = if (
-                            installedApp.installType == InstallType.MOUNT && supportsRootMount
-                        ) {
-                            viewModel.mountedOnDeviceMap[packageName]
-                                ?: (viewModel.installedOnDeviceMap[packageName] == true)
-                        } else {
-                            false
-                        }
-                        val bundleSummaries = viewModel.bundleSummaries[packageName].orEmpty()
+            val appEntry: @Composable (InstalledApp) -> Unit = { installedApp ->
+                    val packageName = installedApp.currentPackageName
+                    val packageInfo = viewModel.packageInfoMap[packageName]
+                    val hasPackageInfo = viewModel.packageInfoMap.containsKey(packageName)
+                    val supportsRootMount = installedApp.supportsRootMount(packageInfo?.packageName)
+                    val isSaved = installedApp.installType == InstallType.SAVED ||
+                        (installedApp.installType == InstallType.MOUNT && !supportsRootMount)
+                    val isBundleMetaLoaded = !isSaved || packageName in viewModel.bundleSummaryLoaded
+                    val showPlaceholder = !hasPackageInfo || !isBundleMetaLoaded
+                    val isMissingInstall = packageName in viewModel.missingPackages
+                    val isSelectable = true
+                    val isSelected = packageName in viewModel.selectedApps
+                    val isInstalledOnDevice = viewModel.installedOnDeviceMap[packageName] == true
+                    val hasSavedCopy = viewModel.savedCopyMap[packageName] == true
+                    val savedApkAbiLabel = viewModel.savedApkAbiLabelMap[packageName]
+                    val isMounted = if (
+                        installedApp.installType == InstallType.MOUNT && supportsRootMount
+                    ) {
+                        viewModel.mountedOnDeviceMap[packageName]
+                            ?: (viewModel.installedOnDeviceMap[packageName] == true)
+                    } else {
+                        false
+                    }
+                    val bundleSummaries = viewModel.bundleSummaries[packageName].orEmpty()
 
-                        if (showPlaceholder) {
-                            InstalledAppCardPlaceholder()
-                        } else {
-                            InstalledAppCard(
-                                installedApp = installedApp,
-                                packageInfo = packageInfo,
-                                appLabel = viewModel.appLabelMap[packageName],
-                                customInstallerLabel = viewModel.customInstallerLabelMap[packageName],
-                                isSelected = isSelected,
-                                selectionActive = selectionActive,
-                                isSelectable = isSelectable,
-                                isMissingInstall = isMissingInstall,
-                                isInstalledOnDevice = isInstalledOnDevice,
-                                hasSavedCopy = hasSavedCopy,
-                                savedApkAbiLabel = savedApkAbiLabel,
-                                isMounted = isMounted,
-                                isPlayStoreInstallerSource =
-                                    viewModel.playStoreInstallerSourceMap[packageName] == true,
-                                supportsRootMount = supportsRootMount,
-                                bundleSummaries = bundleSummaries,
-                                showBundleUpdateBadges = showSavedAppBundleUpdateBadges,
-                                timeTick = timeTick,
-                                savedActionKeys = visibleSavedActionKeys,
-                                onClick = {
-                                    when {
-                                        selectionActive -> viewModel.toggleSelection(installedApp)
-                                        else -> onAppClick(installedApp)
-                                    }
-                                },
-                                onLongClick = {
-                                    viewModel.toggleSelection(installedApp)
-                                },
-                                onSelectionChange = { checked ->
-                                    viewModel.setSelection(installedApp, checked)
-                                },
-                                onAppAction = onAppAction
-                            )
-                        }
+                    if (showPlaceholder) {
+                        InstalledAppCardPlaceholder(appsLayout)
+                    } else {
+                        InstalledAppCard(
+                            layout = appsLayout,
+                            installedApp = installedApp,
+                            packageInfo = packageInfo,
+                            appLabel = viewModel.appLabelMap[packageName],
+                            customInstallerLabel = viewModel.customInstallerLabelMap[packageName],
+                            isSelected = isSelected,
+                            selectionActive = selectionActive,
+                            isSelectable = isSelectable,
+                            isMissingInstall = isMissingInstall,
+                            isInstalledOnDevice = isInstalledOnDevice,
+                            hasSavedCopy = hasSavedCopy,
+                            savedApkAbiLabel = savedApkAbiLabel,
+                            isMounted = isMounted,
+                            isPlayStoreInstallerSource =
+                                viewModel.playStoreInstallerSourceMap[packageName] == true,
+                            supportsRootMount = supportsRootMount,
+                            bundleSummaries = bundleSummaries,
+                            showBundleUpdateBadges = showSavedAppBundleUpdateBadges,
+                            timeTick = timeTick,
+                            savedActionKeys = visibleSavedActionKeys,
+                            onClick = {
+                                when {
+                                    selectionActive -> viewModel.toggleSelection(installedApp)
+                                    else -> onAppClick(installedApp)
+                                }
+                            },
+                            onLongClick = {
+                                viewModel.toggleSelection(installedApp)
+                            },
+                            onSelectionChange = { checked ->
+                                viewModel.setSelection(installedApp, checked)
+                            },
+                            onAppAction = onAppAction
+                        )
+                    }
+            }
+            if (appsLayout == DashboardListLayout.GRID) {
+                DashboardGrid {
+                    gridItems(
+                        filteredApps.orEmpty(),
+                        key = { it.currentPackageName }
+                    ) { installedApp -> appEntry(installedApp) }
+                }
+            } else {
+                LazyColumnWithScrollbar(
+                    thumbLength = DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Top,
+                    // Room for the floating action buttons, so the last card can scroll clear of them.
+                    contentPadding = PaddingValues(
+                        top = if (appsLayout == DashboardListLayout.COMPACT) 5.dp else 0.dp,
+                        bottom = DashboardFabClearance
+                    )
+                ) {
+                    items(
+                        filteredApps.orEmpty(),
+                        key = { it.currentPackageName }
+                    ) { installedApp -> appEntry(installedApp) }
                 }
             }
         }
@@ -284,6 +321,7 @@ fun InstalledAppsScreen(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun InstalledAppCard(
+    layout: DashboardListLayout,
     installedApp: InstalledApp,
     packageInfo: PackageInfo?,
     appLabel: String?,
@@ -322,7 +360,7 @@ private fun InstalledAppCard(
     } else {
         installedApp.currentPackageName
     }
-    val cardShape = RoundedCornerShape(18.dp)
+    val cardShape = MaterialTheme.shapes.large.withClassicCorner(18.dp)
     val elevation = if (isSelected) 6.dp else 2.dp
     val cardBase = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
     val headerBase = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp)
@@ -341,6 +379,54 @@ private fun InstalledAppCard(
             val tick = timeTick
             stringResource(R.string.saved_app_created_at, createdAt.relativeTime(context))
         }
+
+    if (layout != DashboardListLayout.CARDS) {
+        val bundleUpdateCount = if (showBundleUpdateBadges) {
+            bundleSummaries.count { it.hasUpdate }
+        } else 0
+        val summary = InstalledAppSummary(
+            packageInfo = packageInfo,
+            appLabel = appLabel,
+            displayPackageName = displayPackageName,
+            version = formattedVersion,
+            bundleLine = when (bundleSummaries.size) {
+                0 -> null
+                1 -> bundleSummaries.first().title
+                else -> pluralStringResource(
+                    R.plurals.saved_app_patch_bundles_applied_quantity,
+                    bundleSummaries.size,
+                    bundleSummaries.size
+                )
+            },
+            installTypeLabel = if (displayInstallType == InstallType.CUSTOM) {
+                customInstallerLabel ?: stringResource(displayInstallType.stringResource)
+            } else {
+                stringResource(displayInstallType.stringResource)
+            },
+            statusIcon = when {
+                isMissingInstall -> Icons.Outlined.ErrorOutline to stringResource(R.string.patches_missing)
+                bundleUpdateCount > 0 -> Icons.Outlined.Update to pluralStringResource(
+                    R.plurals.saved_app_bundle_update_badge_quantity,
+                    bundleUpdateCount
+                )
+                else -> null
+            },
+            statusIsError = isMissingInstall
+        )
+        InstalledAppSummaryEntry(
+            layout = layout,
+            summary = summary,
+            elevation = elevation,
+            color = cardBackground,
+            isSelected = isSelected,
+            selectionActive = selectionActive,
+            isSelectable = isSelectable,
+            onSelectionChange = onSelectionChange,
+            onClick = onClick,
+            onLongClick = onLongClick
+        )
+        return
+    }
 
     Surface(
         modifier = Modifier
@@ -373,6 +459,7 @@ private fun InstalledAppCard(
                 }
                 AppIcon(
                     packageInfo = packageInfo,
+                    packageName = displayPackageName,
                     contentDescription = null,
                     modifier = Modifier.size(32.dp)
                 )
@@ -428,8 +515,10 @@ private fun InstalledAppCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                if (bundleSummaries.isNotEmpty()) {
-                    val bundleLine = if (bundleSummaries.size == 1) {
+                if (bundleSummaries.isNotEmpty() || isMissingInstall) {
+                    val bundleLine = if (bundleSummaries.isEmpty()) {
+                        ""
+                    } else if (bundleSummaries.size == 1) {
                         val summary = bundleSummaries.first()
                         val versionText = summary.version?.let(::formatVersion)
                         listOfNotNull(summary.title, versionText).joinToString(" • ")
@@ -461,15 +550,13 @@ private fun InstalledAppCard(
                                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
-                    }
-                }
-                if (isMissingInstall) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        StatusChip(
-                            text = stringResource(R.string.patches_missing),
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer
-                        )
+                        if (isMissingInstall) {
+                            StatusChip(
+                                text = stringResource(R.string.patches_missing),
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
                     }
                 }
                 val hasPatchContext = installedApp.selectionPayload != null || bundleSummaries.isNotEmpty()
@@ -478,6 +565,7 @@ private fun InstalledAppCard(
                     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                         Row(
                             modifier = Modifier
+                                .horizontalScrollFade(actionScrollState)
                                 .widthIn(min = maxWidth)
                                 .consumeHorizontalScroll(actionScrollState),
                             horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
@@ -596,9 +684,196 @@ private fun InstalledAppCard(
     }
 }
 
+/** What the compact row and grid tile show for an app. */
+private class InstalledAppSummary(
+    val packageInfo: PackageInfo?,
+    val appLabel: String?,
+    val displayPackageName: String,
+    val version: String?,
+    val bundleLine: String?,
+    val installTypeLabel: String,
+    val statusIcon: Pair<androidx.compose.ui.graphics.vector.ImageVector, String>?,
+    val statusIsError: Boolean
+)
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun InstalledAppCardPlaceholder() {
-    val cardShape = RoundedCornerShape(16.dp)
+private fun InstalledAppSummaryEntry(
+    layout: DashboardListLayout,
+    summary: InstalledAppSummary,
+    elevation: androidx.compose.ui.unit.Dp,
+    color: Color,
+    isSelected: Boolean,
+    selectionActive: Boolean,
+    isSelectable: Boolean,
+    onSelectionChange: (Boolean) -> Unit,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val status: @Composable () -> Unit = {
+        summary.statusIcon?.let { (icon, description) ->
+            Icon(
+                icon,
+                contentDescription = description,
+                tint = if (summary.statusIsError) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+    val checkbox: @Composable () -> Unit = {
+        HapticCheckbox(
+            checked = isSelected,
+            onCheckedChange = if (isSelectable) onSelectionChange else null,
+            enabled = isSelectable
+        )
+    }
+    if (layout == DashboardListLayout.GRID) {
+        val shape = MaterialTheme.shapes.large.withClassicCorner(18.dp)
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            shape = shape,
+            tonalElevation = elevation,
+            color = color
+        ) {
+            Box {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    AppIcon(
+                        packageInfo = summary.packageInfo,
+                        packageName = summary.displayPackageName,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    AppLabel(
+                        packageInfo = summary.packageInfo,
+                        labelOverride = summary.appLabel,
+                        style = MaterialTheme.typography.titleSmall,
+                        defaultText = summary.displayPackageName,
+                        centered = true,
+                        // Two title lines and a version line on every tile keep each grid row even.
+                        maxLines = 2,
+                        minLines = 2
+                    )
+                    Text(
+                        text = summary.version.orEmpty(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (selectionActive) {
+                    // Pulled into the corner so the checkbox square stays off the centered icon
+                    // on the narrowest tiles, level with the status icon opposite.
+                    Box(
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .offset(x = (-6).dp, y = (-6).dp)
+                    ) { checkbox() }
+                }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                ) { status() }
+            }
+        }
+        return
+    }
+    val shape = MaterialTheme.shapes.medium.withClassicCorner(14.dp)
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 3.dp)
+            .clip(shape)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        shape = shape,
+        tonalElevation = elevation,
+        color = color
+    ) {
+        Row(
+            modifier = Modifier.padding(
+                start = if (selectionActive) 4.dp else 12.dp,
+                end = 12.dp,
+                top = 10.dp,
+                bottom = 10.dp
+            ),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (selectionActive) checkbox()
+            AppIcon(
+                packageInfo = summary.packageInfo,
+                packageName = summary.displayPackageName,
+                contentDescription = null,
+                modifier = Modifier.size(32.dp)
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                AppLabel(
+                    packageInfo = summary.packageInfo,
+                    labelOverride = summary.appLabel,
+                    style = MaterialTheme.typography.titleSmall,
+                    defaultText = summary.displayPackageName,
+                    maxLines = 1
+                )
+                val detail = listOfNotNull(summary.version, summary.bundleLine).joinToString(" • ")
+                if (detail.isNotBlank()) {
+                    Text(
+                        text = detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            status()
+            AppMetaPill(
+                text = summary.installTypeLabel,
+                modifier = Modifier.widthIn(max = 112.dp),
+                // Not scrollable: that would capture list and tab swipes starting on the pill.
+                // App info shows the full label.
+                ellipsize = true
+            )
+        }
+    }
+}
+
+@Composable
+private fun InstalledAppCardPlaceholder(layout: DashboardListLayout = DashboardListLayout.CARDS) {
+    if (layout == DashboardListLayout.GRID) {
+        ShimmerBox(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(144.dp),
+            shape = MaterialTheme.shapes.large.withClassicCorner(18.dp)
+        )
+        return
+    }
+    if (layout == DashboardListLayout.COMPACT) {
+        ShimmerBox(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 3.dp)
+                .height(56.dp),
+            shape = MaterialTheme.shapes.medium.withClassicCorner(14.dp)
+        )
+        return
+    }
+    val cardShape = MaterialTheme.shapes.large.withClassicCorner(16.dp)
     val elevation = 2.dp
     Surface(
         modifier = Modifier
@@ -618,7 +893,7 @@ private fun InstalledAppCardPlaceholder() {
         ) {
             ShimmerBox(
                 modifier = Modifier.size(48.dp),
-                shape = RoundedCornerShape(12.dp)
+                shape = MaterialTheme.shapes.medium.withClassicCorner(12.dp)
             )
             Column(
                 modifier = Modifier.weight(1f),
@@ -660,9 +935,12 @@ private fun AppMetaPill(
     modifier: Modifier = Modifier,
     horizontallyScrollable: Boolean = false,
     containerColor: Color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-    contentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant
+    contentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    /** One line cut with an ellipsis, leaving drags to the list and pager. */
+    ellipsize: Boolean = false
 ) {
     val scrollState = rememberScrollState()
+    val singleLine = horizontallyScrollable || ellipsize
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(999.dp),
@@ -682,9 +960,13 @@ private fun AppMetaPill(
                         Modifier
                     }
                 ),
-            maxLines = if (horizontallyScrollable) 1 else Int.MAX_VALUE,
-            softWrap = !horizontallyScrollable,
-            overflow = if (horizontallyScrollable) TextOverflow.Clip else TextOverflow.Visible
+            maxLines = if (singleLine) 1 else Int.MAX_VALUE,
+            softWrap = !singleLine,
+            overflow = when {
+                horizontallyScrollable -> TextOverflow.Clip
+                ellipsize -> TextOverflow.Ellipsis
+                else -> TextOverflow.Visible
+            }
         )
     }
 }
@@ -725,7 +1007,7 @@ private fun AppActionPill(
                 tint = contentColor,
                 modifier = Modifier.size(14.dp)
             )
-            Text(
+            if (!minimalActionButtons("saved")) Text(
                 text = text,
                 style = MaterialTheme.typography.labelSmall,
                 color = contentColor,
@@ -750,7 +1032,7 @@ private fun AppsOrderDialog(
         workingOrder.add(to.index, workingOrder.removeAt(from.index))
     }
 
-    AlertDialog(
+    CollectionDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {
             TextButton(onClick = { onConfirm(workingOrder.toList()) }, enabled = workingOrder.isNotEmpty()) {
@@ -764,16 +1046,17 @@ private fun AppsOrderDialog(
         },
         title = { CenteredDialogTitle(text = stringResource(R.string.apps_reorder_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     text = stringResource(R.string.apps_reorder_description),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LazyColumnWithScrollbar(
+                    thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 320.dp),
+                        .weight(1f, fill = false),
                     reserveScrollbarSpace = true,
                     state = lazyListState
                 ) {

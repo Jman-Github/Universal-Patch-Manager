@@ -1,5 +1,10 @@
 package app.universal.patch.manager.ui.screen.settings
 
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -43,18 +48,12 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -80,6 +79,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.documentfile.provider.DocumentFile
 import app.universal.patch.manager.R
+import app.universal.patch.manager.ui.component.ScrollableBottomSheet
 import app.universal.patch.manager.data.platform.Filesystem
 import app.universal.patch.manager.domain.installer.InstallerManager
 import app.universal.patch.manager.domain.manager.KeystoreManager
@@ -102,6 +102,7 @@ import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsCard
 import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsItem
 import app.universal.patch.manager.ui.component.settings.SettingsSearchHighlight
+import app.universal.patch.manager.ui.viewmodel.AppEntryArchiveViewModel
 import app.universal.patch.manager.ui.viewmodel.ImportExportViewModel
 import app.universal.patch.manager.ui.viewmodel.ResetDialogState
 import app.universal.patch.manager.ui.model.navigation.Settings
@@ -130,6 +131,7 @@ fun ImportExportSettingsScreen(
     val context = LocalContext.current
     val prefs: PreferencesManager = koinInject()
     val installerManager: InstallerManager = koinInject()
+    val appEntries: AppEntryArchiveViewModel = koinViewModel()
     val shizukuPermissionListener = remember {
         Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
             if (requestCode != IMPORTED_SHIZUKU_PERMISSION_REQUEST_CODE) {
@@ -155,12 +157,14 @@ fun ImportExportSettingsScreen(
     val patchBundlesImportDirectory by prefs.patchBundlesImportLastDirectory.getAsState()
     val patchProfilesImportDirectory by prefs.patchProfilesImportLastDirectory.getAsState()
     val managerSettingsImportDirectory by prefs.managerSettingsImportLastDirectory.getAsState()
+    val appEntriesImportDirectory by prefs.appEntriesImportLastDirectory.getAsState()
     val everythingImportDirectory by prefs.everythingImportLastDirectory.getAsState()
     val patchSelectionImportDirectory by prefs.patchSelectionImportLastDirectory.getAsState()
     val currentKeystoreExportDirectory by prefs.currentKeystoreExportLastDirectory.getAsState()
     val patchBundlesExportDirectory by prefs.patchBundlesExportLastDirectory.getAsState()
     val patchProfilesExportDirectory by prefs.patchProfilesExportLastDirectory.getAsState()
     val settingsBackupDirectory by prefs.settingsBackupLastDirectory.getAsState()
+    val appEntriesExportDirectory by prefs.appEntriesExportLastDirectory.getAsState()
     val everythingExportDirectory by prefs.everythingExportLastDirectory.getAsState()
     val patchSelectionExportDirectory by prefs.patchSelectionExportLastDirectory.getAsState()
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
@@ -186,6 +190,7 @@ fun ImportExportSettingsScreen(
         ImportPicker.PatchBundles -> prefs.patchBundlesImportLastDirectory
         ImportPicker.PatchProfiles -> prefs.patchProfilesImportLastDirectory
         ImportPicker.ManagerSettings -> prefs.managerSettingsImportLastDirectory
+        ImportPicker.AppEntries -> prefs.appEntriesImportLastDirectory
         ImportPicker.Everything -> prefs.everythingImportLastDirectory
         ImportPicker.PatchSelection -> prefs.patchSelectionImportLastDirectory
     }
@@ -195,6 +200,7 @@ fun ImportExportSettingsScreen(
         ImportPicker.PatchBundles -> patchBundlesImportDirectory
         ImportPicker.PatchProfiles -> patchProfilesImportDirectory
         ImportPicker.ManagerSettings -> managerSettingsImportDirectory
+        ImportPicker.AppEntries -> appEntriesImportDirectory
         ImportPicker.Everything -> everythingImportDirectory
         ImportPicker.PatchSelection -> patchSelectionImportDirectory
     }
@@ -204,6 +210,7 @@ fun ImportExportSettingsScreen(
         ExportPicker.PatchBundles -> prefs.patchBundlesExportLastDirectory
         ExportPicker.PatchProfiles -> prefs.patchProfilesExportLastDirectory
         ExportPicker.ManagerSettings -> prefs.settingsBackupLastDirectory
+        ExportPicker.AppEntries -> prefs.appEntriesExportLastDirectory
         ExportPicker.Everything -> prefs.everythingExportLastDirectory
         ExportPicker.PatchSelection -> prefs.patchSelectionExportLastDirectory
     }
@@ -213,12 +220,14 @@ fun ImportExportSettingsScreen(
         ExportPicker.PatchBundles -> patchBundlesExportDirectory
         ExportPicker.PatchProfiles -> patchProfilesExportDirectory
         ExportPicker.ManagerSettings -> settingsBackupDirectory
+        ExportPicker.AppEntries -> appEntriesExportDirectory
         ExportPicker.Everything -> everythingExportDirectory
         ExportPicker.PatchSelection -> patchSelectionExportDirectory
     }
 
     fun filePickerBusy(): Boolean =
-        vm.settingsImportPending || exportPreparing || exportInProgress ||
+        appEntries.busy || appEntries.exportEntries != null || appEntries.importPlan != null ||
+            vm.settingsImportPending || exportPreparing || exportInProgress ||
             activeExportPicker != null || pendingExportPicker != null ||
             pendingDocumentExportPicker != null ||
             activeImportPicker != null || pendingImportPicker != null ||
@@ -242,6 +251,7 @@ fun ImportExportSettingsScreen(
             activeExportPicker = pendingExport
         } else {
             if (pendingExport != null) vm.clearPreparedExport()
+            if (pendingExport == ExportPicker.AppEntries) appEntries.dismissExport()
             if (pendingImport == ImportPicker.PatchSelection) {
                 vm.clearSelectionAction()
             }
@@ -287,6 +297,7 @@ fun ImportExportSettingsScreen(
             ImportPicker.PatchBundles -> vm.importPatchBundles(uri)
             ImportPicker.PatchProfiles -> vm.importPatchProfiles(uri)
             ImportPicker.ManagerSettings -> vm.importManagerSettings(uri)
+            ImportPicker.AppEntries -> appEntries.openImport(uri)
             ImportPicker.Everything -> vm.importEverything(uri)
             ImportPicker.PatchSelection -> when (vm.selectionAction) {
                 ImportExportViewModel.SelectionAction.ImportAllBundles ->
@@ -295,13 +306,14 @@ fun ImportExportSettingsScreen(
             }
         }
     }
-    val runDocumentExport: (ExportPicker, Uri) -> Unit = { picker, uri ->
-        exportInProgress = true
+    val runDocumentExport: (ExportPicker, Uri) -> Unit = runDocumentExport@{ picker, uri ->
+        exportInProgress = picker != ExportPicker.AppEntries
         val job = when (picker) {
             ExportPicker.Keystore -> vm.exportKeystore(uri)
             ExportPicker.PatchBundles -> vm.exportPatchBundles(uri)
             ExportPicker.PatchProfiles -> vm.exportPatchProfiles(uri)
             ExportPicker.ManagerSettings -> vm.exportManagerSettings(uri)
+            ExportPicker.AppEntries -> appEntries.finishExport(uri) ?: return@runDocumentExport
             ExportPicker.Everything -> vm.exportEverything(uri)
             ExportPicker.PatchSelection -> when (vm.selectionAction) {
                 ImportExportViewModel.SelectionAction.ExportAllBundles ->
@@ -351,6 +363,23 @@ fun ImportExportSettingsScreen(
         }
         coroutineScope.launch {
             exportDirectoryPreference(picker).update(uri.toPickerDirectoryUri().toString())
+        }
+        runDocumentExport(picker, uri)
+    }
+    val exportAppEntriesDocumentLauncher = rememberLauncherForActivityResult(
+        contract = RememberedCreateDocument("application/zip") {
+            appEntriesExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
+    ) { uri ->
+        val picker = pendingDocumentExportPicker
+        pendingDocumentExportPicker = null
+        if (picker != ExportPicker.AppEntries) return@rememberLauncherForActivityResult
+        if (uri == null) {
+            appEntries.dismissExport()
+            return@rememberLauncherForActivityResult
+        }
+        coroutineScope.launch {
+            prefs.appEntriesExportLastDirectory.update(uri.toPickerDirectoryUri().toString())
         }
         runDocumentExport(picker, uri)
     }
@@ -409,10 +438,10 @@ fun ImportExportSettingsScreen(
                     }
                 } else {
                     pendingDocumentExportPicker = target
-                    if (target == ExportPicker.Keystore) {
-                        exportKeystoreDocumentLauncher.launch(exportName)
-                    } else {
-                        exportDocumentLauncher.launch(exportName)
+                    when (target) {
+                        ExportPicker.Keystore -> exportKeystoreDocumentLauncher.launch(exportName)
+                        ExportPicker.AppEntries -> exportAppEntriesDocumentLauncher.launch(exportName)
+                        else -> exportDocumentLauncher.launch(exportName)
                     }
                 }
             } finally {
@@ -420,13 +449,14 @@ fun ImportExportSettingsScreen(
             }
         }
     }
-    val runExport = { picker: ExportPicker, target: Path ->
-        exportInProgress = true
+    val runExport = runExport@{ picker: ExportPicker, target: Path ->
+        exportInProgress = picker != ExportPicker.AppEntries
         val job = when (picker) {
             ExportPicker.Keystore -> vm.exportKeystore(target)
             ExportPicker.PatchBundles -> vm.exportPatchBundles(target)
             ExportPicker.PatchProfiles -> vm.exportPatchProfiles(target)
             ExportPicker.ManagerSettings -> vm.exportManagerSettings(target)
+            ExportPicker.AppEntries -> appEntries.finishExport(Uri.fromFile(target.toFile())) ?: return@runExport
             ExportPicker.Everything -> vm.exportEverything(target)
             ExportPicker.PatchSelection -> when (vm.selectionAction) {
                 ImportExportViewModel.SelectionAction.ExportAllBundles ->
@@ -440,6 +470,35 @@ fun ImportExportSettingsScreen(
             activeExportPicker = null
         }
     }
+
+    appEntries.exportEntries?.let { entries ->
+        AppEntryArchiveSelection(
+            title = stringResource(R.string.export_app_entries),
+            description = stringResource(R.string.export_app_entries_description),
+            action = stringResource(R.string.app_entries_export_action),
+            entries = entries.map {
+                AppEntryChoice(it.label, it.record.originalPackageName, it.record.version, it.missing, it.hasApk, it.icon)
+            },
+            onDismiss = appEntries::dismissExport,
+            onConfirm = { selected ->
+                appEntries.prepareExport(selected)
+                openExportPicker(ExportPicker.AppEntries)
+            }
+        )
+    }
+    appEntries.importPlan?.takeIf { it.entries.size > 1 }?.let { plan ->
+        AppEntryArchiveSelection(
+            title = stringResource(R.string.import_app_entries),
+            description = stringResource(R.string.import_app_entries_description),
+            action = stringResource(R.string.import_button),
+            entries = plan.entries.mapIndexed { index, it ->
+                AppEntryChoice(it.label, it.originalPackageName, it.version, it.missing, icon = plan.icons.getOrNull(index))
+            },
+            onDismiss = appEntries::dismissImport,
+            onConfirm = appEntries::finishImport
+        )
+    }
+    appEntries.progress?.let { AppEntryArchiveProgressDialog(it) }
 
     val patchBundles by vm.patchBundles.collectAsStateWithLifecycle(initialValue = emptyList())
     val packagesWithSelections by vm.packagesWithSelection.collectAsStateWithLifecycle(initialValue = emptySet())
@@ -655,18 +714,17 @@ fun ImportExportSettingsScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.7f)
-                            .height(4.dp)
                             .clip(RoundedCornerShape(999.dp))
                     )
                 }
             },
             confirmButton = {},
             dismissButton = {},
-            shape = RoundedCornerShape(28.dp)
+            shape = MaterialTheme.shapes.extraLarge.withClassicCorner(28.dp)
         )
     }
 
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
 
     Scaffold(
         topBar = {
@@ -679,6 +737,7 @@ fun ImportExportSettingsScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         ColumnWithScrollbar(
+            thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
@@ -687,6 +746,7 @@ fun ImportExportSettingsScreen(
             if (useCustomFilePicker) activeImportPicker?.let { picker ->
                 val fileFilter = when (picker) {
                     ImportPicker.Keystore -> ::isKeystoreFile
+                    ImportPicker.AppEntries -> ::isZipFile
                     ImportPicker.PatchBundles,
                     ImportPicker.PatchProfiles,
                     ImportPicker.ManagerSettings,
@@ -708,6 +768,7 @@ fun ImportExportSettingsScreen(
                             ImportPicker.PatchBundles -> vm.importPatchBundles(path)
                             ImportPicker.PatchProfiles -> vm.importPatchProfiles(path)
                             ImportPicker.ManagerSettings -> vm.importManagerSettings(path)
+                            ImportPicker.AppEntries -> appEntries.openImport(Uri.fromFile(path.toFile()))
                             ImportPicker.Everything -> vm.importEverything(path)
                             ImportPicker.PatchSelection -> when (vm.selectionAction) {
                                 ImportExportViewModel.SelectionAction.ImportAllBundles ->
@@ -724,6 +785,7 @@ fun ImportExportSettingsScreen(
             if (useCustomFilePicker) activeExportPicker?.let { picker ->
                 val fileFilter = when (picker) {
                     ExportPicker.Keystore -> ::isKeystoreFile
+                    ExportPicker.AppEntries -> ::isZipFile
                     ExportPicker.PatchBundles,
                     ExportPicker.PatchProfiles,
                     ExportPicker.ManagerSettings,
@@ -732,6 +794,7 @@ fun ImportExportSettingsScreen(
                 }
                 val fileTypeLabel = when (picker) {
                     ExportPicker.Keystore -> ".keystore"
+                    ExportPicker.AppEntries -> ".zip"
                     ExportPicker.PatchBundles,
                     ExportPicker.PatchProfiles,
                     ExportPicker.ManagerSettings,
@@ -743,6 +806,7 @@ fun ImportExportSettingsScreen(
                     onSelect = { path ->
                         if (path == null) {
                             activeExportPicker = null
+                            if (picker == ExportPicker.AppEntries) appEntries.dismissExport()
                             vm.clearPreparedExport()
                             if (picker == ExportPicker.PatchSelection) {
                                 vm.clearSelectionAction()
@@ -770,14 +834,18 @@ fun ImportExportSettingsScreen(
                     onDismiss = {
                         exportFileDialogState = null
                         activeExportPicker = null
+                        if (state.picker == ExportPicker.AppEntries) appEntries.dismissExport()
                         vm.clearPreparedExport()
                         if (state.picker == ExportPicker.PatchSelection) {
                             vm.clearSelectionAction()
                         }
                     },
                     onConfirm = { fileName ->
-                        val trimmedName = fileName.trim()
-                        if (trimmedName.isBlank()) return@ExportFileNameDialog
+                        val enteredName = fileName.trim()
+                        if (enteredName.isBlank()) return@ExportFileNameDialog
+                        val trimmedName = if (
+                            state.picker == ExportPicker.AppEntries && !enteredName.endsWith(".zip", ignoreCase = true)
+                        ) "$enteredName.zip" else enteredName
                         exportFileDialogState = null
                         val target = state.directory.resolve(trimmedName)
                         if (Files.exists(target)) {
@@ -867,10 +935,17 @@ fun ImportExportSettingsScreen(
                 }
             }
 
-            GroupHeader(
-                stringResource(R.string.keystore_section),
-                icon = SettingsSectionIcons.Keystore
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.keystore_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.keystore_section),
+                    icon = SettingsSectionIcons.Keystore,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
@@ -941,10 +1016,17 @@ fun ImportExportSettingsScreen(
                 }
             }
 
-            GroupHeader(
-                stringResource(R.string.settings_selections_bundles_section),
-                icon = SettingsSectionIcons.SettingsSelectionsBundles
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.settings_selections_bundles_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.settings_selections_bundles_section),
+                    icon = SettingsSectionIcons.SettingsSelectionsBundles,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
@@ -1034,6 +1116,19 @@ fun ImportExportSettingsScreen(
                         },
                         headline = R.string.export_manager_settings,
                         description = R.string.export_manager_settings_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.export_app_entries,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = { if (!filePickerBusy()) appEntries.chooseExport() },
+                        headline = R.string.export_app_entries,
+                        description = R.string.export_app_entries_description
                     )
                 }
             }
@@ -1127,12 +1222,36 @@ fun ImportExportSettingsScreen(
                         description = R.string.import_manager_settings_description
                     )
                 }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.import_app_entries,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            if (!filePickerBusy()) {
+                                openImportPicker(ImportPicker.AppEntries)
+                            }
+                        },
+                        headline = R.string.import_app_entries,
+                        description = R.string.import_app_entries_description
+                    )
+                }
             }
 
-            GroupHeader(
-                stringResource(R.string.reset),
-                icon = SettingsSectionIcons.Reset
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.reset,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.reset),
+                    icon = SettingsSectionIcons.Reset,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
@@ -1284,42 +1403,34 @@ private fun PackageSelector(packages: Set<String>, onFinish: (String?) -> Unit) 
 
     if (noPackages) return
 
-    ModalBottomSheet(
-        onDismissRequest = { onFinish(null) }
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier
-                    .height(48.dp)
-                    .fillMaxWidth()
+    ScrollableBottomSheet(onDismissRequest = { onFinish(null) }) {
+        Column(Modifier.fillMaxWidth()) {
+            Text(
+                text = stringResource(R.string.select_package),
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 12.dp)
+            )
+            ColumnWithScrollbar(
+                modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = stringResource(R.string.select_package),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            packages.forEach {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier
-                        .height(48.dp)
-                        .fillMaxWidth()
-                        .clickable {
-                            onFinish(it)
-                        }
-                ) {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                packages.forEach { packageName ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier
+                            .height(48.dp)
+                            .fillMaxWidth()
+                            .clickable { onFinish(packageName) }
+                    ) {
+                        Text(
+                            text = packageName,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
         }
@@ -1875,6 +1986,7 @@ private enum class ExportPicker(val defaultName: String) {
     PatchBundles("upm_patch_bundles.json"),
     PatchProfiles("upm_patch_profiles.json"),
     ManagerSettings("upm_settings.json"),
+    AppEntries("upm_app_entries.zip"),
     PatchSelection("upm_patch_selection_all.json")
 }
 
@@ -1884,12 +1996,14 @@ private enum class ImportPicker {
     PatchBundles,
     PatchProfiles,
     ManagerSettings,
+    AppEntries,
     PatchSelection
 }
 
 private fun documentMimeForImportPicker(picker: ImportPicker): String =
     when (picker) {
         ImportPicker.Keystore -> "application/octet-stream"
+        ImportPicker.AppEntries -> "*/*"
         ImportPicker.PatchBundles,
         ImportPicker.PatchProfiles,
         ImportPicker.ManagerSettings,
@@ -1921,6 +2035,7 @@ private fun defaultExportFileName(
 private fun isValidImportUri(context: android.content.Context, uri: Uri, picker: ImportPicker): Boolean {
     val valid = when (picker) {
         ImportPicker.Keystore -> uriHasAnyExtension(context, uri, "jks", "keystore", "p12", "pfx", "bks")
+        ImportPicker.AppEntries -> uriHasAnyExtension(context, uri, "zip")
         ImportPicker.PatchBundles,
         ImportPicker.PatchProfiles,
         ImportPicker.ManagerSettings,
@@ -1930,6 +2045,7 @@ private fun isValidImportUri(context: android.content.Context, uri: Uri, picker:
     if (!valid) {
         val message = when (picker) {
             ImportPicker.Keystore -> context.getString(R.string.selected_file_not_supported_keystore)
+            ImportPicker.AppEntries -> context.getString(R.string.app_entries_select_zip)
             ImportPicker.PatchBundles,
             ImportPicker.PatchProfiles,
             ImportPicker.ManagerSettings,
@@ -1940,6 +2056,9 @@ private fun isValidImportUri(context: android.content.Context, uri: Uri, picker:
     }
     return valid
 }
+
+private fun isZipFile(path: Path): Boolean =
+    hasExtension(path, "zip")
 
 private fun isJsonFile(path: Path): Boolean =
     hasExtension(path, "json")

@@ -75,7 +75,10 @@ data class BatchPatchItem(
     val patcherProgress: PatcherProgressSnapshot? = null,
     val memoryUsageSamples: List<PatcherMemoryUsage> = emptyList(),
     val logLines: List<String> = emptyList(),
-    val signatureInjection: SignatureMetadataWorkflowProgress = SignatureMetadataWorkflowProgress()
+    val signatureInjection: SignatureMetadataWorkflowProgress = SignatureMetadataWorkflowProgress(),
+    // Identifies this queue item. Planned batches have one item per app, so the package name
+    // serves; a manual queue can hold the same app more than once (one per patch bundle).
+    val key: String = packageName
 ) {
     val patchCount get() = selection.values.sumOf { it.size }
     val hasAvailablePatchedFile get() =
@@ -94,6 +97,17 @@ data class BatchPatchItem(
                     patcherSessionInfo != PatcherSessionInfo()
                 ))
 }
+
+/** True when another item in the batch was resolved from the same source entry as [item]. */
+internal fun sharesBatchSourceEntry(items: List<BatchPatchItem>, item: BatchPatchItem): Boolean {
+    val source = item.sourceEntryKey ?: return false
+    return items.any { it.key != item.key && it.sourceEntryKey == source }
+}
+
+/** Names of the bundles this item patches with, which tell apart entries for the same app. */
+internal fun BatchPatchItem.selectedBundleNames(): String = bundles
+    .filter { it.uid in selection.keys }
+    .joinToString(", ") { it.name }
 
 enum class BatchInstallPolicy { SAVE_ONLY, INSTALL_AFTER }
 
@@ -167,7 +181,7 @@ data class BatchRunState(
     val progress: Float = 0f,
     val detail: String? = null,
     val restored: Boolean = false,
-    val activeInstallPackageName: String? = null
+    val activeInstallKey: String? = null
 ) {
     val activeItem get() = activeIndex?.let(items::getOrNull)
     val runnable get() = items.filter { it.state.isRunnable }
@@ -189,16 +203,23 @@ internal fun BatchRunState.canInstallBatchItem(item: BatchPatchItem): Boolean =
         item.hasAvailablePatchedFile &&
         !item.saving &&
         item.installOutcome != BatchInstallOutcome.INSTALLED &&
-        items.none { it.installing }
+        items.none { it.installing } &&
+        !(phase == BatchPhase.RUNNING && items.any { other ->
+            // Installing now would replace the installed app another entry still patches from.
+            other.key != item.key &&
+                other.packageName == item.packageName &&
+                other.input is SelectedApp.Installed &&
+                (other.state == BatchItemState.READY || other.state == BatchItemState.RUNNING)
+        })
 
 internal fun interruptBatchItemInstall(
     state: BatchRunState,
-    packageName: String,
+    key: String,
     message: String
 ): BatchRunState = state.copy(
-    activeInstallPackageName = null,
+    activeInstallKey = null,
     items = state.items.map { item ->
-        if (item.packageName == packageName && item.installing) {
+        if (item.key == key && item.installing) {
             item.copy(
                 installOutcome = BatchInstallOutcome.FAILED,
                 installMessage = message,
@@ -214,13 +235,13 @@ internal fun BatchRunState.canStartBatchPatch(): Boolean =
 
 internal fun reorderBatchItems(
     items: List<BatchPatchItem>,
-    packageNames: List<String>
+    keys: List<String>
 ): List<BatchPatchItem> {
-    val order = packageNames.distinct().withIndex().associate { it.value to it.index }
+    val order = keys.distinct().withIndex().associate { it.value to it.index }
     return items.withIndex()
         .sortedWith(
             compareBy<IndexedValue<BatchPatchItem>> {
-                order[it.value.packageName] ?: Int.MAX_VALUE
+                order[it.value.key] ?: Int.MAX_VALUE
             }.thenBy { it.index }
         )
         .map { it.value }
@@ -233,15 +254,15 @@ internal fun finishInterruptedInstallState(
     if (state.phase == BatchPhase.CANCELLING || state.phase == BatchPhase.FINISHED) {
         return state
     }
-    val interruptedPackage = state.activeInstallPackageName
-        ?: state.activeItem?.packageName
+    val interruptedKey = state.activeInstallKey
+        ?: state.activeItem?.key
     return state.copy(
         phase = BatchPhase.FINISHED,
         activeIndex = null,
-        activeInstallPackageName = null,
+        activeInstallKey = null,
         detail = null,
         items = state.items.map { item ->
-            if (item.packageName == interruptedPackage && item.installing) {
+            if (item.key == interruptedKey && item.installing) {
                 item.copy(
                     installOutcome = BatchInstallOutcome.FAILED,
                     installMessage = message,
@@ -290,7 +311,9 @@ data class BatchResultItemSnapshot(
     val hadPatchFailures: Boolean = true,
     val patcherEngine: String? = null,
     val patcherSessionInfo: PatcherSessionInfo = PatcherSessionInfo(),
-    val logLines: List<String> = emptyList()
+    val logLines: List<String> = emptyList(),
+    // Results saved before queue items had their own keys fall back to the package name.
+    val key: String? = null
 )
 
 internal fun restoreBatchSelection(

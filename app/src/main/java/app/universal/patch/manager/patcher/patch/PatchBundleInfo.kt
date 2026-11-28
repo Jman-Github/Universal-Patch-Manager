@@ -108,12 +108,35 @@ sealed class PatchBundleInfo {
         val incompatible: List<PatchInfo>,
         val universal: List<PatchInfo>
     ) : PatchBundleInfo() {
-        fun patchSequence(allowIncompatible: Boolean) = if (allowIncompatible) {
-            patches.asSequence()
-        } else {
-            sequence {
-                yieldAll(compatible)
-                yieldAll(universal)
+        // The execution contract addresses patches by name within each bundle.
+        // Prefer a compatible entry if the metadata lists several rows for that name.
+        private val selectionRows: Scoped by lazy {
+            val seen = mutableSetOf<String>()
+            val selectableCompatible = compatible.filter { seen.add(it.name) }
+            val selectableUniversal = universal.filter { seen.add(it.name) }
+            val selectableIncompatible = incompatible.filter { seen.add(it.name) }
+            if (seen.size == patches.size) return@lazy this
+
+            val selectable = (selectableCompatible + selectableUniversal + selectableIncompatible).toSet()
+            copy(
+                patches = patches.filter { it in selectable }.distinctBy(PatchInfo::name),
+                compatible = selectableCompatible,
+                incompatible = selectableIncompatible,
+                universal = selectableUniversal
+            )
+        }
+
+        fun forSelection(): Scoped = selectionRows
+
+        fun patchSequence(allowIncompatible: Boolean): Sequence<PatchInfo> {
+            val rows = forSelection()
+            return if (allowIncompatible) {
+                rows.patches.asSequence()
+            } else {
+                sequence {
+                    yieldAll(rows.compatible)
+                    yieldAll(rows.universal)
+                }
             }
         }
     }

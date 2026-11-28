@@ -31,9 +31,10 @@ class RootMountVerifier(
 
     private suspend fun findUrvMounts(
         packageName: String,
-        mountTable: List<MountInfoEntry>
+        mountTable: List<MountInfoEntry>,
+        includeCompeting: Boolean = false
     ): List<MountInfoEntry> {
-        val sources = urvSources(packageName)
+        val sources = urvSources(packageName, includeCompeting)
         var sourceInodes: Set<String>? = null
         val owned = linkedSetOf<MountInfoEntry>()
         mountTable.filter { isSafeApkPath(it.mountPoint) }
@@ -51,7 +52,7 @@ class RootMountVerifier(
                 // stat calls across every APK mount on the device.
                 val visibleLayer = layers.maxByOrNull(MountInfoEntry::mountId)
                 if (visibleLayer != null && visibleLayer !in directlyOwned) {
-                    val inodes = sourceInodes ?: knownSourceInodes(packageName)
+                    val inodes = sourceInodes ?: knownSourceInodes(packageName, includeCompeting)
                         .also { sourceInodes = it }
                     if (inode(target) in inodes) {
                         owned += visibleLayer
@@ -61,16 +62,18 @@ class RootMountVerifier(
         return mountTable.filter { it in owned }
     }
 
-    private fun urvSources(packageName: String): Set<String> = buildSet {
+    private fun urvSources(packageName: String, includeCompeting: Boolean): Set<String> = buildSet {
         listOf(
             RootPaths.moduleApk(packageName),
             RootPaths.moduleStockApk(packageName),
-            "${RootPaths.LEGACY}/$packageName/$packageName.apk",
+            "${RootPaths.legacyPackage(packageName)}/$packageName.apk",
             "${RootPaths.rollbackModule(packageName)}/$packageName.apk",
             "${RootPaths.rollbackModule(packageName)}/$packageName-stock.apk",
             "${RootPaths.backup(packageName)}/module/$packageName.apk",
             "${RootPaths.backup(packageName)}/module/$packageName-stock.apk"
-        ).forEach { source ->
+        ).let { sources ->
+            if (includeCompeting) sources + RootPaths.competingPayloads(packageName) else sources
+        }.forEach { source ->
             add(source)
             // mountinfo records the root inside the /data filesystem, not the
             // absolute Android path, for bind mounts backed by /data.
@@ -83,12 +86,12 @@ class RootMountVerifier(
         return targetInode in sourceInodes
     }
 
-    private suspend fun knownSourceInodes(packageName: String): Set<String> {
+    private suspend fun knownSourceInodes(packageName: String, includeCompeting: Boolean): Set<String> {
         // Only the set of identities matters here, not which path produced each one.
         // Probe all candidates in one bounded job, including legacy and mountinfo aliases.
         // Missing candidates are expected: stat still prints identities for existing files
         // even when another operand fails. Never retain these across discovery calls.
-        val paths = urvSources(packageName).joinToString(" ", transform = ::shellQuote)
+        val paths = urvSources(packageName, includeCompeting).joinToString(" ", transform = ::shellQuote)
         val result = shell.runIsolatedBounded(
             "stat -c '%d:%i' $paths 2>/dev/null",
             METADATA_TIMEOUT_SECONDS,
@@ -100,33 +103,46 @@ class RootMountVerifier(
     override suspend fun removeAllUrvMounts(
         packageName: String,
         extraTargets: Set<String>,
-        allowLazyRecovery: Boolean
+        allowLazyRecovery: Boolean,
+        includeCompeting: Boolean
     ): List<String> {
+        require(extraTargets.all(::isSafeApkPath)) { "Unsafe mount target in transaction state" }
         val lazyUnmounts = mutableListOf<String>()
-        var sourceInodes: Set<String>? = null
+        val inodesByScope = mutableMapOf<Boolean, Set<String>>()
+        fun includesCompetitor(target: String) = includeCompeting && target in extraTargets
+        suspend fun visibleLayerIsOwned(target: String): Boolean {
+            val scope = includesCompetitor(target)
+            val inodes = inodesByScope.getOrPut(scope) { knownSourceInodes(packageName, scope) }
+            return visibleTargetIsUrv(target, inodes)
+        }
         suspend fun revalidateOwnedMountRemains(target: String): Boolean {
             val latestMountTable = mountTableReader.read()
             val allAtTarget = latestMountTable.filter { it.mountPoint == target }
-            val urvAtTarget = findUrvMounts(packageName, latestMountTable)
-                .filter { it.mountPoint == target }
+            val urvAtTarget = findUrvMounts(packageName, allAtTarget, includesCompetitor(target))
             if (urvAtTarget.isEmpty()) return false
             if (allAtTarget.size != urvAtTarget.size) {
-                val inodes = sourceInodes ?: knownSourceInodes(packageName)
-                    .also { sourceInodes = it }
-                check(visibleTargetIsUrv(target, inodes)) {
+                check(visibleLayerIsOwned(target)) {
                     "Foreign mount layer shares UPM target $target; refusing to lazily unmount another owner's layer"
                 }
             }
             return true
         }
-        val targets = findUrvMounts(packageName, extraTargets)
+        suspend fun findCleanupMounts(): List<MountInfoEntry> {
+            val table = mountTableReader.read()
+            if (!includeCompeting) return findUrvMounts(packageName, table)
+            val (currentTargets, otherTargets) = table.partition { it.mountPoint in extraTargets }
+            return findUrvMounts(packageName, currentTargets, includeCompeting = true) +
+                findUrvMounts(packageName, otherTargets)
+        }
+        val targets = findCleanupMounts()
             .map { it.mountPoint }
             .distinct()
             .sortedByDescending(String::length)
         lazyUnmounts += namespaces.removeOwned(
             packageName,
             extraTargets + targets,
-            allowLazyRecovery
+            allowLazyRecovery,
+            competingTargets = if (includeCompeting) extraTargets else emptySet()
         )
         for (target in targets) {
             var unmountAttempts = 0
@@ -134,13 +150,10 @@ class RootMountVerifier(
             while (true) {
                 val mountTable = mountTableReader.read()
                 val allAtTarget = mountTable.filter { it.mountPoint == target }
-                val urvAtTarget = findUrvMounts(packageName, mountTable)
-                    .filter { it.mountPoint == target }
+                val urvAtTarget = findUrvMounts(packageName, allAtTarget, includesCompetitor(target))
                 if (urvAtTarget.isEmpty()) break
                 if (allAtTarget.size != urvAtTarget.size) {
-                    val inodes = sourceInodes ?: knownSourceInodes(packageName)
-                        .also { sourceInodes = it }
-                    check(visibleTargetIsUrv(target, inodes)) {
+                    check(visibleLayerIsOwned(target)) {
                         "Foreign mount layer shares UPM target $target; refusing to unmount another owner's layer"
                     }
                 }
@@ -173,7 +186,7 @@ class RootMountVerifier(
                 unmountAttempts++
             }
         }
-        val remaining = findUrvMounts(packageName, extraTargets)
+        val remaining = findCleanupMounts()
         check(remaining.isEmpty()) { "UPM mount remained after unmount: ${remaining.joinToString { it.mountPoint }}" }
         return lazyUnmounts.distinct()
     }

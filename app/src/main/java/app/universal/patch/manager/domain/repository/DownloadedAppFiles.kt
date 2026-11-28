@@ -1,5 +1,6 @@
 package app.universal.patch.manager.domain.repository
 
+import app.universal.patch.manager.data.platform.SharedApkFiles
 import app.universal.patch.manager.patcher.split.SplitApkPreparer
 import java.io.File
 import java.io.OutputStream
@@ -9,11 +10,11 @@ import java.util.zip.ZipOutputStream
 
 /** Saved downloads retain their original APK components, including when exported. */
 internal object DownloadedAppFiles {
-    fun source(directory: File): File =
+    fun source(directory: File): File = SharedApkFiles.resolve(
         listOf(directory.resolve("base.apks"), directory.resolve("base.apk"))
             .firstOrNull(File::isFile)
             ?: directory.listFiles()?.filter(File::isFile)?.singleOrNull()
-            ?: error("Downloaded app file is missing or ambiguous: ${directory.absolutePath}")
+            ?: error("Downloaded app file is missing or ambiguous: ${directory.absolutePath}"))
 
     fun extension(file: File): String =
         if (SplitApkPreparer.isSplitArchive(file)) "apks" else "apk"

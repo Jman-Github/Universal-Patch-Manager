@@ -55,6 +55,18 @@ internal data class RootMountStateIdentity(
     val committedAtEpochMs: Long
 )
 
+internal data class RootRestoreDowngradeTarget(
+    val savedTransactionId: String,
+    val savedStockSha256: String,
+    val savedPatchedSha256: String,
+    val installedStock: RootPackageState
+)
+
+internal data class RootPayloadRestoreAttempt(
+    val result: RootMountResult,
+    val downgradeTarget: RootRestoreDowngradeTarget? = null
+)
+
 internal data class ConditionalRootMountExecution(
     val matched: Boolean,
     val stateIdentity: RootMountStateIdentity?
@@ -90,6 +102,85 @@ class RootMountTransactionCoordinator(
     ): RootMountResult = withContext(Dispatchers.IO) {
         mutexFor(request.packageName).withLock {
             executeWithLockHeld(request, onPhase)
+        }
+    }
+
+    internal suspend fun restoreCommittedPayload(
+        packageName: String,
+        userId: Int,
+        cacheDirectory: File,
+        confirmation: RootRestoreDowngradeTarget? = null
+    ): RootPayloadRestoreAttempt? = withContext(Dispatchers.IO) {
+        mutexFor(packageName).withLock {
+            transactionStore.initialize()
+            val state = transactionStore.readCommitted(packageName)?.takeIf {
+                it.userId == userId && !it.active && isValidCommittedState(packageName, it)
+            }
+            if (state == null) {
+                check(confirmation == null) { "The saved root mount changed. Start repair again." }
+                return@withLock null
+            }
+            val current = packageStateReader.read(packageName, userId)
+            val target = RootRestoreDowngradeTarget(
+                state.transactionId, state.stockSha256, state.patchedSha256, current.downgradeIdentity()
+            )
+            check(confirmation == null || confirmation == target) {
+                "The saved root mount or installed stock APK changed. Start repair again."
+            }
+            val installedStockMatches = matchesCommittedStock(state, current)
+            if (state.status != "REPAIR_REQUIRED" && installedStockMatches &&
+                moduleStore.readCommittedState(packageName)?.let { matchesReusableModule(state, it) } == true
+            ) {
+                return@withLock RootPayloadRestoreAttempt(
+                    executeWithLockHeld(RootMountRequest(packageName, userId, RootMountOperation.MOUNT_ONLY), {})
+                )
+            }
+            if (current.installed && current.signerSha256 != state.signerSha256) return@withLock null
+            val directory = kotlin.io.path.createTempDirectory(cacheDirectory.toPath(), "root-restore-").toFile()
+            try {
+                // Older modules archived the stock base without its splits. Only
+                // reuse installed files when the entire stock identity still matches.
+                val installedStockPaths = if (installedStockMatches) {
+                    listOf(requireNotNull(current.basePath)) + current.splitPaths.sorted()
+                } else {
+                    emptyList()
+                }
+                val files = moduleStore.copyCommittedPayloads(state, directory, installedStockPaths)
+                if (files.size < 2) {
+                    check(confirmation == null) { "The saved root mount APKs are unavailable. Start repair again." }
+                    return@withLock null
+                }
+                val result = executeWithLockHeld(
+                    RootMountRequest(
+                        packageName = packageName,
+                        userId = userId,
+                        operation = RootMountOperation.REPLACE_STOCK_AND_MOUNT,
+                        patchedApk = files.first(),
+                        stockApks = files.drop(1),
+                        expectedVersionName = state.versionName,
+                        expectedStockVersionCode = state.versionCode,
+                        downgradeFallbackConfirmed = confirmation != null,
+                        downgradeFallbackStock = confirmation?.installedStock
+                    ),
+                    {}
+                )
+                RootPayloadRestoreAttempt(
+                    result,
+                    target.takeIf { result is RootMountResult.RequiresDowngradeConfirmation }
+                )
+            } finally {
+                directory.deleteRecursively()
+            }
+        }
+    }
+
+    private fun RootPackageState.downgradeIdentity(): RootPackageState =
+        copy(launcherResolvable = false, splitPaths = splitPaths.sorted())
+
+    private fun verifyDowngradeFallbackStock(request: RootMountRequest, current: RootPackageState) {
+        val expected = request.downgradeFallbackStock ?: return
+        check(current.downgradeIdentity() == expected) {
+            "The installed stock APK changed after downgrade confirmation. Start repair again."
         }
     }
 
@@ -904,7 +995,10 @@ class RootMountTransactionCoordinator(
                 initialMountedState.basePath,
                 previousCommitted?.stockPath
             ) + requireNotNull(journal).candidateMountTargets
-            removeOldMountsForTransaction(request.packageName, knownTargets, transactionId)
+            removeOldMountsForTransaction(
+                request.packageName, knownTargets, transactionId,
+                includeCompeting = request.operation in MOUNTING_OPERATIONS
+            )
 
             if (request.operation == RootMountOperation.UNMOUNT) {
                 val rawStock = packageStateReader.read(request.packageName, request.userId)
@@ -1091,60 +1185,19 @@ class RootMountTransactionCoordinator(
 
             progress(RootMountPhase.SNAPSHOTTING)
             persist { it.copy(initialPackageState = initial) }
-            val moduleBackupHash = reusableModuleState?.patchedSha256
-                ?: moduleStore.snapshot(request.packageName, legacyPayload)
-            val rebuildMountOnlyModule =
-                request.operation == RootMountOperation.MOUNT_ONLY &&
-                    patchedArtifact != null &&
-                    (previousCommitted == null ||
-                        moduleBackupHash != previousCommitted.patchedSha256)
-            if (rebuildMountOnlyModule && previousCommitted != null) {
-                preflight(
-                    request,
-                    initial,
-                    patchedArtifact,
-                    stockArtifacts,
-                    committed = null,
-                    legacyMigration = false
-                )
-            }
-            previousCommitted?.let { committed ->
-                check(moduleBackupHash == committed.patchedSha256 || rebuildMountOnlyModule) {
-                    "Previous committed module could not be snapshotted and verified"
-                }
-            }
-            legacyPayload?.let { legacy ->
-                check(moduleBackupHash == legacy.sha256) {
-                    "Legacy root module could not be snapshotted and verified"
-                }
+            val snapshot = snapshotPreviousModule(request, preparation, initial, previousCommitted, transactionId)
+            val rebuildMountOnlyModule = snapshot.rebuildMountOnlyModule
+            if (snapshot.useStockForRollback) {
+                persist { it.copy(previousCommitted = null) }
+                previousCommitted = null
             }
             val useRequestedPayload =
                 request.operation != RootMountOperation.MOUNT_ONLY || rebuildMountOnlyModule
             val stock = stockArtifacts.singleOrNull().takeIf { useRequestedPayload }
             val effectivePatchedArtifact = patchedArtifact.takeIf { useRequestedPayload }
-            val stockTransition = RootMountPolicy.classifyStockTransition(initial, stock)
-            if (stockTransition == RootMountPolicy.StockTransition.NONE && stock != null) {
-                check(initial.baseSha256 == stock.sha256) {
-                    "Same-version stock input does not match the unmounted installed stock APK"
-                }
-                if (stock.splitHashes.isNotEmpty()) check(initial.matchesRequestedSplits(stock)) {
-                    "Same-version stock split set differs from the installed package"
-                }
-            }
-            if (request.operation == RootMountOperation.SWITCH_PATCHED_BUILD && stock == null) {
-                if (legacyMigration) {
-                    check(initial.versionName == patchedArtifact?.versionName &&
-                        initial.versionCode == patchedArtifact?.versionCode
-                    ) { "Legacy mount and raw stock versions differ" }
-                } else {
-                    checkCommittedIdentity(
-                        requireNotNull(previousCommitted) {
-                            "No committed stock identity is available for bundle switching"
-                        },
-                        initial
-                    )
-                }
-            }
+            val stockTransition = verifyStockTransition(
+                request, initial, stock, patchedArtifact, previousCommitted, legacyMigration
+            )
             val stockNeedsChange = stockTransition != RootMountPolicy.StockTransition.NONE
 
             // A raw stock backup is only needed when PackageInstaller will mutate the
@@ -1189,11 +1242,17 @@ class RootMountTransactionCoordinator(
                             matchesRequestedStock(it, requiredStock)
                         } == true
                     }
+                    if (!replacementProven && replacement is RootPackageReplaceResult.DowngradeRejected) {
+                        verifyDowngradeFallbackStock(request, afterRejectedReplacement)
+                    }
                 }
                 if (!replacementProven && downgrade) {
                     if (replacement !is RootPackageReplaceResult.DowngradeRejected) {
                         replacement.getOrThrow()
                         error("Package replacement failed without an error")
+                    }
+                    check(!initial.systemApp) {
+                        "Automatic per-user removal is disabled for system-app downgrade recovery"
                     }
                     if (!request.downgradeFallbackConfirmed) {
                         val diagnosticId = "downgrade-${transactionId.take(8)}"
@@ -1214,9 +1273,6 @@ class RootMountTransactionCoordinator(
                         return RootMountResult.RequiresDowngradeConfirmation(
                             "Android rejected the in-place downgrade. Confirm keep-data uninstall/reinstall to continue."
                         )
-                    }
-                    check(!initial.systemApp) {
-                        "Automatic per-user removal is disabled for system-app downgrade recovery"
                     }
                     persist { it.copy(registrationGap = true) }
                     stockChanged = true
@@ -1344,10 +1400,10 @@ class RootMountTransactionCoordinator(
             progress(RootMountPhase.COMMITTING)
             persist()
             withContext(NonCancellable) {
-                moduleStore.commitSnapshot(request.packageName)
                 completeTransaction(
                     requireNotNull(journal),
-                    committed.copy(status = "MOUNTED")
+                    committed.copy(status = "MOUNTED"),
+                    finalizeMount = true
                 )
                 transactionCompleted = true
             }
@@ -1544,10 +1600,103 @@ class RootMountTransactionCoordinator(
         }
     }
 
+    private fun verifyStockTransition(
+        request: RootMountRequest,
+        initial: RootPackageState,
+        stock: RootArtifactState?,
+        patchedArtifact: RootArtifactState?,
+        previousCommitted: RootCommittedState?,
+        legacyMigration: Boolean
+    ): RootMountPolicy.StockTransition {
+        verifyDowngradeFallbackStock(request, initial)
+        val stockTransition = RootMountPolicy.classifyStockTransition(initial, stock)
+        if (stockTransition == RootMountPolicy.StockTransition.NONE && stock != null) {
+            check(initial.baseSha256 == stock.sha256) {
+                "Same-version stock input does not match the unmounted installed stock APK"
+            }
+            if (stock.splitHashes.isNotEmpty()) check(initial.matchesRequestedSplits(stock)) {
+                "Same-version stock split set differs from the installed package"
+            }
+        }
+        if (request.operation == RootMountOperation.SWITCH_PATCHED_BUILD && stock == null) {
+            if (legacyMigration) {
+                check(initial.versionName == patchedArtifact?.versionName &&
+                    initial.versionCode == patchedArtifact?.versionCode
+                ) { "Legacy mount and raw stock versions differ" }
+            } else {
+                checkCommittedIdentity(
+                    requireNotNull(previousCommitted) {
+                        "No committed stock identity is available for bundle switching"
+                    },
+                    initial
+                )
+            }
+        }
+        return stockTransition
+    }
+
+    private data class MountModuleSnapshot(
+        val rebuildMountOnlyModule: Boolean,
+        val useStockForRollback: Boolean
+    )
+
+    private suspend fun snapshotPreviousModule(
+        request: RootMountRequest,
+        preparation: RootMountPreparation,
+        initial: RootPackageState,
+        previous: RootCommittedState?,
+        transactionId: String
+    ): MountModuleSnapshot {
+        val hash = preparation.reusableModuleState?.patchedSha256 ?: if (previous?.active == false) {
+            moduleStore.snapshotInactive(previous)
+        } else {
+            moduleStore.snapshot(request.packageName, preparation.legacyPayload)
+        }
+        val hasPatchedInput = preparation.patchedArtifact != null
+        val rebuildMountOnlyModule = request.operation == RootMountOperation.MOUNT_ONLY &&
+            hasPatchedInput && (previous == null || hash != previous.patchedSha256)
+        if (rebuildMountOnlyModule && previous != null) {
+            preflight(
+                request,
+                initial,
+                preparation.patchedArtifact,
+                preparation.stockArtifacts,
+                committed = null,
+                legacyMigration = false
+            )
+        }
+        preparation.legacyPayload?.let { legacy ->
+            check(hash == legacy.sha256) { "Legacy root module could not be snapshotted and verified" }
+        }
+        if (previous == null || hash == previous.patchedSha256) {
+            return MountModuleSnapshot(rebuildMountOnlyModule, useStockForRollback = false)
+        }
+
+        // An active mount whose module disappeared can only be rebuilt from a
+        // complete saved input against the exact stock exposed after unmounting.
+        val hasStockInput = preparation.stockArtifacts.singleOrNull() != null
+        val verifiedBaseline = when {
+            previous.active -> rebuildMountOnlyModule && matchesCommittedStock(previous, initial)
+            initial.installed -> matchesCommittedStock(previous, initial) ||
+                isVerifiedExternalStockUpdate(previous, initial)
+            else -> true
+        }
+        check(hasPatchedInput && hasStockInput && verifiedBaseline) {
+            "Previous committed module could not be snapshotted and verified"
+        }
+        transactionStore.appendDiagnostic(
+            request.packageName,
+            "snapshot-${transactionId.take(8)}",
+            "Replacing a module with an unusable backup; verified stock is the rollback baseline"
+        )
+        return MountModuleSnapshot(rebuildMountOnlyModule, useStockForRollback = true)
+    }
+
     private suspend fun removeOldMountsForTransaction(
         packageName: String,
         targets: Set<String>,
-        transactionId: String
+        transactionId: String,
+        includeCompeting: Boolean
     ) {
         // The target was force-stopped first, but restart-tolerant operations may continue if
         // Android immediately relaunches it. Ownership verification keeps lazy detach bounded to
@@ -1555,7 +1704,8 @@ class RootMountTransactionCoordinator(
         val lazyUnmounts = mountVerifier.removeAllUrvMounts(
             packageName,
             targets,
-            allowLazyRecovery = true
+            allowLazyRecovery = true,
+            includeCompeting = includeCompeting
         )
         if (lazyUnmounts.isNotEmpty()) {
             transactionStore.appendDiagnostic(
@@ -1666,7 +1816,8 @@ class RootMountTransactionCoordinator(
             val completionCleanup = cleanupDurableCompletion(
                 request.packageName,
                 transactionId,
-                recordedCompletionState
+                recordedCompletionState,
+                finalizeMount = interrupted.finalizeMountOnCompletion && recordedCompletionState?.active == true
             )
             val cleanupFailure = completionCleanup.failure
             if (cleanupFailure != null) {
@@ -2029,14 +2180,16 @@ class RootMountTransactionCoordinator(
 
     private suspend fun completeTransaction(
         journal: RootMountJournal,
-        committed: RootCommittedState?
+        committed: RootCommittedState?,
+        finalizeMount: Boolean = false
     ) = withContext(NonCancellable) {
-        transactionStore.complete(journal, committed)
+        transactionStore.complete(journal.copy(finalizeMountOnCompletion = finalizeMount), committed)
         if (
             cleanupCommittedModuleSnapshot(
                 journal.packageName,
                 journal.transactionId,
-                preserveCancellation = false
+                preserveCancellation = false,
+                finalizeMount = finalizeMount
             )
         ) {
             clearCompletedJournal(
@@ -2050,9 +2203,24 @@ class RootMountTransactionCoordinator(
     private suspend fun cleanupCommittedModuleSnapshot(
         packageName: String,
         transactionId: String,
-        preserveCancellation: Boolean
+        preserveCancellation: Boolean,
+        finalizeMount: Boolean = false
     ): Boolean {
         val cleanupFailure = runCleanupCatching(preserveCancellation) {
+            if (finalizeMount) {
+                moduleStore.commitSnapshot(packageName)
+                runCleanupCatching(preserveCancellation) {
+                    moduleStore.disableCompetingBootHooks(packageName)
+                }.onFailure { failure ->
+                    runCleanupCatching(preserveCancellation) {
+                        transactionStore.appendDiagnostic(
+                            packageName,
+                            "cleanup-${transactionId.take(8)}",
+                            "Mount committed, but competing ReVanced boot hooks could not be disabled: ${failure.message}"
+                        )
+                    }
+                }
+            }
             moduleStore.cleanupCommittedSnapshot(packageName)
         }.exceptionOrNull()
         if (cleanupFailure != null) {
@@ -2093,7 +2261,8 @@ class RootMountTransactionCoordinator(
     private suspend fun cleanupDurableCompletion(
         packageName: String,
         transactionId: String,
-        committedState: RootCommittedState?
+        committedState: RootCommittedState?,
+        finalizeMount: Boolean = false
     ): DurableCompletionCleanup {
         val committedStateCleanupFailure = runCatchingPreservingCancellation {
             if (committedState == null) transactionStore.clearCommitted(packageName)
@@ -2101,7 +2270,8 @@ class RootMountTransactionCoordinator(
         val snapshotCleaned = cleanupCommittedModuleSnapshot(
             packageName,
             transactionId,
-            preserveCancellation = true
+            preserveCancellation = true,
+            finalizeMount = finalizeMount
         )
         val journalCleanupFailure = if (committedStateCleanupFailure == null && snapshotCleaned) {
             clearCompletedJournal(packageName, transactionId, preserveCancellation = true)

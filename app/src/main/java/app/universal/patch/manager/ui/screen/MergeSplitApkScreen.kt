@@ -1,5 +1,10 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.FilledTonalButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import android.os.Build
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -22,11 +27,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.lazy.LazyColumn
+import app.universal.patch.manager.ui.component.ColumnWithScrollbar
+import app.universal.patch.manager.ui.component.LazyColumnWithScrollbar
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.outlined.Cancel
@@ -36,7 +40,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.PostAdd
 import androidx.compose.material.icons.outlined.Save
-import androidx.compose.material.icons.outlined.Sort
+import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Checkbox
@@ -45,14 +49,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -87,6 +87,7 @@ import app.universal.patch.manager.ui.component.TransparentLoadingDialog
 import app.universal.patch.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.universal.patch.manager.ui.component.patcher.InstallerPickerDialog
 import app.universal.patch.manager.ui.component.patcher.PatcherResourceUsageCards
+import app.universal.patch.manager.ui.component.patcher.ResourceUsageProgressLayout
 import app.universal.patch.manager.ui.component.patcher.rememberResourceGraphState
 import app.universal.patch.manager.ui.component.patcher.MergerInformationCard
 import app.universal.patch.manager.ui.component.patcher.Steps
@@ -134,6 +135,7 @@ fun MergeSplitApkScreen(
     val skipSplitMergeSigning by prefs.skipSplitMergeSigning.getAsState()
     val splitMergeAutoCollapseSteps by prefs.splitMergeAutoCollapseSteps.getAsState()
     val showSplitMergeMemoryUsageGraph by prefs.showSplitMergeMemoryUsageGraph.getAsState()
+    val pinResourceGraphs by prefs.pinSplitMergeResourceGraphs.getAsState()
     val compactResourceGraphs by prefs.compactSplitMergeResourceGraphs.getAsState()
     val showGraphExtraInfo by prefs.showSplitMergeResourceGraphExtraInfo.getAsState()
     val showCompactGraphExtraInfo by prefs.showCompactSplitMergeResourceGraphExtraInfo.getAsState()
@@ -504,7 +506,6 @@ fun MergeSplitApkScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.75f)
-                            .height(4.dp)
                     )
                 }
             }
@@ -700,66 +701,75 @@ fun MergeSplitApkScreen(
             LinearProgressIndicator(
                 progress = { mergeProgress },
                 modifier = Modifier.fillMaxWidth(),
-                drawStopIndicator = {}
+                showStopIndicator = false
             )
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (showSplitMergeMemoryUsageGraph && state.memoryUsageSamples.isNotEmpty()) {
-                    item(key = "resource-usage") {
-                        PatcherResourceUsageCards(
-                            samples = state.memoryUsageSamples,
-                            isActive = state.inProgress &&
-                                state.writeStep.status != SplitMergeStepStatus.COMPLETED,
-                            compact = compactResourceGraphs,
-                            showExtraInfo = if (compactResourceGraphs) showCompactGraphExtraInfo else showGraphExtraInfo,
-                            merger = true,
-                            graphState = resourceGraphState
-                        )
+            val pinGraphs = pinResourceGraphs && showSplitMergeMemoryUsageGraph && state.memoryUsageSamples.isNotEmpty()
+            val resourceGraphs: @Composable () -> Unit = {
+                PatcherResourceUsageCards(
+                    samples = state.memoryUsageSamples,
+                    isActive = state.inProgress &&
+                        state.writeStep.status != SplitMergeStepStatus.COMPLETED,
+                    compact = compactResourceGraphs,
+                    showExtraInfo = if (compactResourceGraphs) showCompactGraphExtraInfo else showGraphExtraInfo,
+                    merger = true,
+                    graphState = resourceGraphState
+                )
+            }
+            ResourceUsageProgressLayout(
+                pinGraphs = pinGraphs,
+                graphContent = resourceGraphs
+            ) { progressModifier ->
+                LazyColumnWithScrollbar(
+                    modifier = progressModifier,
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (!pinGraphs && showSplitMergeMemoryUsageGraph && state.memoryUsageSamples.isNotEmpty()) {
+                        item(key = "resource-usage") {
+                            resourceGraphs()
+                        }
                     }
-                }
-                if (state.sessionInfo.startedAtElapsedRealtimeMs != null) {
-                    item(key = "merger-information") {
-                        MergerInformationCard(
-                            information = state.sessionInfo,
-                            expanded = mergerInformationExpanded,
-                            onExpandedChange = { expanded ->
-                                coroutineScope.launch {
-                                    prefs.splitMergeInformationExpanded.update(expanded)
+                    if (state.sessionInfo.startedAtElapsedRealtimeMs != null) {
+                        item(key = "merger-information") {
+                            MergerInformationCard(
+                                information = state.sessionInfo,
+                                expanded = mergerInformationExpanded,
+                                onExpandedChange = { expanded ->
+                                    coroutineScope.launch {
+                                        prefs.splitMergeInformationExpanded.update(expanded)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    items(stepsByCategory.toList(), key = { it.first }) { (category, steps) ->
+                        Steps(
+                            category = category,
+                            steps = steps,
+                            subStepsById = subStepsById,
+                            isExpanded = expandedCategories.contains(category),
+                            autoExpandRunning = splitMergeAutoExpandRunningSteps,
+                            autoExpandRunningMainOnly = useExclusiveAutoExpand,
+                            autoCollapseCompleted = splitMergeAutoCollapseSteps,
+                            onExpand = {
+                                if (useExclusiveAutoExpand) {
+                                    expandedCategories.clear()
+                                }
+                                expandedCategories.add(category)
+                            },
+                            onClick = {
+                                if (expandedCategories.contains(category)) {
+                                    expandedCategories.remove(category)
+                                } else {
+                                    expandedCategories.add(category)
                                 }
                             }
                         )
                     }
-                }
-                items(stepsByCategory.toList(), key = { it.first }) { (category, steps) ->
-                    Steps(
-                        category = category,
-                        steps = steps,
-                        subStepsById = subStepsById,
-                        isExpanded = expandedCategories.contains(category),
-                        autoExpandRunning = splitMergeAutoExpandRunningSteps,
-                        autoExpandRunningMainOnly = useExclusiveAutoExpand,
-                        autoCollapseCompleted = splitMergeAutoCollapseSteps,
-                        onExpand = {
-                            if (useExclusiveAutoExpand) {
-                                expandedCategories.clear()
-                            }
-                            expandedCategories.add(category)
-                        },
-                        onClick = {
-                            if (expandedCategories.contains(category)) {
-                                expandedCategories.remove(category)
-                            } else {
-                                expandedCategories.add(category)
-                            }
+                    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
+                        item(key = "legacy-android-memory-warning") {
                         }
-                    )
-                }
-                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
-                    item(key = "legacy-android-memory-warning") {
                     }
                 }
             }
@@ -1302,7 +1312,7 @@ internal fun SplitMergeSelectionDialog(
                         Box {
                             IconButton(onClick = { showSortMenu = true }) {
                                 Icon(
-                                    imageVector = Icons.Outlined.Sort,
+                                    imageVector = Icons.AutoMirrored.Outlined.Sort,
                                     contentDescription = stringResource(
                                         R.string.merge_split_apk_sort_title
                                     )
@@ -1475,11 +1485,9 @@ internal fun SplitMergeSelectionDialog(
                         }
                     }
                 }
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ColumnWithScrollbar(
+                    modifier = Modifier.weight(1f),
+                    contentModifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     sortedModules.forEach { module ->
@@ -1568,7 +1576,7 @@ private fun SplitMergeModuleRow(
 ) {
     Surface(
         onClick = { if (enabled) onCheckedChange(!checked) },
-        shape = RoundedCornerShape(20.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
         tonalElevation = 2.dp
     ) {
         Row(

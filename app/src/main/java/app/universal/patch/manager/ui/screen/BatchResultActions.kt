@@ -59,7 +59,7 @@ internal fun rememberBatchResultActions(
     val context = LocalContext.current
     val currentInstallerPickerItemKey by rememberUpdatedState(
         item?.let { current ->
-            Triple(current.packageName, current.patchedFile?.absolutePath, current.useMount)
+            Triple(current.key, current.patchedFile?.absolutePath, current.useMount)
         }
     )
     val prefs: PreferencesManager = koinInject()
@@ -72,7 +72,8 @@ internal fun rememberBatchResultActions(
     val patcherLogExportDirectory by prefs.patcherLogExportLastDirectory.getAsState()
     val pickerScope = rememberCoroutineScope()
     val storageRoots = remember { fs.storageRoots() }
-    val packageName = item?.packageName.orEmpty()
+    // Actions address the queue item by key; the same app can be queued more than once.
+    val itemKey = item?.key.orEmpty()
     val exportData = remember(item) {
         item?.let {
             PatchedAppExportData(
@@ -129,7 +130,7 @@ internal fun rememberBatchResultActions(
                 prefs.patchedApkExportLastDirectory.update(it.toPickerDirectoryUri().toString())
             }
         }
-        viewModel.exportPatchedAppToUri(packageName, uri)
+        viewModel.exportPatchedAppToUri(itemKey, uri)
         showExportPicker = false
     }
     val logExportDocumentLauncher = rememberLauncherForActivityResult(
@@ -142,7 +143,7 @@ internal fun rememberBatchResultActions(
                 prefs.patcherLogExportLastDirectory.update(it.toPickerDirectoryUri().toString())
             }
         }
-        viewModel.exportLogsToUri(context, packageName, uri)
+        viewModel.exportLogsToUri(context, itemKey, uri)
         showLogExportPicker = false
         pendingLogExportFileName = null
     }
@@ -177,16 +178,15 @@ internal fun rememberBatchResultActions(
     }
 
     suspend fun refreshInstallerPickerEligibility(requestedItem: BatchPatchItem): Boolean {
-        val requestedPackageName = requestedItem.packageName
         val requestedItemKey = Triple(
-            requestedPackageName,
+            requestedItem.key,
             requestedItem.patchedFile?.absolutePath,
             requestedItem.useMount
         )
         val (supportsRootMount, supportsRootMountPackage) = withContext(Dispatchers.IO) {
-            val packageCompatible = viewModel.supportsRootMountPackage(requestedPackageName)
+            val packageCompatible = viewModel.supportsRootMountPackage(requestedItem.key)
             val modeOverrideCompatible =
-                !requestedItem.useMount && viewModel.supportsRootMount(requestedPackageName)
+                !requestedItem.useMount && viewModel.supportsRootMount(requestedItem.key)
             modeOverrideCompatible to packageCompatible
         }
         if (currentInstallerPickerItemKey != requestedItemKey) return false
@@ -235,7 +235,7 @@ internal fun rememberBatchResultActions(
             onDismiss = { showInstallerPicker = false },
             onConfirm = { token ->
                 showInstallerPicker = false
-                viewModel.installWithToken(item.packageName, token)
+                viewModel.installWithToken(item.key, token)
             },
             onOpenShizuku = installerManager::openShizukuApp
         )
@@ -250,7 +250,7 @@ internal fun rememberBatchResultActions(
                     clipboard.setPrimaryClip(
                         ClipData.newPlainText(
                             "Patch log",
-                            viewModel.getLogContent(context, item.packageName)
+                            viewModel.getLogContent(context, item.key)
                         )
                     )
                     context.toast(context.getString(R.string.patcher_log_copy_success))
@@ -321,7 +321,7 @@ internal fun rememberBatchResultActions(
                     )
                 } else {
                     exportInProgress = true
-                    viewModel.exportPatchedAppToPath(packageName, target) { success ->
+                    viewModel.exportPatchedAppToPath(itemKey, target) { success ->
                         exportInProgress = false
                         if (success) showExportPicker = false
                     }
@@ -340,7 +340,7 @@ internal fun rememberBatchResultActions(
                 pendingExportConfirmation = null
                 exportInProgress = true
                 viewModel.exportPatchedAppToPath(
-                    packageName,
+                    itemKey,
                     state.directory.resolve(state.fileName)
                 ) { success ->
                     exportInProgress = false
@@ -373,7 +373,7 @@ internal fun rememberBatchResultActions(
                     )
                 } else {
                     logExportInProgress = true
-                    viewModel.exportLogsToPath(context, packageName, target) { success ->
+                    viewModel.exportLogsToPath(context, itemKey, target) { success ->
                         logExportInProgress = false
                         if (success) showLogExportPicker = false
                     }
@@ -393,7 +393,7 @@ internal fun rememberBatchResultActions(
                 logExportInProgress = true
                 viewModel.exportLogsToPath(
                     context,
-                    packageName,
+                    itemKey,
                     state.directory.resolve(state.fileName)
                 ) { success ->
                     logExportInProgress = false
@@ -424,11 +424,11 @@ internal fun rememberBatchResultActions(
             when {
                 item == null || item.saving -> Unit
                 item.installing &&
-                    viewModel.state.value?.activeInstallPackageName == item.packageName ->
+                    viewModel.state.value?.activeInstallKey == item.key ->
                     viewModel.cancelInstall()
                 item.installing -> Unit
                 item.installOutcome == BatchInstallOutcome.INSTALLED ->
-                    viewModel.open(item.packageName)
+                    viewModel.open(item.key)
                 viewModel.state.value?.canInstallBatchItem(item) != true -> Unit
                 item.hasAvailablePatchedFile && chooseInstallerPerInstall -> {
                     pickerScope.launch {
@@ -437,7 +437,7 @@ internal fun rememberBatchResultActions(
                         }
                     }
                 }
-                item.hasAvailablePatchedFile -> viewModel.install(item.packageName)
+                item.hasAvailablePatchedFile -> viewModel.install(item.key)
             }
         }
     )

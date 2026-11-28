@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.component.settings
 
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
+import app.universal.patch.manager.ui.component.design.ListItem
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -23,7 +25,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.ListItem
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,7 +46,9 @@ fun SettingsListItem(
     headlineContent = {
         Text(
             text = headlineContent,
-            style = MaterialTheme.typography.titleLarge
+            // Expressive rows sit in cards and share the settings rows' title size.
+            style = if (LocalExpressiveDesign.current) MaterialTheme.typography.titleMedium
+                else MaterialTheme.typography.titleLarge
         )
     },
     modifier = modifier,
@@ -73,7 +76,7 @@ fun SettingsListItem(
     shadowElevation: Dp = ListItemDefaults.Elevation,
 ) = ListItem(
     headlineContent = headlineContent,
-    modifier = modifier.then(Modifier.padding(horizontal = 8.dp)),
+    modifier = if (LocalExpressiveDesign.current) modifier else modifier.then(Modifier.padding(horizontal = 8.dp)),
     overlineContent = overlineContent,
     supportingContent = {
         when {
@@ -81,7 +84,8 @@ fun SettingsListItem(
             supportingContent != null -> Text(
                 text = supportingContent,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.outline
+                color = if (LocalExpressiveDesign.current) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.outline
             )
         }
     },

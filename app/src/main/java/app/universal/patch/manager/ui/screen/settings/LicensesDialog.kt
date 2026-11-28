@@ -1,6 +1,7 @@
 package app.universal.patch.manager.ui.screen.settings
 
-import androidx.compose.foundation.clickable
+import app.universal.patch.manager.ui.component.design.ListItem
+import app.universal.patch.manager.ui.component.design.TextButton
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,11 +15,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -112,10 +111,13 @@ fun LicensesDialog(onDismiss: () -> Unit) {
                 )
             }
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
+            app.universal.patch.manager.ui.component.LazyColumnWithScrollbar(
+                modifier = Modifier.fillMaxSize(),
+                thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH
+            ) {
                 items(libraries) { library ->
                     ListItem(
-                        modifier = Modifier.clickable { selectedLibrary = library },
+                        onClick = { selectedLibrary = library },
                         headlineContent = {
                             Text(
                                 text = library.name,
@@ -203,19 +205,14 @@ private fun AboutViewerDialog(
                     text = title,
                     style = MaterialTheme.typography.titleLarge
                 )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 320.dp, max = 620.dp)
-                        .let { base ->
-                            if (scrollable) {
-                                base.verticalScroll(rememberScrollState())
-                            } else {
-                                base
-                            }
-                        }
-                ) {
-                    content()
+                val contentModifier = Modifier.fillMaxWidth().heightIn(min = 320.dp, max = 620.dp)
+                if (scrollable) {
+                    app.universal.patch.manager.ui.component.ColumnWithScrollbar(
+                        modifier = contentModifier,
+                        thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH
+                    ) { content() }
+                } else {
+                    Box(modifier = contentModifier) { content() }
                 }
                 Box(
                     modifier = Modifier.fillMaxWidth(),

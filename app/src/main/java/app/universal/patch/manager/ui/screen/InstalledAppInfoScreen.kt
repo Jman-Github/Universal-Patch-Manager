@@ -1,5 +1,11 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsCard
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
+import app.universal.patch.manager.ui.component.design.TextButton
 import app.universal.patch.manager.domain.bundles.toLegacyAwareBundleIndex
 
 import android.content.ClipData
@@ -48,17 +54,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.surfaceColorAtElevation
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -104,6 +106,7 @@ import app.universal.patch.manager.ui.component.SegmentedButton
 import app.universal.patch.manager.ui.component.TransparentLoadingDialog
 import app.universal.patch.manager.ui.component.ConfirmDialog
 import app.universal.patch.manager.ui.component.ExportSavedApkFileNameDialog
+import app.universal.patch.manager.ui.component.appVersionLabel
 import app.universal.patch.manager.ui.component.patches.PathSelectorDialog
 import app.universal.patch.manager.ui.component.RememberedCreateDocument
 import app.universal.patch.manager.ui.component.toPickerDirectoryUri
@@ -140,6 +143,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import java.nio.file.Files
 import java.nio.file.Path
 import app.universal.patch.manager.ui.component.CenteredDialogTitle
+
+@Composable
+internal fun RootRestoreDowngradeDialog(viewModel: InstalledAppInfoViewModel) {
+    if (!viewModel.rootRestoreNeedsDowngradeConfirmation) return
+    ConfirmDialog(
+        title = stringResource(R.string.root_mount_downgrade_title),
+        description = stringResource(R.string.root_mount_downgrade_confirmation),
+        icon = Icons.Outlined.SettingsBackupRestore,
+        onDismiss = viewModel::dismissRootRestoreDowngrade,
+        onConfirm = viewModel::confirmRootRestoreDowngrade
+    )
+}
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -393,6 +408,7 @@ fun InstalledAppInfoScreen(
                     version = savedVersion ?: currentVersion,
                     patchInfos = patchInfos,
                     fallbackNames = missingNames,
+                    fallbackDetails = savedBundle?.patchDisplayInfo.orEmpty(),
                     bundleAvailable = info != null,
                     hasUpdate = savedVersion != null &&
                         currentVersion != null &&
@@ -1072,14 +1088,13 @@ fun InstalledAppInfoScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.7f)
-                            .height(4.dp)
                             .clip(RoundedCornerShape(999.dp))
                     )
                 }
             },
             confirmButton = {},
             dismissButton = {},
-            shape = RoundedCornerShape(28.dp)
+            shape = MaterialTheme.shapes.extraLarge.withClassicCorner(28.dp)
         )
     }
 
@@ -1089,7 +1104,7 @@ fun InstalledAppInfoScreen(
         )
     }
 
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
 
     Scaffold(
         topBar = {
@@ -1191,11 +1206,12 @@ fun InstalledAppInfoScreen(
                 placeholderLabel = displayPackageName,
                 isLoading = !viewModel.hasLoadedAppInfo
             ) {
+                val versionLabel = installedApp.version.toPrefixedVersionLabel()
                 val copyAppVersion = {
                     clipboard?.setPrimaryClip(
                         ClipData.newPlainText(
                             "App version",
-                            installedApp.version.toPrefixedVersionLabel()
+                            versionLabel
                         )
                     )
                     if (clipboard != null) {
@@ -1205,6 +1221,7 @@ fun InstalledAppInfoScreen(
                 AppVersion(
                     appInfo = viewModel.appInfo,
                     versionName = installedApp.version,
+                    versionCodeOverride = viewModel.displayedVersionCode,
                     prefixVersion = true,
                     modifier = Modifier.longPressOnly(
                         label = stringResource(R.string.copy_to_clipboard),
@@ -1377,14 +1394,13 @@ fun InstalledAppInfoScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.7f)
-                            .height(4.dp)
                             .clip(RoundedCornerShape(999.dp))
                     )
                 }
             },
             confirmButton = {},
             dismissButton = {},
-            shape = RoundedCornerShape(28.dp)
+            shape = MaterialTheme.shapes.extraLarge.withClassicCorner(28.dp)
         )
     }
     FlowRow(
@@ -1392,7 +1408,7 @@ fun InstalledAppInfoScreen(
         verticalArrangement = Arrangement.spacedBy(2.dp),
         modifier = Modifier
             .padding(horizontal = 16.dp)
-            .clip(RoundedCornerShape(24.dp))
+            .clip(MaterialTheme.shapes.extraLarge.withClassicCorner(24.dp))
     ) {
         val installType = remember(
             installedApp.installType,
@@ -1486,6 +1502,8 @@ fun InstalledAppInfoScreen(
                 else -> if (viewModel.hasSavedCopy) showSavedEntryDeleteDialog = true
             }
         }
+
+        RootRestoreDowngradeDialog(viewModel)
 
         LaunchedEffect(pendingAction, installedApp.currentPackageName, appliedSelection) {
             val action = pendingAction ?: return@LaunchedEffect
@@ -1811,9 +1829,7 @@ fun InstalledAppInfoScreen(
         }
     }
 
-            Column(
-                modifier = Modifier.padding(vertical = 16.dp)
-            ) {
+            AppDetailsGroup {
                 SettingsListItem(
                     modifier = Modifier.clickable(
                         enabled = appliedSelection != null
@@ -2221,6 +2237,16 @@ private data class PendingSavedExportConfirmation(
     val directory: Path,
     val fileName: String
 )
+
+/** Expressive gathers the app details into one card; classic keeps the plain list. */
+@Composable
+private fun AppDetailsGroup(content: @Composable () -> Unit) {
+    if (LocalExpressiveDesign.current) {
+        ExpressiveSettingsCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp), content = content)
+    } else {
+        Column(modifier = Modifier.padding(vertical = 16.dp)) { content() }
+    }
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

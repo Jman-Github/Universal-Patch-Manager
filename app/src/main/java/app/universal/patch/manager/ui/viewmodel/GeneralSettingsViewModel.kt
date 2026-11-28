@@ -85,16 +85,7 @@ class GeneralSettingsViewModel(
     )
 
     fun resetThemeSettings() = viewModelScope.launch {
-        prefs.theme.update(Theme.SYSTEM)
-        prefs.dynamicColor.update(false)
-        prefs.pureBlackTheme.update(false)
-        prefs.materialYouPureBlackTheme.update(false)
-        prefs.pureBlackOnSystemDark.update(false)
-        prefs.themePresetSelectionEnabled.update(true)
-        prefs.themePresetSelectionName.update(ThemePreset.DEFAULT.name)
-        prefs.customAccentColor.update("")
-        prefs.customThemeColor.update("")
-
+        prefs.resetThemeSettings()
     }
 
     fun setCustomAccentColor(color: Color?) = viewModelScope.launch {

@@ -7,14 +7,14 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
 fun main() {
-    check(JvmHeapPolicy.limitMb(2048, true) == 1536)
+    check(JvmHeapPolicy.limitMb(2048, true) == 2048)
     check(JvmHeapPolicy.limitMb(6144, true) == 2048)
     check(JvmHeapPolicy.limitMb(16384, true) == 3072)
     check(JvmHeapPolicy.limitMb(Long.MAX_VALUE, true) == 3072)
     check(JvmHeapPolicy.limitMb(2048, false) == 1024)
-    check(JvmHeapPolicy.limitMb(16384, false) == 1024)
-    check(JvmHeapPolicy.fit32Bit(1024, 896) == 768)
-    check(JvmHeapPolicy.fit32Bit(1024, 64) == 0)
+    check(JvmHeapPolicy.limitMb(2560, false) == 1280)
+    check(JvmHeapPolicy.limitMb(16384, false) == 1536)
+    check(JvmHeapPolicy.minimumMb(false) == 1024)
 
     val shortSpike = GcOverheadWindow()
     check(shortSpike.sample(0, 500_000) == null)

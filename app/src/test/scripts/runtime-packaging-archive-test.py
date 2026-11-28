@@ -36,32 +36,16 @@ def apk_classes(archive):
 def validate():
     app = max((ROOT / "app/build/outputs/apk/release").glob("*universal.apk"),
               key=lambda path: path.stat().st_mtime_ns)
-    plugin = ROOT / "revanced.v22-runtime-plugin/build/outputs/apk/release/revanced.v22-plugin.apk"
     with zipfile.ZipFile(app) as archive:
         entries = set(archive.namelist())
-        assert "assets/reseam-runtime.apk" in entries
-        assert "assets/morphe-runtime.apk" in entries
-        assert "assets/jvm/tools-patcher-core.jar.xz" in entries
-        assert not any("revanced22-patcher-core" in name for name in entries)
-        assert not any("revanced.v22" in name and name.endswith(".apk") for name in entries)
+        assert "assets/runtime-catalog.json" in entries
+        assert not any(name.startswith("assets/jvm/") or name in
+            {"assets/reseam-runtime.apk", "assets/morphe-runtime.apk"} for name in entries)
         classes = apk_classes(archive)
-        assert not any(name.startswith("Lapp/revanced/patcher/") for name in classes)
-        assert "Lapp/universal/patch/manager/revanced/runtime/RevancedRuntimeEntry;" not in classes
-        with zipfile.ZipFile(io.BytesIO(archive.read("assets/reseam-runtime.apk"))) as reseam:
-            assert any(name.endswith("/libreseam-sdk-native.so") for name in reseam.namelist())
-            assert "Lapp/universal/patch/manager/reseam/runtime/ReseamRuntimeEntry;" in apk_classes(reseam)
-        with zipfile.ZipFile(io.BytesIO(lzma.decompress(archive.read("assets/jvm/tools-patcher-core.jar.xz")))) as tools:
-            assert not any(name.startswith("app/revanced/patcher/") for name in tools.namelist())
-    with zipfile.ZipFile(plugin) as archive:
-        classes = apk_classes(archive)
-        assert "Lapp/universal/patch/manager/revanced/runtime/RevancedRuntimeEntry;" in classes
-        assert any(name.startswith("Lapp/revanced/patcher/") for name in classes)
-        with zipfile.ZipFile(io.BytesIO(archive.read("assets/jvm/revanced22-patcher-core.jar"))) as host:
-            assert "app/universal/patch/manager/revanced/runtime/RevancedRuntimeEntry.class" in host.namelist()
-            frameworks = [name for name in host.namelist() if name.startswith("frameworks/") and not name.endswith("/")]
-            assert frameworks, "Standalone v22 JVM host has no frameworks"
-    print("PASS: UPM includes Morphe/Reseam, excludes the ReVanced engine, and retains SDK-free tools")
-    print("PASS: standalone ReVanced v22 includes its ART engine, JVM host and framework data")
+        assert not any(name.startswith(("Lapp/revanced/patcher/", "Lapp/morphe/patcher/", "Lapp/reseam/sdk/")) for name in classes)
+        for name in ("revanced", "morphe", "reseam"):
+            assert not any(name + "/runtime/" in value and value.endswith("RuntimeEntry;") for value in classes)
+    print("PASS: manager contains its bootstrap catalog and no engine APKs, JVM distributions or engine implementations")
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--wait", type=int, default=0, help="Wait for an in-progress assembly to publish valid APKs")

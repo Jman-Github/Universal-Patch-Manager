@@ -1,9 +1,9 @@
 package app.universal.patch.manager.ui.component.bundle
 
+import app.universal.patch.manager.ui.theme.withClassicCorner
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -26,7 +26,7 @@ fun LinkOptionRow(
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = MaterialTheme.shapes.medium.withClassicCorner(12.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()

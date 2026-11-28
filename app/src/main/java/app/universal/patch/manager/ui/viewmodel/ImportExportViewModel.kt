@@ -17,6 +17,9 @@ import app.universal.patch.manager.domain.installer.InstallerManager
 import app.universal.patch.manager.domain.manager.AutoClearCacheInterval
 import app.universal.patch.manager.domain.manager.KeystoreManager
 import app.universal.patch.manager.domain.manager.PreferencesManager
+import app.universal.patch.manager.domain.manager.parsePatchSectionKey
+import app.universal.patch.manager.domain.manager.patchSectionKey
+import app.universal.patch.manager.domain.bundles.BundleDiscoveryStateStore
 import app.universal.patch.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.universal.patch.manager.domain.manager.BundleUpdateDeliveryMode
 import app.universal.patch.manager.domain.repository.DownloaderPluginRepository
@@ -181,7 +184,22 @@ data class PatchProfileExportFile(
 @Serializable
 data class ManagerSettingsExportFile(
     val version: Int = 1,
-    val settings: PreferencesManager.SettingsSnapshot
+    val settings: PreferencesManager.SettingsSnapshot,
+    /** Patch selection sections opened or closed by hand; null in backups made before they were saved. */
+    val patchSectionStates: List<PatchSectionStateExport>? = null
+)
+
+/**
+ * A patch selection section opened or closed by hand. It names its bundle by source address (or
+ * name, for a local bundle) because bundle ids differ between installs.
+ */
+@Serializable
+data class PatchSectionStateExport(
+    val packageName: String,
+    val sectionId: String,
+    val bundleName: String,
+    val bundleDisplayName: String? = null,
+    val bundleSource: String? = null
 )
 
 @Serializable
@@ -225,8 +243,10 @@ internal fun importedBackgroundWorkNeedsNotifications(
     announcementInterval: SearchForUpdatesBackgroundInterval,
     autoClearCacheInterval: AutoClearCacheInterval,
     deliveryMode: BundleUpdateDeliveryMode,
-    autoPatchEnabled: Boolean
+    autoPatchEnabled: Boolean,
+    runtimeInterval: SearchForUpdatesBackgroundInterval = SearchForUpdatesBackgroundInterval.NEVER
 ): Boolean = autoPatchEnabled ||
+    runtimeInterval != SearchForUpdatesBackgroundInterval.NEVER ||
     bundleInterval != SearchForUpdatesBackgroundInterval.NEVER ||
     managerInterval != SearchForUpdatesBackgroundInterval.NEVER ||
     announcementInterval != SearchForUpdatesBackgroundInterval.NEVER ||
@@ -251,9 +271,11 @@ class ImportExportViewModel(
     private val downloaderPluginRepository: DownloaderPluginRepository,
     private val preferencesManager: PreferencesManager,
     private val workerRepository: WorkerRepository,
-    private val installerManager: InstallerManager
+    private val installerManager: InstallerManager,
+    private val discoveryStateStore: BundleDiscoveryStateStore
 ) : ViewModel() {
     data class ImportedNotificationRollback(
+        val runtimeInterval: SearchForUpdatesBackgroundInterval,
         val bundleInterval: SearchForUpdatesBackgroundInterval,
         val managerInterval: SearchForUpdatesBackgroundInterval,
         val announcementInterval: SearchForUpdatesBackgroundInterval,
@@ -763,20 +785,13 @@ class ImportExportViewModel(
     ) {
         require(exportFile.version in 1..2) { "Unsupported patch selection backup version" }
         val bundles = patchBundleRepository.sources.first()
-        val byEndpoint =
-            bundles.mapNotNull { it.asRemoteOrNull?.endpoint?.let(::bundleEndpointIdentity)?.takeIf(String::isNotBlank)?.let { endpoint -> endpoint to it } }
-                .toLegacyAwareBundleIndex()
+        val byEndpoint = bundles.remoteBundleIndex()
 
         var skipped = 0
         for (bundleExport in exportFile.bundles) {
-            val endpoint = bundleExport.source?.let(::bundleEndpointIdentity)?.takeIf(String::isNotBlank)
-            val source = if (endpoint != null) {
-                byEndpoint[endpoint]
-            } else {
-                bundles.singleOrNull {
-                    it.asRemoteOrNull == null && bundleExport.matchesSelectedBundle(it)
-                }
-            }
+            val source = findImportedBundle(
+                bundleExport.source, bundleExport.name, bundleExport.displayName, bundles, byEndpoint
+            )
             if (source == null) {
                 skipped++
                 continue
@@ -790,6 +805,85 @@ class ImportExportViewModel(
             if (skipped == 0) message
             else "$message, ${app.getString(R.string.import_result_with_skipped, skipped)}"
         )
+    }
+
+    private fun List<PatchBundleSource>.remoteBundleIndex(): Map<String, PatchBundleSource> =
+        mapNotNull { bundle ->
+            bundle.asRemoteOrNull?.endpoint?.let(::bundleEndpointIdentity)?.takeIf(String::isNotBlank)
+                ?.let { endpoint -> endpoint to bundle }
+        }.toLegacyAwareBundleIndex()
+
+    /**
+     * The installed bundle a backup entry belongs to: by source address when it has one, otherwise
+     * the single local bundle with a matching name.
+     */
+    private fun findImportedBundle(
+        source: String?,
+        name: String,
+        displayName: String?,
+        bundles: List<PatchBundleSource>,
+        byEndpoint: Map<String, PatchBundleSource>
+    ): PatchBundleSource? {
+        val endpoint = source?.let(::bundleEndpointIdentity)?.takeIf(String::isNotBlank)
+        return if (endpoint != null) {
+            byEndpoint[endpoint]
+        } else {
+            bundles.singleOrNull { it.asRemoteOrNull == null && bundleNamesMatch(name, displayName, it) }
+        }
+    }
+
+    /** Patch selection sections opened or closed by hand, with their bundles named portably. */
+    private suspend fun buildPatchSectionStateExports(): List<PatchSectionStateExport> {
+        val bundlesByUid = patchBundleRepository.sources.first().associateBy { it.uid }
+        return preferencesManager.patchSelectionSectionOverrides.get().mapNotNull { key ->
+            val parts = parsePatchSectionKey(key) ?: return@mapNotNull null
+            // Keys of bundles removed since stay behind in storage; there's nothing to restore them to.
+            val bundle = bundlesByUid[parts.bundleUid] ?: return@mapNotNull null
+            PatchSectionStateExport(
+                packageName = parts.packageName,
+                sectionId = parts.sectionId,
+                bundleName = bundle.name,
+                bundleDisplayName = bundle.displayName,
+                bundleSource = bundle.asRemoteOrNull?.endpoint
+            )
+        }.sortedWith(compareBy({ it.packageName }, { it.bundleName }, { it.sectionId }))
+    }
+
+    private suspend fun buildManagerSettingsExportFile() = ManagerSettingsExportFile(
+        settings = preferencesManager.exportSettings(),
+        patchSectionStates = buildPatchSectionStateExports()
+    )
+
+    /**
+     * Restores backed-up section states onto the bundles installed here. Bundles the backup doesn't
+     * cover keep their current states, as does everything when a backup predates section states.
+     * They're only display state, so a failure is logged and the rest of the import carries on.
+     */
+    private suspend fun importPatchSectionStates(
+        states: List<PatchSectionStateExport>?,
+        settings: PreferencesManager.SettingsSnapshot
+    ) {
+        if (states == null) return
+        try {
+            val bundles = patchBundleRepository.sources.first()
+            val byEndpoint = bundles.remoteBundleIndex()
+            val restored = states.mapNotNull { state ->
+                val bundle = findImportedBundle(
+                    state.bundleSource, state.bundleName, state.bundleDisplayName, bundles, byEndpoint
+                ) ?: return@mapNotNull null
+                bundle.uid to patchSectionKey(state.packageName, bundle.uid, state.sectionId)
+            }
+            preferencesManager.importPatchSectionOverrides(
+                overrides = restored.mapTo(mutableSetOf()) { it.second },
+                restoredBundleUids = restored.mapTo(mutableSetOf()) { it.first },
+                backupExpandsCategories = settings.patchSelectionExpandCategories
+                    ?: preferencesManager.patchSelectionExpandCategories.default
+            )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.e(tag, "Failed to restore patch section states", error)
+        }
     }
 
     private suspend fun buildPatchSelectionBundleExport(
@@ -868,6 +962,15 @@ class ImportExportViewModel(
             return exportEndpoint != null && selectedEndpoint != null && legacyBundleEndpointsMatch(this.source.orEmpty(), selectedEndpoint)
         }
 
+        return bundleNamesMatch(name, displayName, source)
+    }
+
+    /** Whether a backup entry called [name] or [displayName] names the local bundle [source]. */
+    private fun bundleNamesMatch(
+        name: String,
+        displayName: String?,
+        source: PatchBundleSource
+    ): Boolean {
         val exportNames = setOfNotNull(name, displayName)
             .map { it.normalizedBundleIdentifier() }
             .filter(String::isNotBlank)
@@ -1189,7 +1292,7 @@ class ImportExportViewModel(
                                 endpoint,
                                 snapshot.searchUpdate,
                                 snapshot.autoUpdate,
-                                usePrereleases = snapshot.usePrereleases == true && snapshot.useLatest != true,
+                                usePrereleases = snapshot.usePrereleases == true,
                                 useLatest = snapshot.useLatest == true,
                                 useSpecificVersion = snapshot.useSpecificVersion == true,
                                 selectedVersion = snapshot.selectedVersion,
@@ -1529,6 +1632,7 @@ class ImportExportViewModel(
                     val previousSettings = preferencesManager.exportSettings()
                     applyImportedManagerSettings(exportFile.settings, previousSettings)
                     try {
+                        importPatchSectionStates(exportFile.patchSectionStates, exportFile.settings)
                         refreshImportedRepositories(exportFile.settings, previousSettings)
                     } finally {
                         // Settings are already saved even if a later import step fails.
@@ -1559,15 +1663,21 @@ class ImportExportViewModel(
         } else null
         // Activity resume checks disable automatic patching without notification permission.
         // Save the intended Shizuku settings, but enable automatic patching only after permission.
-        preferencesManager.importSettings(
-            deferred?.let {
-                settings.copy(
-                    autoPatchEnabled = false,
-                    autoPatchInstallWithShizuku = it.autoPatchInstallWithShizuku,
-                    autoPatchUninstallOnConflictWithShizuku = it.autoPatchUninstallOnConflictWithShizuku
-                )
-            } ?: settings
-        )
+        val importedSettings = deferred?.let {
+            settings.copy(
+                autoPatchEnabled = false,
+                autoPatchInstallWithShizuku = it.autoPatchInstallWithShizuku,
+                autoPatchUninstallOnConflictWithShizuku = it.autoPatchUninstallOnConflictWithShizuku
+            )
+        } ?: settings
+        patcherRuntimePluginRepository.importSettingsWithRuntimeRestore(importedSettings) { prepared, restore ->
+            preferencesManager.importSettings(prepared, restoreRuntimes = restore)
+        }
+        // Discover keeps its browsing state in memory and an import only recreates the activity, so
+        // apply the imported flag there too. The store then saves its whole current state.
+        settings.patchBundleDiscoveryFiltersExpanded?.let { expanded ->
+            discoveryStateStore.update { it.copy(filtersExpanded = expanded) }
+        }
         deferredImportedAutoPatchSettings = deferred
     }
 
@@ -1603,14 +1713,11 @@ class ImportExportViewModel(
 
     fun exportManagerSettings(target: Uri) = viewModelScope.launch {
         uiSafe(app, R.string.export_manager_settings_fail, "Failed to export manager settings") {
-            val snapshot = preferencesManager.exportSettings()
+            val exportFile = buildManagerSettingsExportFile()
 
             withContext(Dispatchers.IO) {
                 contentResolver.openOutputStream(target, "wt")!!.use { output ->
-                    Json.Default.encodeToStream(
-                        ManagerSettingsExportFile(settings = snapshot),
-                        output
-                    )
+                    Json.Default.encodeToStream(exportFile, output)
                 }
             }
 
@@ -1620,15 +1727,12 @@ class ImportExportViewModel(
 
     fun exportManagerSettings(target: Path) = viewModelScope.launch {
         uiSafe(app, R.string.export_manager_settings_fail, "Failed to export manager settings") {
-            val snapshot = preferencesManager.exportSettings()
+            val exportFile = buildManagerSettingsExportFile()
 
             withContext(Dispatchers.IO) {
                 target.parent?.let { Files.createDirectories(it) }
                 Files.newOutputStream(target).use { output ->
-                    Json.Default.encodeToStream(
-                        ManagerSettingsExportFile(settings = snapshot),
-                        output
-                    )
+                    Json.Default.encodeToStream(exportFile, output)
                 }
             }
 
@@ -1654,7 +1758,7 @@ class ImportExportViewModel(
     private suspend fun buildEverythingExportFile(): EverythingExportFile {
         val bundleResult = buildPatchBundleExportResult()
         val profileExport = PatchProfileExportFile(patchProfileRepository.exportProfiles())
-        val settingsExport = ManagerSettingsExportFile(settings = preferencesManager.exportSettings())
+        val settingsExport = buildManagerSettingsExportFile()
         val selectionExport = buildPatchSelectionExportFile()
         return EverythingExportFile(
             patchBundles = bundleResult.exportFile,
@@ -1672,6 +1776,7 @@ class ImportExportViewModel(
         preferencesManager.importSettings(
             PreferencesManager.SettingsSnapshot(
                 announcementPushNotificationInterval = rollback.announcementInterval,
+                backgroundRuntimeUpdateInterval = rollback.runtimeInterval,
                 autoClearCacheInterval = rollback.autoClearCacheInterval,
                 searchForUpdatesBackgroundInterval = rollback.bundleInterval,
                 searchForManagerUpdatesBackgroundInterval = rollback.managerInterval,
@@ -1686,6 +1791,7 @@ class ImportExportViewModel(
     }
 
     private suspend fun syncImportedPeriodicWork() {
+        workerRepository.scheduleRuntimeUpdateWork(preferencesManager.backgroundRuntimeUpdateInterval.get())
         workerRepository.scheduleBundleUpdateNotificationWork(
             preferencesManager.searchForUpdatesBackgroundInterval.get()
         )
@@ -1705,6 +1811,7 @@ class ImportExportViewModel(
     }
 
     private fun suspendImportedPeriodicWork() {
+        workerRepository.scheduleRuntimeUpdateWork(SearchForUpdatesBackgroundInterval.NEVER)
         workerRepository.scheduleBundleUpdateNotificationWork(
             SearchForUpdatesBackgroundInterval.NEVER
         )
@@ -1747,18 +1854,10 @@ class ImportExportViewModel(
                 Log.e(tag, "Failed to update imported downloader plugins", error)
             }
         }
-        if (settings.acknowledgedPatcherRuntimePlugins != null ||
-            settings.trustedPatcherRuntimePluginsJson != null ||
-            settings.patcherRuntimePluginSourcesJson != null
+        if (settings.patcherRuntimePluginSourcesJson == null &&
+            (settings.acknowledgedPatcherRuntimePlugins != null || settings.trustedPatcherRuntimePluginsJson != null)
         ) {
             patcherRuntimePluginRepository.reload()
-            try {
-                patcherRuntimePluginRepository.updateCheck()
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                Log.e(tag, "Failed to update imported patcher runtime plugins", error)
-            }
         }
         patchBundleRepository.reload()
     }
@@ -1794,6 +1893,7 @@ class ImportExportViewModel(
             ).permissionGranted
 
         val backgroundNotificationsEnabled = importedBackgroundWorkNeedsNotifications(
+            runtimeInterval = preferencesManager.backgroundRuntimeUpdateInterval.get(),
             bundleInterval = bundleInterval,
             managerInterval = managerInterval,
             announcementInterval = announcementInterval,
@@ -1808,6 +1908,8 @@ class ImportExportViewModel(
             needsShizukuPermission = needsShizukuPermission,
             notificationRollback = if (backgroundNotificationsEnabled) {
                 ImportedNotificationRollback(
+                    runtimeInterval = previousSettings.backgroundRuntimeUpdateInterval
+                        ?: SearchForUpdatesBackgroundInterval.NEVER,
                     bundleInterval = previousSettings.searchForUpdatesBackgroundInterval
                         ?: SearchForUpdatesBackgroundInterval.NEVER,
                     managerInterval = previousSettings.searchForManagerUpdatesBackgroundInterval
@@ -1903,6 +2005,8 @@ class ImportExportViewModel(
                         importPatchSelectionExportFile(exportFile.patchSelection) {
                             importToasts[EverythingImportToast.PATCH_SELECTION] = it
                         }
+                        // After the bundles above, so section states can find them.
+                        importPatchSectionStates(exportFile.managerSettings.patchSectionStates, settings)
                     } finally {
                         // Settings are already saved even if a later import step fails.
                         finishManagerSettingsImport(previousSettings)

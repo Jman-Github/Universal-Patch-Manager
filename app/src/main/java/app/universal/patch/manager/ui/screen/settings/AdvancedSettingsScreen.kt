@@ -1,5 +1,15 @@
 package app.universal.patch.manager.ui.screen.settings
 
+import app.universal.patch.manager.ui.theme.actionTrayColor
+
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.ListItem
+import app.universal.patch.manager.ui.component.design.ListItemRadioButton
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.FilledTonalButton
+import app.universal.patch.manager.ui.component.design.TextButton
+import app.universal.patch.manager.ui.component.minimalActionButtons
 import android.Manifest
 import android.app.ActivityManager
 import android.content.ClipData
@@ -43,7 +53,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -97,12 +106,8 @@ import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -110,12 +115,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -173,7 +175,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.LineHeightStyle
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
@@ -181,6 +182,7 @@ import androidx.core.content.getSystemService
 import androidx.lifecycle.viewModelScope
 import app.universal.patch.manager.BuildConfig
 import app.universal.patch.manager.R
+import app.universal.patch.manager.ui.component.ScrollableBottomSheet
 import app.universal.patch.manager.ui.component.AppTopBar
 import app.universal.patch.manager.ui.component.ColumnWithScrollbar
 import app.universal.patch.manager.ui.component.CenteredDialogTitle
@@ -199,6 +201,7 @@ import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsItem
 import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsSwitch
 import app.universal.patch.manager.ui.component.settings.SettingsSearchHighlight
 import app.universal.patch.manager.ui.component.patcher.InstallerPickerDialog
+import app.universal.patch.manager.ui.component.patcher.installerOptionRowColors
 import app.universal.patch.manager.ui.component.patcher.ShizukuConfigurationDialog
 import app.universal.patch.manager.domain.installer.InstallerManager
 import app.universal.patch.manager.domain.manager.SearchForUpdatesBackgroundInterval
@@ -344,11 +347,6 @@ fun AdvancedSettingsScreen(
     var autoPatchShizukuConflictOptionsExpanded by rememberSaveable {
         mutableStateOf(false)
     }
-    LaunchedEffect(highlightTarget) {
-        if (highlightTarget == R.string.auto_patch_shizuku_uninstall_on_conflict) {
-            autoPatchShizukuConflictOptionsExpanded = true
-        }
-    }
     val appLanguage by viewModel.prefs.appLanguage.getAsState()
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
     var pendingLanguageRestart by rememberSaveable { mutableStateOf<String?>(null) }
@@ -398,7 +396,7 @@ fun AdvancedSettingsScreen(
             availableVariables = ExportNameFormatter.availableMergedApkVariables()
         )
     }
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
 
     LaunchedEffect(searchTarget, mode) {
         val target = searchTarget
@@ -483,6 +481,7 @@ fun AdvancedSettingsScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         ColumnWithScrollbar(
+            thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
@@ -494,10 +493,17 @@ fun AdvancedSettingsScreen(
             val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
             val announcementSystemEnabled by viewModel.prefs.announcementSystemEnabled.getAsState()
             var showSearchEngineDialog by rememberSaveable { mutableStateOf(false) }
-            GroupHeader(
-                stringResource(R.string.app_behavior_section),
-                icon = SettingsSectionIcons.AppBehavior
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.app_behavior_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.app_behavior_section),
+                    icon = SettingsSectionIcons.AppBehavior,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -574,10 +580,17 @@ fun AdvancedSettingsScreen(
                 }
             }
 
-            GroupHeader(
-                stringResource(R.string.network_integrations_section),
-                icon = SettingsSectionIcons.NetworkIntegrations
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.network_integrations_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.network_integrations_section),
+                    icon = SettingsSectionIcons.NetworkIntegrations,
+                    modifier = highlightModifier
+                )
+            }
 
             val apiUrl by viewModel.prefs.api.getAsState()
             val gitHubPat by viewModel.prefs.gitHubPat.getAsState()
@@ -668,10 +681,17 @@ fun AdvancedSettingsScreen(
                 }
             }
 
-            GroupHeader(
-                stringResource(R.string.installer_section),
-                icon = SettingsSectionIcons.Installer
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.installer_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.installer_section),
+                    icon = SettingsSectionIcons.Installer,
+                    modifier = highlightModifier
+                )
+            }
             val installTarget = InstallerManager.InstallTarget.PATCHER
             val primaryPreference by viewModel.prefs.installerPrimary.getAsState()
             val fallbackPreference by viewModel.prefs.installerFallback.getAsState()
@@ -684,6 +704,13 @@ fun AdvancedSettingsScreen(
                 viewModel.prefs.autoPatchInstallWithShizuku.getAsState()
             val autoPatchUninstallOnConflictWithShizuku by
                 viewModel.prefs.autoPatchUninstallOnConflictWithShizuku.getAsState()
+            LaunchedEffect(autoPatchEnabled, autoPatchInstallWithShizuku, highlightTarget) {
+                if (!autoPatchEnabled || !autoPatchInstallWithShizuku) {
+                    autoPatchShizukuConflictOptionsExpanded = false
+                } else if (highlightTarget == R.string.auto_patch_shizuku_uninstall_on_conflict) {
+                    autoPatchShizukuConflictOptionsExpanded = true
+                }
+            }
             val autoPatchRequiresCharging by viewModel.prefs.autoPatchRequiresCharging.getAsState()
             val autoPatchInterval by viewModel.prefs.autoPatchInterval.getAsState()
             val allowExternalBatchActions by viewModel.prefs.allowExternalBatchActions.getAsState()
@@ -965,10 +992,17 @@ fun AdvancedSettingsScreen(
 
             // Code adapted from Morphe, see third-party/NOTICE for more information
             // https://github.com/MorpheApp/morphe-manager/pull/795
-            GroupHeader(
-                stringResource(R.string.auto_patch_section),
-                icon = SettingsSectionIcons.Installer
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.auto_patch_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.auto_patch_section),
+                    icon = SettingsSectionIcons.Installer,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -1000,7 +1034,7 @@ fun AdvancedSettingsScreen(
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
                     val controlEnabled = !pendingAutoPatchShizukuPermission &&
-                        (autoPatchEnabled || autoPatchInstallWithShizuku)
+                        autoPatchEnabled
                     ExpressiveSettingsItem(
                         modifier = highlightModifier,
                         headlineContent = stringResource(
@@ -1012,13 +1046,8 @@ fun AdvancedSettingsScreen(
                         enabled = controlEnabled,
                         trailingContent = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                ExpressiveSettingsSwitch(
-                                    checked = autoPatchInstallWithShizuku,
-                                    enabled = controlEnabled,
-                                    onCheckedChange = setAutoPatchInstallWithShizuku
-                                )
                                 IconButton(
-                                    enabled = autoPatchInstallWithShizuku,
+                                    enabled = controlEnabled && autoPatchInstallWithShizuku,
                                     onClick = {
                                         autoPatchShizukuConflictOptionsExpanded =
                                             !autoPatchShizukuConflictOptionsExpanded
@@ -1033,6 +1062,11 @@ fun AdvancedSettingsScreen(
                                         contentDescription = null
                                     )
                                 }
+                                ExpressiveSettingsSwitch(
+                                    checked = autoPatchInstallWithShizuku,
+                                    enabled = controlEnabled,
+                                    onCheckedChange = setAutoPatchInstallWithShizuku
+                                )
                             }
                         },
                         onClick = {
@@ -1042,7 +1076,7 @@ fun AdvancedSettingsScreen(
                         }
                     )
                 }
-                if (autoPatchShizukuConflictOptionsExpanded) {
+                if (autoPatchShizukuConflictOptionsExpanded && autoPatchEnabled && autoPatchInstallWithShizuku) {
                     ExpressiveSettingsDivider()
                     SettingsSearchHighlight(
                         targetKey = R.string.auto_patch_shizuku_uninstall_on_conflict,
@@ -1050,9 +1084,7 @@ fun AdvancedSettingsScreen(
                         onHighlightComplete = { highlightTarget = null }
                     ) { highlightModifier ->
                         ExpressiveSettingsItem(
-                            modifier = highlightModifier
-                                .padding(start = 24.dp)
-                                .alpha(if (autoPatchInstallWithShizuku) 1f else 0.5f),
+                            modifier = highlightModifier.padding(start = 24.dp),
                             headlineContent = stringResource(
                                 R.string.auto_patch_shizuku_uninstall_on_conflict
                             ),
@@ -1086,8 +1118,7 @@ fun AdvancedSettingsScreen(
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
                     ExpressiveSettingsItem(
-                        modifier = highlightModifier
-                            .alpha(if (autoPatchEnabled) 1f else 0.5f),
+                        modifier = highlightModifier,
                         headlineContent = stringResource(
                             R.string.auto_patch_requires_charging
                         ),
@@ -1128,7 +1159,7 @@ fun AdvancedSettingsScreen(
                         },
                         secondaryActionEnabled = autoPatchEnabled &&
                             autoPatchInterval != viewModel.prefs.autoPatchInterval.default,
-                        primaryActionLabel = stringResource(R.string.configure),
+                        primaryActionLabel = stringResource(R.string.settings),
                         onPrimaryAction = { showAutoPatchIntervalDialog = true },
                         primaryActionEnabled = autoPatchEnabled
                     )
@@ -1180,17 +1211,15 @@ fun AdvancedSettingsScreen(
                                 .filterNot { it == SearchForUpdatesBackgroundInterval.NEVER }
                                 .forEach { interval ->
                                     ListItem(
+                                        selected = interval == autoPatchInterval,
                                         colors = transparentListItemColors,
                                         leadingContent = {
-                                            RadioButton(
-                                                selected = interval == autoPatchInterval,
-                                                onClick = null
-                                            )
+                                            ListItemRadioButton(selected = interval == autoPatchInterval)
                                         },
                                         headlineContent = {
                                             Text(stringResource(interval.displayName))
                                         },
-                                        modifier = Modifier.clickable {
+                                        onClick = {
                                             viewModel.setAutoPatchInterval(interval)
                                             showAutoPatchIntervalDialog = false
                                         }
@@ -1203,10 +1232,17 @@ fun AdvancedSettingsScreen(
             }
 
             if (mode == AdvancedSettingsMode.ADVANCED_SYSTEM) {
-            GroupHeader(
-                stringResource(R.string.safeguards_compatibility_section),
-                icon = SettingsSectionIcons.SafeguardsCompatibility
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.safeguards_compatibility_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.safeguards_compatibility_section),
+                    icon = SettingsSectionIcons.SafeguardsCompatibility,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -1321,6 +1357,18 @@ fun AdvancedSettingsScreen(
             val morpheBytecodeMode by viewModel.prefs.morpheBytecodeMode.getAsState()
             val patcherLogMode by viewModel.prefs.patcherLogMode.getAsState()
             val useJvmRuntime by viewModel.prefs.useJvmRuntime.getAsState()
+            val artMemoryLimit by viewModel.prefs.artMemoryLimit.getAsState()
+            var showArtMemoryDialog by remember { mutableStateOf(false) }
+            if (showArtMemoryDialog) {
+                app.universal.patch.manager.ui.component.settings.ProcessMemoryLimitDialog(
+                    currentLimit = artMemoryLimit,
+                    onDismiss = { showArtMemoryDialog = false },
+                    onLimitChange = { limit -> viewModel.viewModelScope.launch {
+                        viewModel.prefs.artMemoryLimit.update(limit)
+                    } }
+                )
+            }
+
             if (showMorpheBytecodeModeDialog) {
                 MorpheBytecodeModeDialog(
                     current = morpheBytecodeMode,
@@ -1341,14 +1389,37 @@ fun AdvancedSettingsScreen(
                     }
                 )
             }
-            GroupHeader(
-                stringResource(R.string.patching_engine_section),
-                icon = SettingsSectionIcons.PatchingEngine
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.patching_engine_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.patching_engine_section),
+                    icon = SettingsSectionIcons.PatchingEngine,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.process_memory_limit,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.process_memory_limit),
+                        supportingContent = stringResource(R.string.art_memory_description),
+                        trailingContent = {
+                            Text(stringResource(R.string.process_memory_limit_value, artMemoryLimit))
+                        },
+                        onClick = { showArtMemoryDialog = true }
+                    )
+                }
+                ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
                     targetKey = R.string.patcher_jvm_enable,
                     activeKey = highlightTarget,
@@ -1504,10 +1575,17 @@ fun AdvancedSettingsScreen(
             val autoExpandRunningStepsExclusive by
                 viewModel.prefs.autoExpandRunningStepsExclusive.getAsState()
 
-            GroupHeader(
-                stringResource(R.string.patching_flow_section),
-                icon = SettingsSectionIcons.PatchingFlow
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.patching_flow_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.patching_flow_section),
+                    icon = SettingsSectionIcons.PatchingFlow,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -1537,6 +1615,21 @@ fun AdvancedSettingsScreen(
                             enabled = childEnabled
                         )
                     }
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.patcher_resource_graphs_pinned_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.pinPatcherResourceGraphs,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.patcher_resource_graphs_pinned_title,
+                        description = R.string.patcher_resource_graphs_pinned_description,
+                        enabled = patcherGraphsEnabled
+                    )
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
@@ -1642,15 +1735,211 @@ fun AdvancedSettingsScreen(
                 }
             }
 
+            SettingsSearchHighlight(
+                targetKey = R.string.saved_apps_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.saved_apps_section),
+                    icon = SettingsSectionIcons.SavedApps,
+                    modifier = highlightModifier
+                )
+            }
+            val savedAppsEnabled by viewModel.prefs.enableSavedApps.getAsState()
+            val disableSavedAppOverwrite by viewModel.prefs.disableSavedAppOverwrite.getAsState()
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.patcher_saved_apps_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = savedAppsEnabled,
+                        onValueChange = viewModel::setSavedAppsEnabled,
+                        headline = R.string.patcher_saved_apps_title,
+                        description = R.string.patcher_saved_apps_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.saved_apps_disable_overwrite_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = savedAppsEnabled && disableSavedAppOverwrite,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.disableSavedAppOverwrite.update(value)
+                            }
+                        },
+                        headline = R.string.saved_apps_disable_overwrite_title,
+                        description = R.string.saved_apps_disable_overwrite_description,
+                        enabled = savedAppsEnabled
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.saved_apps_show_bundle_update_badges_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    val showSavedAppBundleUpdateBadges by viewModel.prefs.showSavedAppBundleUpdateBadges.getAsState()
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = savedAppsEnabled && showSavedAppBundleUpdateBadges,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.showSavedAppBundleUpdateBadges.update(value)
+                            }
+                        },
+                        headline = R.string.saved_apps_show_bundle_update_badges_title,
+                        description = R.string.saved_apps_show_bundle_update_badges_description,
+                        enabled = savedAppsEnabled
+                    )
+                }
+            }
+            val showPatchSelectionVersionTags by
+                viewModel.prefs.patchSelectionShowVersionTags.getAsState()
+            val showPatchSelectionOptionPreviews by
+                viewModel.prefs.patchSelectionShowOptionPreviews.getAsState()
+            val minimalPatchSelectionView =
+                !showPatchSelectionVersionTags && !showPatchSelectionOptionPreviews
+
+            val showCustomPatchSections by viewModel.prefs.patchSelectionShowCustomSections.getAsState()
+            val expandPatchCategories by viewModel.prefs.patchSelectionExpandCategories.getAsState()
+            SettingsSearchHighlight(
+                targetKey = R.string.patch_list_display_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.patch_list_display_section),
+                    icon = SettingsSectionIcons.ActionButtonsPatchList,
+                    modifier = highlightModifier
+                )
+            }
+            ExpressiveSettingsCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.minimal_patch_selection_view_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = minimalPatchSelectionView,
+                        onValueChange = { enabled ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.setMinimalPatchSelectionView(enabled)
+                            }
+                        },
+                        headline = R.string.minimal_patch_selection_view_title,
+                        description = R.string.minimal_patch_selection_view_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.patch_selection_version_tags_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = showPatchSelectionVersionTags,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.patchSelectionShowVersionTags.update(value)
+                            }
+                        },
+                        headline = R.string.patch_selection_version_tags_title,
+                        description = R.string.patch_selection_version_tags_description,
+                        enabled = !minimalPatchSelectionView
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.patch_selection_option_previews_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = showPatchSelectionOptionPreviews,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.patchSelectionShowOptionPreviews.update(value)
+                            }
+                        },
+                        headline = R.string.patch_selection_option_previews_title,
+                        description = R.string.patch_selection_option_previews_description,
+                        enabled = !minimalPatchSelectionView
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.patch_selection_show_custom_sections_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = showCustomPatchSections,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.patchSelectionShowCustomSections.update(value)
+                            }
+                        },
+                        headline = R.string.patch_selection_show_custom_sections_title,
+                        description = R.string.patch_selection_show_custom_sections_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.patch_selection_expand_categories_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = expandPatchCategories,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.setPatchCategoriesExpanded(value)
+                            }
+                        },
+                        headline = R.string.patch_selection_expand_categories_title,
+                        description = R.string.patch_selection_expand_categories_description,
+                        enabled = showCustomPatchSections
+                    )
+                }
+            }
             val splitMergeAutoExpandRunningStepsEnabled by
                 viewModel.prefs.splitMergeAutoExpandRunningSteps.getAsState()
             val splitMergeAutoExpandRunningStepsExclusive by
                 viewModel.prefs.splitMergeAutoExpandRunningStepsExclusive.getAsState()
 
-            GroupHeader(
-                stringResource(R.string.merge_split_flow_section),
-                icon = SettingsSectionIcons.PatchingFlow
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.merge_split_flow_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.merge_split_flow_section),
+                    icon = SettingsSectionIcons.PatchingFlow,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -1694,6 +1983,21 @@ fun AdvancedSettingsScreen(
                             enabled = childEnabled
                         )
                     }
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.merger_resource_graphs_pinned_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.pinSplitMergeResourceGraphs,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.merger_resource_graphs_pinned_title,
+                        description = R.string.merger_resource_graphs_pinned_description,
+                        enabled = mergerGraphsEnabled
+                    )
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
@@ -1770,150 +2074,20 @@ fun AdvancedSettingsScreen(
                     )
                 }
             }
-
-            GroupHeader(
-                stringResource(R.string.saved_apps_section),
-                icon = SettingsSectionIcons.SavedApps
-            )
-            val savedAppsEnabled by viewModel.prefs.enableSavedApps.getAsState()
-            val disableSavedAppOverwrite by viewModel.prefs.disableSavedAppOverwrite.getAsState()
-            ExpressiveSettingsCard(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
-            ) {
-                SettingsSearchHighlight(
-                    targetKey = R.string.patcher_saved_apps_title,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        value = savedAppsEnabled,
-                        onValueChange = viewModel::setSavedAppsEnabled,
-                        headline = R.string.patcher_saved_apps_title,
-                        description = R.string.patcher_saved_apps_description,
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.saved_apps_disable_overwrite_title,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        value = savedAppsEnabled && disableSavedAppOverwrite,
-                        onValueChange = { value ->
-                            viewModel.viewModelScope.launch {
-                                viewModel.prefs.disableSavedAppOverwrite.update(value)
-                            }
-                        },
-                        headline = R.string.saved_apps_disable_overwrite_title,
-                        description = R.string.saved_apps_disable_overwrite_description,
-                        enabled = savedAppsEnabled
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.saved_apps_show_bundle_update_badges_title,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    val showSavedAppBundleUpdateBadges by viewModel.prefs.showSavedAppBundleUpdateBadges.getAsState()
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        value = savedAppsEnabled && showSavedAppBundleUpdateBadges,
-                        onValueChange = { value ->
-                            viewModel.viewModelScope.launch {
-                                viewModel.prefs.showSavedAppBundleUpdateBadges.update(value)
-                            }
-                        },
-                        headline = R.string.saved_apps_show_bundle_update_badges_title,
-                        description = R.string.saved_apps_show_bundle_update_badges_description,
-                        enabled = savedAppsEnabled
-                    )
-                }
-            }
-            val showPatchSelectionVersionTags by
-                viewModel.prefs.patchSelectionShowVersionTags.getAsState()
-            val showPatchSelectionOptionPreviews by
-                viewModel.prefs.patchSelectionShowOptionPreviews.getAsState()
-            val minimalPatchSelectionView =
-                !showPatchSelectionVersionTags && !showPatchSelectionOptionPreviews
-
-            GroupHeader(
-                stringResource(R.string.patch_list_display_section),
-                icon = SettingsSectionIcons.ActionButtonsPatchList
-            )
-            ExpressiveSettingsCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
-            ) {
-                SettingsSearchHighlight(
-                    targetKey = R.string.minimal_patch_selection_view_title,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        value = minimalPatchSelectionView,
-                        onValueChange = { enabled ->
-                            viewModel.viewModelScope.launch {
-                                viewModel.prefs.setMinimalPatchSelectionView(enabled)
-                            }
-                        },
-                        headline = R.string.minimal_patch_selection_view_title,
-                        description = R.string.minimal_patch_selection_view_description
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.patch_selection_version_tags_title,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        value = showPatchSelectionVersionTags,
-                        onValueChange = { value ->
-                            viewModel.viewModelScope.launch {
-                                viewModel.prefs.patchSelectionShowVersionTags.update(value)
-                            }
-                        },
-                        headline = R.string.patch_selection_version_tags_title,
-                        description = R.string.patch_selection_version_tags_description,
-                        enabled = !minimalPatchSelectionView
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.patch_selection_option_previews_title,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        value = showPatchSelectionOptionPreviews,
-                        onValueChange = { value ->
-                            viewModel.viewModelScope.launch {
-                                viewModel.prefs.patchSelectionShowOptionPreviews.update(value)
-                            }
-                        },
-                        headline = R.string.patch_selection_option_previews_title,
-                        description = R.string.patch_selection_option_previews_description,
-                        enabled = !minimalPatchSelectionView
-                    )
-                }
-            }
         }
 
         if (mode == AdvancedSettingsMode.ADVANCED_SYSTEM) {
-        GroupHeader(
-            stringResource(R.string.diagnostics_output_section),
-            icon = SettingsSectionIcons.DiagnosticsOutput
-        )
+        SettingsSearchHighlight(
+            targetKey = R.string.diagnostics_output_section,
+            activeKey = highlightTarget,
+            onHighlightComplete = { highlightTarget = null }
+        ) { highlightModifier ->
+            GroupHeader(
+                stringResource(R.string.diagnostics_output_section),
+                icon = SettingsSectionIcons.DiagnosticsOutput,
+                modifier = highlightModifier
+            )
+        }
         ExpressiveSettingsCard(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -1934,7 +2108,7 @@ fun AdvancedSettingsScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Surface(
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = MaterialTheme.shapes.small.withClassicCorner(8.dp),
                                     color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
                                 ) {
                                     Text(
@@ -1970,7 +2144,7 @@ fun AdvancedSettingsScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Surface(
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = MaterialTheme.shapes.small.withClassicCorner(8.dp),
                                     color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
                                 ) {
                                     Text(
@@ -2103,6 +2277,7 @@ private fun LanguageDialog(
         text = {
             val scrollState = rememberScrollState()
             ColumnWithScrollbar(
+                thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                 state = scrollState,
                 modifier = Modifier
                     .heightIn(max = 360.dp)
@@ -2113,7 +2288,7 @@ private fun LanguageDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                             .clickable { onSelect(option.code) }
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -2332,7 +2507,8 @@ internal fun ActionButtonSettings(
 
     LaunchedEffect(highlightTarget) {
         when (highlightTarget) {
-            R.string.patch_selection_action_visibility_title -> actionsExpanded = true
+            R.string.patch_selection_action_visibility_title,
+            R.string.minimal_action_buttons_title -> actionsExpanded = true
             R.string.patch_bundle_action_visibility_title -> bundleActionsExpanded = true
             R.string.batch_result_action_visibility_title -> batchResultActionsExpanded = true
             R.string.saved_app_action_visibility_title -> savedActionsExpanded = true
@@ -2341,8 +2517,21 @@ internal fun ActionButtonSettings(
         }
     }
     Column {
+        DashboardActionSettings(
+            viewModel.prefs,
+            bundles = false,
+            highlightTarget = highlightTarget,
+            onHighlightComplete = onHighlightComplete
+        )
+        DashboardActionSettings(
+            viewModel.prefs,
+            bundles = true,
+            highlightTarget = highlightTarget,
+            onHighlightComplete = onHighlightComplete
+        )
         SettingsSearchHighlight(
                 targetKey = R.string.patch_selection_action_order_title,
+                extraKeys = setOf(R.string.minimal_action_buttons_title),
                 activeKey = highlightTarget,
                 onHighlightComplete = onHighlightComplete
             ) { highlightModifier ->
@@ -2361,6 +2550,7 @@ internal fun ActionButtonSettings(
             }
 
             if (actionsExpanded) {
+                MinimalActionSettings(viewModel.prefs, "selection")
                 ExpressiveSettingsDivider()
                 Box(
                         modifier = Modifier
@@ -2646,7 +2836,7 @@ internal fun ActionButtonSettings(
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .clip(RoundedCornerShape(12.dp))
+                                                .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                                                 .clickable(enabled = !forcedHidden) { setVisible(!visible) }
                                                 .alpha(if (forcedHidden) 0.7f else 1f)
                                                 .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -2676,26 +2866,16 @@ internal fun ActionButtonSettings(
                                     }
                             }
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                TextButton(
-                                    onClick = { viewModel.setPatchSelectionHiddenActions(emptySet()) }
-                                ) {
-                                    Text(stringResource(R.string.patch_selection_action_visibility_reset))
+                            ActionOrderResetButtons(
+                                showAllLabel = R.string.patch_selection_action_visibility_reset,
+                                resetOrderLabel = R.string.patch_selection_action_order_reset,
+                                onShowAll = { viewModel.setPatchSelectionHiddenActions(emptySet()) },
+                                onResetOrder = {
+                                    workingOrder.clear()
+                                    workingOrder.addAll(PatchSelectionActionKey.DefaultOrder)
+                                    viewModel.setPatchSelectionActionOrder(PatchSelectionActionKey.DefaultOrder)
                                 }
-                                TextButton(
-                                    onClick = {
-                                        workingOrder.clear()
-                                        workingOrder.addAll(PatchSelectionActionKey.DefaultOrder)
-                                        viewModel.setPatchSelectionActionOrder(PatchSelectionActionKey.DefaultOrder)
-                                    }
-                                ) {
-                                    Text(stringResource(R.string.patch_selection_action_order_reset))
-                                }
-                            }
+                            )
                     }
                 }
             ExpressiveSettingsDivider()
@@ -2719,6 +2899,7 @@ internal fun ActionButtonSettings(
                 }
 
                 if (bundleActionsExpanded) {
+                MinimalActionSettings(viewModel.prefs, "bundles")
                     ExpressiveSettingsDivider()
                 Box(
                     modifier = Modifier
@@ -2775,7 +2956,7 @@ internal fun ActionButtonSettings(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clip(RoundedCornerShape(12.dp))
+                                            .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                                             .clickable { setVisible(!visible) }
                                             .padding(horizontal = 10.dp, vertical = 6.dp),
                                         verticalAlignment = Alignment.CenterVertically
@@ -2793,26 +2974,16 @@ internal fun ActionButtonSettings(
                                 }
                         }
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            TextButton(
-                                onClick = { viewModel.setPatchBundleHiddenActions(emptySet()) }
-                            ) {
-                                Text(stringResource(R.string.patch_bundle_action_visibility_reset))
+                        ActionOrderResetButtons(
+                            showAllLabel = R.string.patch_bundle_action_visibility_reset,
+                            resetOrderLabel = R.string.patch_bundle_action_order_reset,
+                            onShowAll = { viewModel.setPatchBundleHiddenActions(emptySet()) },
+                            onResetOrder = {
+                                bundleWorkingOrder.clear()
+                                bundleWorkingOrder.addAll(PatchBundleActionKey.DefaultOrder)
+                                viewModel.setPatchBundleActionOrder(PatchBundleActionKey.DefaultOrder)
                             }
-                            TextButton(
-                                onClick = {
-                                    bundleWorkingOrder.clear()
-                                    bundleWorkingOrder.addAll(PatchBundleActionKey.DefaultOrder)
-                                    viewModel.setPatchBundleActionOrder(PatchBundleActionKey.DefaultOrder)
-                                }
-                            ) {
-                                Text(stringResource(R.string.patch_bundle_action_order_reset))
-                            }
-                        }
+                        )
                     }
                 }
 
@@ -2841,6 +3012,7 @@ internal fun ActionButtonSettings(
             }
 
             if (batchResultActionsExpanded) {
+                MinimalActionSettings(viewModel.prefs, "batch")
                 ExpressiveSettingsDivider()
                 Box(
                     modifier = Modifier
@@ -2903,7 +3075,7 @@ internal fun ActionButtonSettings(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                                     .clickable { setVisible(!visible) }
                                     .padding(horizontal = 10.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -2921,26 +3093,16 @@ internal fun ActionButtonSettings(
                         }
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { viewModel.setBatchResultHiddenActions(emptySet()) }
-                        ) {
-                            Text(stringResource(R.string.batch_result_action_visibility_reset))
+                    ActionOrderResetButtons(
+                        showAllLabel = R.string.batch_result_action_visibility_reset,
+                        resetOrderLabel = R.string.batch_result_action_order_reset,
+                        onShowAll = { viewModel.setBatchResultHiddenActions(emptySet()) },
+                        onResetOrder = {
+                            batchResultWorkingOrder.clear()
+                            batchResultWorkingOrder.addAll(BatchResultActionKey.DefaultOrder)
+                            viewModel.setBatchResultActionOrder(BatchResultActionKey.DefaultOrder)
                         }
-                        TextButton(
-                            onClick = {
-                                batchResultWorkingOrder.clear()
-                                batchResultWorkingOrder.addAll(BatchResultActionKey.DefaultOrder)
-                                viewModel.setBatchResultActionOrder(BatchResultActionKey.DefaultOrder)
-                            }
-                        ) {
-                            Text(stringResource(R.string.batch_result_action_order_reset))
-                        }
-                    }
+                    )
                 }
             }
 
@@ -2965,6 +3127,7 @@ internal fun ActionButtonSettings(
             }
 
             if (savedActionsExpanded) {
+                MinimalActionSettings(viewModel.prefs, "saved")
                 ExpressiveSettingsDivider()
                 Box(
                     modifier = Modifier
@@ -3021,7 +3184,7 @@ internal fun ActionButtonSettings(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
+                                        .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                                         .clickable { setVisible(!visible) }
                                         .padding(horizontal = 10.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
@@ -3039,26 +3202,16 @@ internal fun ActionButtonSettings(
                             }
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { viewModel.setSavedAppHiddenActions(emptySet()) }
-                        ) {
-                            Text(stringResource(R.string.saved_app_action_visibility_reset))
+                    ActionOrderResetButtons(
+                        showAllLabel = R.string.saved_app_action_visibility_reset,
+                        resetOrderLabel = R.string.saved_app_action_order_reset,
+                        onShowAll = { viewModel.setSavedAppHiddenActions(emptySet()) },
+                        onResetOrder = {
+                            savedWorkingOrder.clear()
+                            savedWorkingOrder.addAll(SavedAppActionKey.DefaultOrder)
+                            viewModel.setSavedAppActionOrder(SavedAppActionKey.DefaultOrder)
                         }
-                        TextButton(
-                            onClick = {
-                                savedWorkingOrder.clear()
-                                savedWorkingOrder.addAll(SavedAppActionKey.DefaultOrder)
-                                viewModel.setSavedAppActionOrder(SavedAppActionKey.DefaultOrder)
-                            }
-                        ) {
-                            Text(stringResource(R.string.saved_app_action_order_reset))
-                        }
-                    }
+                    )
                 }
             }
             ExpressiveSettingsDivider()
@@ -3082,6 +3235,7 @@ internal fun ActionButtonSettings(
             }
 
             if (profileActionsExpanded) {
+                MinimalActionSettings(viewModel.prefs, "profiles")
                 ExpressiveSettingsDivider()
                 Box(
                     modifier = Modifier
@@ -3138,7 +3292,7 @@ internal fun ActionButtonSettings(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
+                                        .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                                         .clickable { setVisible(!visible) }
                                         .padding(horizontal = 10.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
@@ -3156,26 +3310,16 @@ internal fun ActionButtonSettings(
                             }
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { viewModel.setPatchProfileHiddenActions(emptySet()) }
-                        ) {
-                            Text(stringResource(R.string.patch_profile_action_visibility_reset))
+                    ActionOrderResetButtons(
+                        showAllLabel = R.string.patch_profile_action_visibility_reset,
+                        resetOrderLabel = R.string.patch_profile_action_order_reset,
+                        onShowAll = { viewModel.setPatchProfileHiddenActions(emptySet()) },
+                        onResetOrder = {
+                            profileWorkingOrder.clear()
+                            profileWorkingOrder.addAll(PatchProfileActionKey.DefaultOrder)
+                            viewModel.setPatchProfileActionOrder(PatchProfileActionKey.DefaultOrder)
                         }
-                        TextButton(
-                            onClick = {
-                                profileWorkingOrder.clear()
-                                profileWorkingOrder.addAll(PatchProfileActionKey.DefaultOrder)
-                                viewModel.setPatchProfileActionOrder(PatchProfileActionKey.DefaultOrder)
-                            }
-                        ) {
-                            Text(stringResource(R.string.patch_profile_action_order_reset))
-                        }
-                    }
+                    )
                 }
             }
 
@@ -3204,6 +3348,7 @@ internal fun ActionButtonSettings(
             }
 
             if (lsposedActionsExpanded) {
+                MinimalActionSettings(viewModel.prefs, "lsposed")
                 ExpressiveSettingsDivider()
                 Box(
                     modifier = Modifier
@@ -3262,7 +3407,7 @@ internal fun ActionButtonSettings(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
                                     .clickable { setVisible(!visible) }
                                     .padding(horizontal = 10.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -3280,31 +3425,43 @@ internal fun ActionButtonSettings(
                         }
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { viewModel.setLsposedModuleHiddenActions(emptySet()) }
-                        ) {
-                            Text(stringResource(R.string.lsposed_module_action_visibility_reset))
+                    ActionOrderResetButtons(
+                        showAllLabel = R.string.lsposed_module_action_visibility_reset,
+                        resetOrderLabel = R.string.lsposed_module_action_order_reset,
+                        onShowAll = { viewModel.setLsposedModuleHiddenActions(emptySet()) },
+                        onResetOrder = {
+                            lsposedWorkingOrder.clear()
+                            lsposedWorkingOrder.addAll(LsposedModuleActionKey.DefaultOrder)
+                            viewModel.setLsposedModuleActionOrder(
+                                LsposedModuleActionKey.DefaultOrder
+                            )
                         }
-                        TextButton(
-                            onClick = {
-                                lsposedWorkingOrder.clear()
-                                lsposedWorkingOrder.addAll(LsposedModuleActionKey.DefaultOrder)
-                                viewModel.setLsposedModuleActionOrder(
-                                    LsposedModuleActionKey.DefaultOrder
-                                )
-                            }
-                        ) {
-                            Text(stringResource(R.string.lsposed_module_action_order_reset))
-                        }
-                    }
+                    )
                 }
             }
 
+    }
+}
+
+@Composable
+internal fun ActionOrderResetButtons(
+    @StringRes showAllLabel: Int,
+    @StringRes resetOrderLabel: Int,
+    onShowAll: () -> Unit,
+    onResetOrder: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(onClick = onShowAll, modifier = Modifier.weight(1f)) {
+            Text(stringResource(showAllLabel), textAlign = TextAlign.Center)
+        }
+        TextButton(onClick = onResetOrder, modifier = Modifier.weight(1f)) {
+            Text(stringResource(resetOrderLabel), textAlign = TextAlign.Center)
+        }
     }
 }
 
@@ -3337,11 +3494,11 @@ private fun PatchSelectionActionPreview(
     ) {
         Box(
             modifier = Modifier.fillMaxWidth(),
-            contentAlignment = if (centerContent) Alignment.Center else Alignment.CenterEnd
+            contentAlignment = if (centerContent || minimalActionButtons("selection")) Alignment.Center else Alignment.CenterEnd
         ) {
             Surface(
-                shape = RoundedCornerShape(18.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
+                color = actionTrayColor(),
                 tonalElevation = 0.dp,
                 shadowElevation = 6.dp,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
@@ -3423,7 +3580,10 @@ private fun SelectionActionPreviewRow(
             .height(48.dp),
         state = state,
         userScrollEnabled = userScrollEnabled,
-        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End)
+        horizontalArrangement = Arrangement.spacedBy(
+            6.dp,
+            if (minimalActionButtons("selection")) Alignment.CenterHorizontally else Alignment.End
+        )
     ) {
         items(
             items = keys,
@@ -3451,7 +3611,7 @@ private fun SelectionActionPreviewRow(
 }
 
 @Composable
-private fun SelectionActionPreviewChip(
+internal fun SelectionActionPreviewChip(
     icon: ImageVector,
     label: String,
     hidden: Boolean = false,
@@ -3460,6 +3620,7 @@ private fun SelectionActionPreviewChip(
     highlighted: Boolean = false,
     ghost: Boolean = false,
     floating: Boolean = false,
+    group: String = "selection",
     onBoundsChanged: ((Rect) -> Unit)? = null
 ) {
     var layoutCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -3511,12 +3672,12 @@ private fun SelectionActionPreviewChip(
         ) {
             Icon(
                 imageVector = icon,
-                contentDescription = null,
+                contentDescription = label,
                 modifier = Modifier
                     .size(16.dp)
                     .offset(y = iconOffset)
             )
-            Text(
+            if (!minimalActionButtons(group)) Text(
                 text = label,
                 style = labelStyle,
                 maxLines = 1
@@ -3565,8 +3726,8 @@ private fun PatchBundleActionPreview(
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+            shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
+            color = actionTrayColor(),
             tonalElevation = 0.dp,
             shadowElevation = 6.dp,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
@@ -3623,6 +3784,11 @@ private fun PatchBundleActionPreviewRow(
             .fillMaxWidth()
             .height(48.dp),
         state = state,
+        horizontalArrangement = if (minimalActionButtons("bundles")) {
+            Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally)
+        } else {
+            Arrangement.Start
+        },
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(
@@ -3637,6 +3803,7 @@ private fun PatchBundleActionPreviewRow(
                     contentAlignment = Alignment.Center
                 ) {
                     SelectionActionPreviewChip(
+                        group = "bundles",
                         icon = previewIconForBundleAction(key),
                         label = stringResource(key.labelRes),
                         dragging = isDragging,
@@ -3666,8 +3833,8 @@ private fun BatchResultActionPreview(
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+            shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
+            color = actionTrayColor(),
             tonalElevation = 0.dp,
             shadowElevation = 6.dp,
             border = BorderStroke(
@@ -3726,6 +3893,11 @@ private fun BatchResultActionPreviewRow(
             .fillMaxWidth()
             .height(48.dp),
         state = state,
+        horizontalArrangement = if (minimalActionButtons("batch")) {
+            Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally)
+        } else {
+            Arrangement.Start
+        },
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(
@@ -3740,6 +3912,7 @@ private fun BatchResultActionPreviewRow(
                     contentAlignment = Alignment.Center
                 ) {
                     SelectionActionPreviewChip(
+                        group = "batch",
                         icon = previewIconForBatchResultAction(key),
                         label = stringResource(key.labelRes),
                         dragging = isDragging,
@@ -3769,8 +3942,8 @@ private fun SavedAppActionPreview(
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+            shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
+            color = actionTrayColor(),
             tonalElevation = 0.dp,
             shadowElevation = 6.dp,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
@@ -3827,6 +4000,11 @@ private fun SavedAppActionPreviewRow(
             .fillMaxWidth()
             .height(48.dp),
         state = state,
+        horizontalArrangement = if (minimalActionButtons("saved")) {
+            Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally)
+        } else {
+            Arrangement.Start
+        },
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(
@@ -3841,6 +4019,7 @@ private fun SavedAppActionPreviewRow(
                     contentAlignment = Alignment.Center
                 ) {
                     SelectionActionPreviewChip(
+                        group = "saved",
                         icon = previewIconForSavedAppAction(key),
                         label = stringResource(key.labelRes),
                         dragging = isDragging,
@@ -3870,8 +4049,8 @@ private fun PatchProfileActionPreview(
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+            shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
+            color = actionTrayColor(),
             tonalElevation = 0.dp,
             shadowElevation = 6.dp,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
@@ -3927,6 +4106,11 @@ private fun PatchProfileActionPreviewRow(
             .fillMaxWidth()
             .height(48.dp),
         state = state,
+        horizontalArrangement = if (minimalActionButtons("profiles")) {
+            Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally)
+        } else {
+            Arrangement.Start
+        },
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(
@@ -3941,6 +4125,7 @@ private fun PatchProfileActionPreviewRow(
                     contentAlignment = Alignment.Center
                 ) {
                     SelectionActionPreviewChip(
+                        group = "profiles",
                         icon = previewIconForProfileAction(key),
                         label = stringResource(key.labelRes),
                         dragging = isDragging,
@@ -3970,8 +4155,8 @@ private fun LsposedModuleActionPreview(
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+            shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
+            color = actionTrayColor(),
             tonalElevation = 0.dp,
             shadowElevation = 6.dp,
             border = BorderStroke(
@@ -4032,6 +4217,11 @@ private fun LsposedModuleActionPreviewRow(
             .fillMaxWidth()
             .height(48.dp),
         state = state,
+        horizontalArrangement = if (minimalActionButtons("lsposed")) {
+            Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally)
+        } else {
+            Arrangement.Start
+        },
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(
@@ -4046,6 +4236,7 @@ private fun LsposedModuleActionPreviewRow(
                     contentAlignment = Alignment.Center
                 ) {
                     SelectionActionPreviewChip(
+                        group = "lsposed",
                         icon = previewIconForLsposedModuleAction(key),
                         label = stringResource(key.labelRes),
                         dragging = isDragging,
@@ -4196,7 +4387,7 @@ private fun ExportNameFormatDialog(
                 )
                 Surface(
                     tonalElevation = 2.dp,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = MaterialTheme.shapes.medium.withClassicCorner(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -4230,7 +4421,7 @@ private fun ExportNameFormatDialog(
                         variables.forEach { variable ->
                             Surface(
                                 tonalElevation = 1.dp,
-                                shape = RoundedCornerShape(16.dp),
+                                shape = MaterialTheme.shapes.large.withClassicCorner(16.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column(
@@ -4347,10 +4538,7 @@ private fun CustomInstallerManagerDialog(
     }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState
-    ) {
+    ScrollableBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         CustomInstallerContent(
             installerManager = installerManager,
             viewModel = viewModel,
@@ -4374,8 +4562,7 @@ private fun CustomInstallerContent(
     installTarget: InstallerManager.InstallTarget,
     customComponents: Set<String>,
     builtinComponents: Set<ComponentName>,
-    onClose: () -> Unit,
-    modifier: Modifier = Modifier
+    onClose: () -> Unit
 ) {
     val context = LocalContext.current
     val savedComponents = remember(customComponents) { customComponents.toSet() }
@@ -4394,7 +4581,6 @@ private fun CustomInstallerContent(
     val coroutineScope = rememberCoroutineScope()
     val trimmedInput = remember(inputValue) { inputValue.trim() }
     var selectedTab by rememberSaveable { mutableStateOf(InstallerTab.Saved) }
-    val scrollState = rememberScrollState()
             val autoSavedEntries = remember(builtinComponents, installTarget) {
                 buildList {
                     // Built-in system installers discovered automatically.
@@ -4472,12 +4658,10 @@ private fun CustomInstallerContent(
         }
     }
 
-    Column(
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-            .verticalScroll(scrollState)
+    ColumnWithScrollbar(
+        modifier = Modifier.fillMaxWidth(),
+        contentModifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
             text = stringResource(R.string.installer_custom_header),
@@ -4857,10 +5041,12 @@ private fun InstallerSelectionDialog(
                         option.availability.reason in shizukuPromptReasons &&
                         onOpenShizuku != null
                     ListItem(
-                        modifier = Modifier.clickable(enabled = enabled) {
+                        selected = selectedOption,
+                        enabled = enabled,
+                        onClick = {
                             if (enabled) currentSelection = option.token
                         },
-                        colors = transparentListItemColors,
+                        colors = installerOptionRowColors(enabled),
                         leadingContent = {
                             val iconDrawable = option.icon
                             val useInstallerIcon = iconDrawable != null && when (option.token) {
@@ -4876,22 +5062,11 @@ private fun InstallerSelectionDialog(
                                     enabled = enabled || selectedOption
                                 )
                             } else {
-                                RadioButton(
-                                    selected = selectedOption,
-                                    onClick = null,
-                                    enabled = enabled
-                                )
+                                ListItemRadioButton(selected = selectedOption, enabled = enabled)
                             }
                         },
                         headlineContent = {
-                            Text(
-                                option.label,
-                                color = if (enabled) {
-                                    MaterialTheme.colorScheme.onSurface
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                }
-                            )
+                            Text(option.label)
                         },
                         supportingContent = {
                             val desc = option.description?.let { text ->
@@ -4909,14 +5084,11 @@ private fun InstallerSelectionDialog(
                             if (desc != null || statusBadges.isNotEmpty() || showShizukuAction) {
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     desc?.let {
-                                        Text(
-                                            it,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                        Text(it)
                                     }
                                     statusBadges.forEach { status ->
                                         Surface(
-                                            shape = RoundedCornerShape(8.dp),
+                                            shape = MaterialTheme.shapes.small.withClassicCorner(8.dp),
                                             color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
                                             tonalElevation = 0.dp
                                         ) {
@@ -4963,12 +5135,12 @@ private fun InstallerIcon(
     Box(
         modifier = Modifier
             .size(40.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(MaterialTheme.shapes.medium.withClassicCorner(12.dp))
             .background(background)
             .border(
                 width = if (selected) 2.dp else 1.dp,
                 color = borderColor,
-                shape = RoundedCornerShape(12.dp)
+                shape = MaterialTheme.shapes.medium.withClassicCorner(12.dp)
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -5106,9 +5278,9 @@ private fun SelectionDialogOptionRow(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(MaterialTheme.shapes.large.withClassicCorner(16.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(16.dp),
         color = Color.Transparent,
         tonalElevation = 0.dp
     ) {
@@ -5147,13 +5319,13 @@ private fun SelectionDialogOptionRow(
 @StringRes
 private fun MorpheBytecodeMode.titleRes(): Int = when (this) {
     MorpheBytecodeMode.FAST -> R.string.morphe_bytecode_mode_fast
-    MorpheBytecodeMode.FULL -> R.string.morphe_bytecode_mode_full
+    MorpheBytecodeMode.SAFE -> R.string.morphe_bytecode_mode_safe
 }
 
 @StringRes
 private fun MorpheBytecodeMode.descriptionRes(): Int = when (this) {
     MorpheBytecodeMode.FAST -> R.string.morphe_bytecode_mode_fast_description
-    MorpheBytecodeMode.FULL -> R.string.morphe_bytecode_mode_full_description
+    MorpheBytecodeMode.SAFE -> R.string.morphe_bytecode_mode_safe_description
 }
 
 @StringRes
@@ -5329,7 +5501,7 @@ private fun GitHubPatDialog(
                     },
                     visualTransformation = VisualTransformation { original ->
                         val masked = original.text.let { s ->
-                            if (s.length <= 5) s else s.take(5) + "•".repeat(s.length - 5)
+                            if (s.length <= 5) s else s.take(5) + "\u2022".repeat(s.length - 5)
                         }
                         TransformedText(AnnotatedString(masked), OffsetMapping.Identity)
                     }

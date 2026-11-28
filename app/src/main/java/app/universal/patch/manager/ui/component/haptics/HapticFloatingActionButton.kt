@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.component.haptics
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.disabled
 import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material3.FloatingActionButton
@@ -33,7 +35,8 @@ fun HapticFloatingActionButton (
 
     FloatingActionButton(
         onClick = clickHandler,
-        modifier = modifier,
+        // Material FABs have no disabled state, so report it to accessibility services here.
+        modifier = if (enabled) modifier else modifier.semantics { disabled() },
         shape = shape,
         containerColor = containerColor,
         contentColor = contentColor,

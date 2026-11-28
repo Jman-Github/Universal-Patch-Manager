@@ -326,7 +326,7 @@ class BatchPatchingContractTest {
                 items = listOf(ready, installing),
                 phase = BatchPhase.RUNNING,
                 policy = BatchInstallPolicy.SAVE_ONLY,
-                activeInstallPackageName = installing.packageName
+                activeInstallKey = installing.packageName
             )
 
             assertFalse(state.canInstallBatchItem(ready))
@@ -345,7 +345,7 @@ class BatchPatchingContractTest {
             phase = BatchPhase.RUNNING,
             policy = BatchInstallPolicy.INSTALL_AFTER,
             activeIndex = 1,
-            activeInstallPackageName = installing.packageName,
+            activeInstallKey = installing.packageName,
             progress = 0.4f,
             detail = running.appName
         )
@@ -357,7 +357,7 @@ class BatchPatchingContractTest {
         assertEquals(running.appName, result.detail)
         assertEquals(BatchInstallOutcome.FAILED, result.items[0].installOutcome)
         assertFalse(result.items[0].installing)
-        assertEquals(null, result.activeInstallPackageName)
+        assertEquals(null, result.activeInstallKey)
         assertEquals(running, result.items[1])
         assertEquals(queued, result.items[2])
     }

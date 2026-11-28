@@ -29,45 +29,46 @@ internal object SplitManifestInspector {
     }
 
     fun archiveOrder(source: File, entryNames: Set<String>, checkCancelled: () -> Unit = {}): List<String> =
-        ZipFile(source).use { archive ->
-            baseFirst(entryNames.map { name ->
-                checkCancelled()
-                val entry = requireNotNull(archive.getEntry(name)) { "Missing split APK: $name" }
-                name.substringAfterLast('/') to archive.getInputStream(entry).use { input ->
-                    // Check cancellation even while nextEntry drains an earlier DEX/resource entry.
-                    val checked = object : FilterInputStream(input) {
-                        override fun read(): Int { checkCancelled(); return super.read() }
-                        override fun read(b: ByteArray, off: Int, len: Int): Int {
-                            checkCancelled()
-                            return super.read(b, off, len)
-                        }
-                    }
-                    val stream = object : ZipInputStream(checked) {
-                        private var scannedBytes = 0L
-                        override fun read(b: ByteArray, off: Int, len: Int): Int {
-                            checkCancelled()
-                            val read = super.read(b, off, len)
-                            if (read > 0) {
-                                scannedBytes += read
-                                require(scannedBytes <= 2L * 1024 * 1024 * 1024) {
-                                    "Split APK contents are too large."
-                                }
-                            }
-                            return read
-                        }
-                    }
-                    stream.use { apk ->
-                        var manifest = apk.nextEntry
-                        while (manifest != null && (manifest.isDirectory || manifest.name != MANIFEST)) {
-                            checkCancelled()
-                            manifest = apk.nextEntry
-                        }
-                        require(manifest != null) { "Missing manifest: $name" }
-                        isSplit(apk, checkCancelled)
+        ZipFile(source).use { archiveOrder(it, entryNames, checkCancelled) }
+
+    fun archiveOrder(archive: ZipFile, entryNames: Set<String>, checkCancelled: () -> Unit): List<String> =
+        baseFirst(entryNames.map { name ->
+            checkCancelled()
+            val entry = requireNotNull(archive.getEntry(name)) { "Missing split APK: $name" }
+            name.substringAfterLast('/') to archive.getInputStream(entry).use { input ->
+                // Check cancellation even while nextEntry drains an earlier DEX/resource entry.
+                val checked = object : FilterInputStream(input) {
+                    override fun read(): Int { checkCancelled(); return super.read() }
+                    override fun read(b: ByteArray, off: Int, len: Int): Int {
+                        checkCancelled()
+                        return super.read(b, off, len)
                     }
                 }
-            })
-        }
+                val stream = object : ZipInputStream(checked) {
+                    private var scannedBytes = 0L
+                    override fun read(b: ByteArray, off: Int, len: Int): Int {
+                        checkCancelled()
+                        val read = super.read(b, off, len)
+                        if (read > 0) {
+                            scannedBytes += read
+                            require(scannedBytes <= 2L * 1024 * 1024 * 1024) {
+                                "Split APK contents are too large."
+                            }
+                        }
+                        return read
+                    }
+                }
+                stream.use { apk ->
+                    var manifest = apk.nextEntry
+                    while (manifest != null && (manifest.isDirectory || manifest.name != MANIFEST)) {
+                        checkCancelled()
+                        manifest = apk.nextEntry
+                    }
+                    require(manifest != null) { "Missing manifest: $name" }
+                    isSplit(apk, checkCancelled)
+                }
+            }
+        })
 
     private fun isSplit(input: InputStream, checkCancelled: () -> Unit): Boolean {
         val bytes = ByteArrayOutputStream()

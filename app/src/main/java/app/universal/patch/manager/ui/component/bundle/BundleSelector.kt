@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -21,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import app.universal.patch.manager.domain.bundles.PatchBundleSource
 import app.universal.patch.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.universal.patch.manager.ui.component.ColumnWithScrollbar
+import app.universal.patch.manager.ui.component.ScrollableBottomSheet
 import app.universal.patch.manager.R
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,66 +36,66 @@ fun BundleSelector(sources: List<PatchBundleSource>, onFinish: (PatchBundleSourc
         return
     }
 
-    ModalBottomSheet(
-        onDismissRequest = { onFinish(null) }
-    ) {
-        ColumnWithScrollbar(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+    ScrollableBottomSheet(onDismissRequest = { onFinish(null) }) {
+        Column(Modifier.fillMaxWidth()) {
             Text(
                 text = stringResource(R.string.select),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(top = 4.dp)
+                modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 12.dp)
             )
             HorizontalDivider()
-            sources.forEachIndexed { index, source ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onFinish(source) }
-                        .padding(horizontal = 24.dp, vertical = 12.dp)
-                ) {
-                    Text(
-                        source.displayTitle,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    val hasCustomName =
-                        source.displayName?.takeUnless { name -> name.isBlank() } != null && source.displayTitle != source.name
-                    if (hasCustomName) {
+            ColumnWithScrollbar(
+                modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                sources.forEachIndexed { index, source ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onFinish(source) }
+                            .padding(horizontal = 24.dp, vertical = 12.dp)
+                    ) {
                         Text(
-                            source.name,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            source.displayTitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                    }
-                    source.version?.let { versionLabel ->
+                        val hasCustomName =
+                            source.displayName?.takeUnless { name -> name.isBlank() } != null && source.displayTitle != source.name
+                        if (hasCustomName) {
+                            Text(
+                                source.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        source.version?.let { versionLabel ->
+                            Text(
+                                versionLabel,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         Text(
-                            versionLabel,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Text(
-                        text = stringResource(
-                            when {
+                            text = stringResource(
+                                when {
 
-                                source.asRemoteOrNull != null -> R.string.bundle_type_remote
-                                else -> R.string.bundle_type_local
-                            }
-                        ),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
+                                    source.asRemoteOrNull != null -> R.string.bundle_type_remote
+                                    else -> R.string.bundle_type_local
+                                }
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                    if (index != sources.lastIndex) {
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp))
+                    }
                 }
-                if (index != sources.lastIndex) {
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp))
-                }
+                Spacer(modifier = Modifier.height(12.dp))
             }
-            Spacer(modifier = Modifier.height(12.dp))
         }
     }
 }

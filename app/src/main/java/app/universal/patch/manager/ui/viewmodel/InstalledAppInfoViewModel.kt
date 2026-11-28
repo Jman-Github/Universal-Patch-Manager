@@ -71,8 +71,11 @@ import app.universal.patch.manager.util.supportsRootMount
 import app.universal.patch.manager.util.simpleMessage
 import app.universal.patch.manager.util.tag
 import app.universal.patch.manager.util.awaitUserConfirmation
+import app.universal.patch.manager.domain.installer.root.RootRestoreDowngradeTarget
+import app.universal.patch.manager.domain.storage.CacheCleanupGuard
 import app.universal.patch.manager.util.toast
 import app.universal.patch.manager.util.toastHandle
+import app.universal.patch.manager.util.versionCodeFor
 import app.universal.patch.manager.util.withRepeatingToast
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -174,6 +177,8 @@ class InstalledAppInfoViewModel(
     var hasSavedCopy by mutableStateOf(false)
         private set
     var savedFileExtension by mutableStateOf("apk")
+        private set
+    var displayedVersionCode by mutableStateOf<Long?>(null)
         private set
     var savedApkAbiLabel by mutableStateOf<String?>(null)
         private set
@@ -385,9 +390,11 @@ class InstalledAppInfoViewModel(
         val selection = appliedPatches ?: resolveAppliedSelection(app)
         val selectionPayload = app.selectionPayload
         val targetPackage = packageNameOverride ?: resolveDevicePackageName(app)
-        val resolvedVersion = versionName
-            ?: pm.getPackageInfo(targetPackage)?.versionName
-            ?: app.version
+        val installedInfo = pm.getPackageInfo(targetPackage)
+        val resolvedVersion = versionName ?: installedInfo?.versionName ?: app.version
+        val resolvedVersionCode = app.versionCode?.takeIf { resolvedVersion == app.version }
+            ?: savedApkFile(app)?.let(pm::getPackageInfo)?.versionCodeFor(resolvedVersion)
+            ?: installedInfo?.versionCodeFor(resolvedVersion)
         val newVariantIdentity = buildSavedAppVariantIdentity(
             appVersion = resolvedVersion,
             selectionPayload = selectionPayload,
@@ -423,7 +430,9 @@ class InstalledAppInfoViewModel(
                 updateUseMount = true,
                 customInstallerPackageName = customInstallerPackageName,
                 repatchSourcePath = app.repatchSourcePath,
-                updateRepatchSource = true
+                updateRepatchSource = true,
+                versionCode = resolvedVersionCode,
+                updateVersionCode = true
             )
         }
         if (pendingHistoricalEntry != null) {
@@ -1578,7 +1587,22 @@ class InstalledAppInfoViewModel(
         }
     }
 
-    fun repairRootMount() = viewModelScope.launch {
+    private var rootRestoreDowngradeTarget by mutableStateOf<RootRestoreDowngradeTarget?>(null)
+    val rootRestoreNeedsDowngradeConfirmation: Boolean get() = rootRestoreDowngradeTarget != null
+
+    fun dismissRootRestoreDowngrade() {
+        rootRestoreDowngradeTarget = null
+    }
+
+    fun confirmRootRestoreDowngrade() {
+        val target = rootRestoreDowngradeTarget ?: return
+        dismissRootRestoreDowngrade()
+        repairRootMount(confirmation = target)
+    }
+
+    fun repairRootMount() = repairRootMount(confirmation = null)
+
+    private fun repairRootMount(confirmation: RootRestoreDowngradeTarget?) = viewModelScope.launch {
         if (isRootMountBusy) return@launch
         val app = installedApp ?: return@launch
         mountOperation = MountOperation.REPAIRING
@@ -1594,20 +1618,36 @@ class InstalledAppInfoViewModel(
             }
             try {
                 val packageName = resolveDevicePackageName(app)
-                when (val recovery = rootMountCoordinator.execute(
-                    RootMountRequest(
-                        packageName,
-                        userId = android.os.Process.myUid() / 100_000,
-                        operation = RootMountOperation.RECOVER
-                    )
-                )) {
-                    is RootMountResult.Success,
-                    is RootMountResult.RecoveredToPreviousMount,
-                    is RootMountResult.RecoveredToStock -> Unit
+                val userId = android.os.Process.myUid() / 100_000
+                val recovery = rootMountCoordinator.execute(
+                    RootMountRequest(packageName, userId, RootMountOperation.RECOVER)
+                )
+                when (recovery) {
+                    is RootMountResult.RecoveredToPreviousMount -> {
+                        isMounted = true
+                        context.toast(context.getString(R.string.root_mount_repair_success))
+                        return@launch
+                    }
+                    is RootMountResult.Success, is RootMountResult.RecoveredToStock -> Unit
                     else -> recovery.requireSuccess()
                 }
-                check(mountSavedPayload(packageName, app)) {
-                    "No compatible saved payload is available"
+                val restored = CacheCleanupGuard.withCacheInUse {
+                    rootMountCoordinator.restoreCommittedPayload(
+                        packageName,
+                        userId,
+                        context.cacheDir,
+                        confirmation
+                    )
+                }
+                when (val result = restored?.result) {
+                    is RootMountResult.RequiresDowngradeConfirmation -> {
+                        rootRestoreDowngradeTarget = requireNotNull(restored.downgradeTarget)
+                        return@launch
+                    }
+                    null -> check(mountSavedPayload(packageName, app)) {
+                        "No compatible saved payload is available"
+                    }
+                    else -> result.requireSuccess()
                 }
                 isMounted = rootInstaller.isAppMounted(packageName)
                 check(isMounted) { "Root mount could not be verified" }
@@ -1986,6 +2026,22 @@ class InstalledAppInfoViewModel(
         }
         val installedInfo = withContext(Dispatchers.IO) {
             pm.getPackageInfo(devicePackageName)
+        }
+        displayedVersionCode = withContext(Dispatchers.IO) {
+            app.versionCode
+                ?: installedAppRepository.get(app.currentPackageName)
+                    ?.takeIf { it.version == app.version }?.versionCode
+                ?: savedInfo?.versionCodeFor(app.version)
+                ?: installedInfo?.versionCodeFor(app.version)
+                ?: app.repatchSourcePath?.let(::File)?.takeIf(File::isFile)
+                    ?.let(pm::getPackageInfo)
+                    ?.takeIf { info ->
+                        info.packageName == app.originalPackageName ||
+                            info.packageName == devicePackageName
+                    }?.versionCodeFor(app.version)
+        }
+        displayedVersionCode?.let { code ->
+            installedAppRepository.rememberVersionCode(app, code)
         }
         customInstallerLabel = if (
             app.installType == InstallType.CUSTOM && installedInfo != null

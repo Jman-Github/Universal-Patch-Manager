@@ -36,10 +36,6 @@ object MorpheRuntimeBridge {
     private var loadMetadataMethod: Method? = null
     @Volatile
     private var loadMetadataForBundleMethod: Method? = null
-    @Volatile
-    private var runPatcherMethod: Method? = null
-    @Volatile
-    private var callbackClass: Class<*>? = null
 
     private val lock = Any()
 
@@ -78,7 +74,9 @@ object MorpheRuntimeBridge {
         isCancelled: () -> Boolean = { false }
     ): String? {
         val entry = ensureEntryClass()
-        val callback = ensureCallbackClass()
+        // Keep all reflected types on the loader selected for this invocation.
+        val loader = requireNotNull(entry.classLoader)
+        val callback = loader.loadClass(CALLBACK_CLASS_NAME)
         val proxy = Proxy.newProxyInstance(
             entry.classLoader,
             arrayOf(callback)
@@ -101,7 +99,7 @@ object MorpheRuntimeBridge {
                 else -> null
             }
         }
-        val method = ensureRunPatcherMethod()
+        val method = entry.getMethod(RUN_PATCHER_METHOD, Map::class.java, callback)
         val result = method.invoke(null, params, proxy) as? String
         if (result == CANCELLATION_SENTINEL) {
             throw CancellationException("Patching cancelled")
@@ -110,44 +108,27 @@ object MorpheRuntimeBridge {
     }
 
     private fun ensureLoadMetadataMethod(): Method = synchronized(lock) {
+        val entry = ensureEntryClass()
         loadMetadataMethod ?: run {
-            val method = ensureEntryClass().getMethod(LOAD_METADATA_METHOD, List::class.java)
+            val method = entry.getMethod(LOAD_METADATA_METHOD, List::class.java)
             loadMetadataMethod = method
             method
         }
     }
 
     private fun ensureLoadMetadataForBundleMethod(): Method = synchronized(lock) {
+        val entry = ensureEntryClass()
         loadMetadataForBundleMethod ?: run {
-            val method = ensureEntryClass().getMethod(LOAD_METADATA_FOR_BUNDLE_METHOD, String::class.java)
+            val method = entry.getMethod(LOAD_METADATA_FOR_BUNDLE_METHOD, String::class.java)
             loadMetadataForBundleMethod = method
             method
         }
     }
 
-    private fun ensureRunPatcherMethod(): Method = synchronized(lock) {
-        runPatcherMethod ?: run {
-            val method = ensureEntryClass().getMethod(
-                RUN_PATCHER_METHOD,
-                Map::class.java,
-                ensureCallbackClass()
-            )
-            runPatcherMethod = method
-            method
-        }
-    }
-
-    private fun ensureCallbackClass(): Class<*> = synchronized(lock) {
-        callbackClass ?: run {
-            val loaded = ensureClassLoader().loadClass(CALLBACK_CLASS_NAME)
-            callbackClass = loaded
-            loaded
-        }
-    }
-
     private fun ensureEntryClass(): Class<*> = synchronized(lock) {
+        // Refresh cached classes and methods when the selected plugin changes or loses trust.
+        val loader = ensureClassLoader()
         entryClass ?: run {
-            val loader = ensureClassLoader()
             val loaded = loader.loadClass(ENTRY_CLASS_NAME)
             entryClass = loaded
             loaded
@@ -175,8 +156,6 @@ object MorpheRuntimeBridge {
             entryClass = null
             loadMetadataMethod = null
             loadMetadataForBundleMethod = null
-            runPatcherMethod = null
-            callbackClass = null
             return loader
         }
     }

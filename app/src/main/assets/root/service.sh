@@ -947,6 +947,52 @@ fi
 expected_path_count=1
 for entry in ${URV_STOCK_SPLITS:-}; do expected_path_count=$((expected_path_count + 1)); done
 
+# Discard binds left by the two recognized ReVanced layouts, including private
+# namespaces of processes started before the UPM boot mount. Leave mixed or
+# unidentified stacks for the normal conflict checks.
+clear_competing_mounts() (
+  legacy="/adb/revanced/$URV_PACKAGE/$URV_PACKAGE.apk"
+  other="/adb/modules/$URV_PACKAGE-ReVanced/$URV_PACKAGE.apk"
+  ownership_check='
+    $5 == target {
+      total++
+      root=$4
+      sub(/\\040\(deleted\)$/, "", root)
+      if (root == legacy || root == other || root == "/data" legacy || root == "/data" other) found++
+    }
+    END { exit !(found && found == total) }
+  '
+  for info in /proc/[0-9]*/mountinfo; do
+    [ -r "$info" ] || continue
+    awk -v target="$URV_STOCK_PATH" -v legacy="$legacy" -v other="$other" \
+      "$ownership_check" "$info" 2>/dev/null || continue
+    pid="${info#/proc/}"
+    pid="${pid%/mountinfo}"
+    # The first check only finds candidates. Confirm ownership in the namespace
+    # where the unmount actually runs.
+    detached="$(nsenter --mount="/proc/$pid/ns/mnt" -- sh -c '
+      target="$1"
+      legacy="$2"
+      other="$3"
+      ownership_check="$4"
+      competing_only() {
+        awk -v target="$target" -v legacy="$legacy" -v other="$other" \
+          "$ownership_check" /proc/self/mountinfo
+      }
+      count=0
+      while [ "$count" -lt 8 ] && competing_only; do
+        umount "$target" || { competing_only && umount -l "$target"; } || break
+        count=$((count + 1))
+      done
+      printf "%s" "$count"
+    ' sh "$URV_STOCK_PATH" "$legacy" "$other" "$ownership_check" 2>/dev/null)" || continue
+    [ "$detached" -eq 0 ] || log_status "Removed $detached competing ReVanced APK bind(s) from pid $pid"
+  done
+)
+if [ "$current_path" = "$URV_STOCK_PATH" ]; then
+  clear_competing_mounts
+fi
+
 mount_count="$(awk -v target="$URV_STOCK_PATH" '$5 == target { count++ } END { print count+0 }' /proc/self/mountinfo)"
 mounted_hash=""
 [ "$mount_count" -gt 0 ] && mounted_hash="$(sha256sum "$URV_STOCK_PATH" 2>/dev/null | awk '{print $1}')"

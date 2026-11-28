@@ -22,6 +22,9 @@ data class PatchProfilePayload(
     )
 
     @Serializable
+    data class PatchDisplayInfo(val label: String, val description: String? = null)
+
+    @Serializable
     data class Bundle(
         val bundleUid: Int,
         val patches: List<String>,
@@ -30,6 +33,7 @@ data class PatchProfilePayload(
         val sourceEndpoint: String? = null,
         val sourceName: String? = null,
         val version: String? = null,
-        val optionDisplayInfo: Map<String, Map<String, OptionDisplayInfo>>? = null
+        val optionDisplayInfo: Map<String, Map<String, OptionDisplayInfo>>? = null,
+        val patchDisplayInfo: Map<String, PatchDisplayInfo>? = null
     )
 }

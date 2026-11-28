@@ -1,20 +1,15 @@
 package app.universal.patch.manager.ui.component.bundle
 
-import androidx.compose.foundation.horizontalScroll
+import app.universal.patch.manager.ui.component.AppTopBar
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
-import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import app.universal.patch.manager.util.consumeHorizontalScroll
-import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,10 +20,8 @@ fun BundleTopBar(
     scrollBehavior: TopAppBarScrollBehavior? = null,
     backIcon: @Composable () -> Unit,
 ) {
-    val containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp)
-
     val scrollState = rememberScrollState()
-    TopAppBar(
+    AppTopBar(
         title = {
             Text(
                 text = title,
@@ -39,16 +32,9 @@ fun BundleTopBar(
             )
         },
         scrollBehavior = scrollBehavior,
-        navigationIcon = {
-            if (onBackClick != null) {
-                IconButton(onClick = onBackClick) {
-                    backIcon()
-                }
-            }
-        },
+        onBackClick = onBackClick,
+        backIcon = backIcon,
         actions = actions,
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = containerColor
-        )
+        applyContainerColor = true
     )
 }

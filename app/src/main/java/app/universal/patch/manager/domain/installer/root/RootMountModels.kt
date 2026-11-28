@@ -14,7 +14,8 @@ data class RootMountRequest(
     val expectedStockVersionCode: Long? = null,
     val label: String = packageName,
     val downgradeFallbackConfirmed: Boolean = false,
-    val removeModuleAfterUnmount: Boolean = false
+    val removeModuleAfterUnmount: Boolean = false,
+    val downgradeFallbackStock: RootPackageState? = null
 ) {
     init {
         require(PACKAGE_NAME.matches(packageName)) { "Invalid package name" }
@@ -161,7 +162,8 @@ data class RootMountJournal(
     val completionStateRecorded: Boolean? = null,
     val completionCommittedState: RootCommittedState? = null,
     val diagnosticId: String? = null,
-    val status: String? = null
+    val status: String? = null,
+    val finalizeMountOnCompletion: Boolean = false
 )
 
 @Serializable

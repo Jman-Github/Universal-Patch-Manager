@@ -36,6 +36,37 @@ class RepositoryBundleSettingsTest {
         assertTrue(disabled.useLatest)
     }
 
+    @Test fun latestAndPinnedBackupPreservesTheOverriddenPrereleaseChoice() {
+        val original = RepositoryBundleSettings(usePrereleases = true, useLatest = true,
+            useSpecificVersion = true, selectedVersion = asset)
+        assertEquals(original, RepositoryBundleSettings().withImportedSelection(true, true, true, asset))
+        val unpinned = original.withVersionSelection(false)
+        assertTrue(unpinned.useLatest)
+        assertTrue(unpinned.usePrereleases)
+        assertEquals(RepositoryBundleReleaseChannel.PRERELEASE,
+            unpinned.copy(useLatest = false).releaseChannel)
+    }
+
+    @Test fun changingOnlyLatestInAnImportKeepsThePrereleaseChoice() {
+        val original = RepositoryBundleSettings(usePrereleases = true)
+        val latest = original.withImportedSelection(null, true, null, null)
+        assertTrue(latest.usePrereleases)
+        assertTrue(latest.useLatest)
+        assertEquals(original, latest.withImportedSelection(null, false, null, null))
+    }
+
+    @Test fun overriddenPrereleaseChoiceSurvivesDiskRoundTrip() {
+        val dir = Files.createTempDirectory("bundle-channels-test").toFile()
+        try {
+            val original = RepositoryBundleSettings(usePrereleases = true, useLatest = true,
+                useSpecificVersion = true, selectedVersion = asset)
+            RepositoryBundleSettingsStore.write(dir, original)
+            assertEquals(original, RepositoryBundleSettingsStore.read(dir))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
     @Test fun oldSettingsRemainCompatible() {
         val settings = Json.decodeFromString<RepositoryBundleSettings>(
             """{"usePrereleases":true,"useLatest":false}"""

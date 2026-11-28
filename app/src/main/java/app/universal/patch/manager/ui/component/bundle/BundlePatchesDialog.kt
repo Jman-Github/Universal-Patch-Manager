@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.component.bundle
 
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.IconButton
 import app.universal.patch.manager.ui.component.persistentControls
 import android.net.Uri
 import android.os.Build
@@ -164,7 +166,8 @@ fun PatchItem(
     showCompatibilityMeta: Boolean = true,
     showOptionValues: Boolean = false,
     optionValues: Map<String, Any?>? = null,
-    appMetadata: Map<String, PackageNode> = emptyMap()
+    appMetadata: Map<String, PackageNode> = emptyMap(),
+    allowAppMetadataLookup: Boolean = true
 ) {
     val context = LocalContext.current
     val anyPackageLabel = stringResource(R.string.patches_view_any_package)
@@ -174,7 +177,7 @@ fun PatchItem(
             .fillMaxWidth()
             .then(
                 if (patch.options.isNullOrEmpty()) Modifier else Modifier
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(MaterialTheme.shapes.small.withClassicCorner(8.dp))
                     .clickable(onClick = onExpandOptions),
             )
     ) {
@@ -226,6 +229,19 @@ fun PatchItem(
                             val versions = compatiblePackage.versions.orEmpty().reversed()
                             val packageIsAny = isAnyPackageTag(packageName, anyPackageLabel)
 
+                            if (allowAppMetadataLookup && !packageIsAny && packageName !in appMetadata) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    app.universal.patch.manager.ui.component.AppIcon(
+                                        packageInfo = null, contentDescription = null,
+                                        packageName = packageName, modifier = Modifier.size(28.dp)
+                                    )
+                                    app.universal.patch.manager.ui.component.AppLabel(
+                                        packageInfo = null, packageName = packageName,
+                                        defaultText = packageName, style = MaterialTheme.typography.labelLarge
+                                    )
+                                }
+                            }
                             appMetadata[packageName]?.let { application ->
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically) {
@@ -345,7 +361,7 @@ fun PatchItem(
                                     disabledContainerColor = Color.Transparent,
                                     disabledContentColor = MaterialTheme.colorScheme.onSurface
                                 ), shape = when {
-                                    options.size == 1 -> RoundedCornerShape(8.dp)
+                                    options.size == 1 -> MaterialTheme.shapes.small.withClassicCorner(8.dp)
                                     i == 0 -> RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
                                     i == options.lastIndex -> RoundedCornerShape(
                                         bottomStart = 8.dp,

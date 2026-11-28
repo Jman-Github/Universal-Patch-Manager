@@ -217,6 +217,7 @@ fun PatcherSessionInfo.updatedFromLog(message: String): PatcherSessionInfo {
                 "in-process" -> false
                 else -> when {
                     message.removePrefix("Runtime mode:").trim().startsWith("bound ") -> true
+                    message.removePrefix("Runtime mode:").trim().startsWith("standalone ART") -> true
                     message.removePrefix("Runtime mode:").trim().startsWith("in-app ") -> false
                     else -> runtimeProcess
                 }

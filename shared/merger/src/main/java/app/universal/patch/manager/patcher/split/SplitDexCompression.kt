@@ -2,7 +2,7 @@ package app.universal.patch.manager.patcher.split
 
 import com.reandroid.apk.ApkModule
 import com.reandroid.apk.DexFileInputSource
-import com.reandroid.arsc.value.ValueType
+import com.reandroid.arsc.value.DataType
 import java.util.zip.ZipEntry
 
 object SplitDexCompression {
@@ -18,7 +18,7 @@ object SplitDexCompression {
             it.nameId == USE_EMBEDDED_DEX_ATTR || it.name == "useEmbeddedDex"
         }.asSequence().any {
             // An unresolved reference could enable direct loading; keep its DEX stored.
-            it.valueType != ValueType.BOOLEAN || it.valueAsBoolean
+            it.dataType != DataType.BOOLEAN || it.dataAsBoolean
         }
         val uncompressed = module.uncompressedFiles
         for (source in module.zipEntryMap.toArray()) {

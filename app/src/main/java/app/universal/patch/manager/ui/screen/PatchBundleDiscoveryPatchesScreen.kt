@@ -1,5 +1,8 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import app.universal.patch.manager.ui.component.persistentControls
 import android.net.Uri
 import android.os.Build
@@ -22,13 +25,10 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import app.universal.patch.manager.ui.component.bundle.CatalogIcon
 import androidx.compose.runtime.LaunchedEffect
@@ -83,7 +83,7 @@ fun PatchBundleDiscoveryPatchesScreen(
     historicalGeneration: String? = null,
     viewModel: BundleDiscoveryViewModel = koinViewModel(),
 ) {
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
     val prefs: PreferencesManager = koinInject()
     val patchBundleRepository: PatchBundleRepository = koinInject()
     val searchEngineHost by prefs.searchEngineHost.getAsState()
@@ -257,7 +257,7 @@ fun PatchBundleDiscoveryPatchesScreen(
                                     R.string.patch_bundle_discovery_patches_empty
                                 )
                             )
-                            androidx.compose.material3.TextButton(onClick = {
+                            TextButton(onClick = {
                                 viewModel.loadPatches(bundle)
                             }) { Text(stringResource(R.string.bundle_changelog_retry)) }
                         }
@@ -313,7 +313,8 @@ fun PatchBundleDiscoveryPatchesScreen(
                             expandOptions,
                             onExpandOptions = { expandOptions = !expandOptions },
                             searchEngineHost = searchEngineHost,
-                            appMetadata = viewModel.appMetadata
+                            appMetadata = viewModel.appMetadata,
+                            allowAppMetadataLookup = false
                         )
                     }
                 }

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keep the mark compact inside the framework's large notification artwork slot. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/ic_notification_status"
+    android:insetLeft="25%"
+    android:insetTop="25%"
+    android:insetRight="25%"
+    android:insetBottom="25%" />

@@ -1,5 +1,12 @@
 package app.universal.patch.manager.ui.component.patches
 
+import app.universal.patch.manager.util.withHapticFeedback
+import android.view.HapticFeedbackConstants
+import app.universal.patch.manager.ui.component.design.ListItem
+import app.universal.patch.manager.ui.component.design.ListItemRadioButton
+import app.universal.patch.manager.ui.component.design.CircularProgressIndicator
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import android.app.Activity
 import android.app.Application
 import android.content.Context
@@ -13,11 +20,8 @@ import android.webkit.MimeTypeMap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,20 +53,17 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisallowComposableCalls
 import androidx.compose.runtime.DisposableEffect
@@ -105,7 +106,6 @@ import app.universal.patch.manager.ui.component.RememberedOpenDocument
 import app.universal.patch.manager.ui.component.RememberedOpenDocumentTree
 import app.universal.patch.manager.ui.component.toPickerDirectoryUri
 import app.universal.patch.manager.ui.component.haptics.HapticExtendedFloatingActionButton
-import app.universal.patch.manager.ui.component.haptics.HapticRadioButton
 import app.universal.patch.manager.ui.component.haptics.HapticSwitch
 import app.universal.patch.manager.util.IMAGE_MIMETYPE
 import app.universal.patch.manager.util.WILDCARD_MIMETYPE
@@ -274,7 +274,7 @@ fun <T : Any> OptionItem(
 
     WithOptionEditor(editor, option, value, setValue, selectionWarningEnabled) {
         ListItem(
-            modifier = Modifier.clickable(onClick = ::clickAction),
+            onClick = ::clickAction,
             headlineContent = { Text(option.title) },
             supportingContent = {
                 Column {
@@ -1384,14 +1384,12 @@ private class PresetOptionEditor<T : Any>(private val innerEditor: OptionEditor<
                         @Composable
                         fun Item(title: String, value: Any?, presetKey: String?) {
                             ListItem(
-                                modifier = Modifier.clickable { selectedPreset = presetKey },
+                                selected = selectedPreset == presetKey,
+                                onClick = { selectedPreset = presetKey }.withHapticFeedback(HapticFeedbackConstants.CLOCK_TICK),
                                 headlineContent = { Text(title) },
                                 supportingContent = value?.toString()?.let { { Text(it) } },
                                 leadingContent = {
-                                    HapticRadioButton(
-                                        selected = selectedPreset == presetKey,
-                                        onClick = { selectedPreset = presetKey }
-                                    )
+                                    ListItemRadioButton(selected = selectedPreset == presetKey)
                                 },
                                 trailingContent = if (isColorOption && value is String) {
                                     { ColorOptionSwatch(value) }
@@ -1609,58 +1607,49 @@ private class ListOptionEditor<T : Serializable>(private val elementEditor: Opti
                                 },
                                 selectionWarningEnabled = scope.selectionWarningEnabled
                             ) {
-                                ListItem(
-                                    modifier = Modifier.combinedClickable(
-                                        indication = LocalIndication.current,
+                                val headline: @Composable () -> Unit = {
+                                    val value = item.value
+                                    if (value == null) {
+                                        Text(stringResource(R.string.empty), fontStyle = FontStyle.Italic)
+                                    } else {
+                                        Text(value.toString())
+                                    }
+                                }
+                                val dragHandle: @Composable () -> Unit = {
+                                    IconButton(
+                                        onClick = {},
                                         interactionSource = interactionSource,
+                                        modifier = with(reorderableScope) { Modifier.longPressDraggableHandle() }
+                                    ) {
+                                        Icon(Icons.Filled.DragHandle, stringResource(R.string.drag_handle))
+                                    }
+                                }
+                                if (deleteMode) {
+                                    val checked = item.key in deletionTargets
+                                    ListItem(
+                                        checked = checked,
+                                        onCheckedChange = { select ->
+                                            if (select) deletionTargets.add(item.key) else deletionTargets.remove(item.key)
+                                            deleteMode = deletionTargets.isNotEmpty()
+                                        },
+                                        headlineContent = headline,
+                                        leadingContent = dragHandle,
+                                        trailingContent = { Checkbox(checked = checked, onCheckedChange = null) }
+                                    )
+                                } else {
+                                    ListItem(
+                                        onClick = ::clickAction,
                                         onLongClickLabel = stringResource(R.string.select),
                                         onLongClick = {
-                                            if (!deleteMode) {
-                                                deletionTargets.add(item.key)
-                                                deleteMode = true
-                                            }
+                                            deletionTargets.add(item.key)
+                                            deleteMode = true
                                         },
-                                        onClick = {
-                                            if (!deleteMode) {
-                                                clickAction()
-                                                return@combinedClickable
-                                            }
-
-                                            if (item.key in deletionTargets) {
-                                                deletionTargets.remove(
-                                                    item.key
-                                                )
-                                                deleteMode = deletionTargets.isNotEmpty()
-                                            } else deletionTargets.add(item.key)
-                                        },
-                                    ),
-                                    tonalElevation = if (deleteMode && item.key in deletionTargets) 8.dp else 0.dp,
-                                    leadingContent = {
-                                        IconButton(
-                                            onClick = {},
-                                            interactionSource = interactionSource,
-                                            modifier = with(reorderableScope) {
-                                                Modifier.longPressDraggableHandle()
-                                            }
-                                        ) {
-                                            Icon(
-                                                Icons.Filled.DragHandle,
-                                                stringResource(R.string.drag_handle)
-                                            )
-                                        }
-                                    },
-                                    headlineContent = {
-                                        if (item.value == null) return@ListItem Text(
-                                            stringResource(R.string.empty),
-                                            fontStyle = FontStyle.Italic
-                                        )
-
-                                        Text(item.value.toString())
-                                    },
-                                    trailingContent = {
-                                        ListItemTrailingContent()
-                                    }
-                                )
+                                        interactionSource = interactionSource,
+                                        headlineContent = headline,
+                                        leadingContent = dragHandle,
+                                        trailingContent = { ListItemTrailingContent() }
+                                    )
+                                }
                             }
                         }
                     }

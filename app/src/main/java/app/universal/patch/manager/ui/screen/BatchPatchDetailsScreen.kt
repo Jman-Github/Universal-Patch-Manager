@@ -5,6 +5,9 @@
 
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
+import app.universal.patch.manager.ui.component.design.IconButton
 import android.content.Context
 import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
@@ -16,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Cancel
@@ -27,8 +29,6 @@ import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,7 +39,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -60,6 +60,7 @@ import app.universal.patch.manager.ui.component.haptics.HapticExtendedFloatingAc
 import app.universal.patch.manager.ui.component.patcher.PatcherInformation
 import app.universal.patch.manager.ui.component.patcher.PatcherInformationCard
 import app.universal.patch.manager.ui.component.patcher.PatcherResourceUsageCards
+import app.universal.patch.manager.ui.component.patcher.ResourceUsageProgressLayout
 import app.universal.patch.manager.ui.component.patcher.rememberResourceGraphState
 import app.universal.patch.manager.ui.component.patcher.Steps
 import androidx.compose.runtime.toMutableStateList
@@ -94,7 +95,7 @@ import org.koin.compose.koinInject
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BatchPatchDetailsScreen(
-    packageName: String,
+    itemKey: String,
     onBackClick: () -> Unit,
     viewModel: BatchPatcherViewModel = koinViewModel()
 ) {
@@ -102,6 +103,7 @@ fun BatchPatchDetailsScreen(
     val prefs: PreferencesManager = koinInject()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val showPatcherMemoryUsageGraph by prefs.showPatcherMemoryUsageGraph.getAsState()
+    val pinResourceGraphs by prefs.pinPatcherResourceGraphs.getAsState()
     val compactResourceGraphs by prefs.compactPatcherResourceGraphs.getAsState()
     val showGraphExtraInfo by prefs.showPatcherResourceGraphExtraInfo.getAsState()
     val showCompactGraphExtraInfo by prefs.showCompactPatcherResourceGraphExtraInfo.getAsState()
@@ -113,9 +115,9 @@ fun BatchPatchDetailsScreen(
     val coroutineScope = rememberCoroutineScope()
     val useExclusiveAutoExpand =
         autoExpandRunningSteps && autoExpandRunningStepsExclusive
-    val item = state?.items?.firstOrNull { it.packageName == packageName }
+    val item = state?.items?.firstOrNull { it.key == itemKey }
     val resourceGraphState = rememberResourceGraphState(
-        state?.requestId, packageName, item?.patcherSessionInfo?.startedAtElapsedRealtimeMs
+        state?.requestId, itemKey, item?.patcherSessionInfo?.startedAtElapsedRealtimeMs
     )
     val lifecycleOwner = LocalLifecycleOwner.current
     val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
@@ -135,8 +137,8 @@ fun BatchPatchDetailsScreen(
     val canUseLogs = item?.let {
         it.state == BatchItemState.SUCCEEDED || it.state == BatchItemState.FAILED
     } == true
-    val activeInstallPackage = state?.activeInstallPackageName
-    val isActiveInstall = item?.installing == true && item.packageName == activeInstallPackage
+    val activeInstallKey = state?.activeInstallKey
+    val isActiveInstall = item?.installing == true && item.key == activeInstallKey
     val canInstallOrOpen = item?.let {
         !it.saving && (
             isActiveInstall ||
@@ -221,7 +223,7 @@ fun BatchPatchDetailsScreen(
                                 },
                                 onClick = resultActions.installOrOpen,
                                 enabled = installActionEnabled,
-                                shape = RoundedCornerShape(16.dp)
+                                shape = MaterialTheme.shapes.large.withClassicCorner(16.dp)
                             )
                         }
                     }
@@ -308,135 +310,144 @@ fun BatchPatchDetailsScreen(
                     progressUi?.progress ?: if (item.state == BatchItemState.SUCCEEDED) 1f else 0f
                 },
                 modifier = Modifier.fillMaxWidth(),
-                drawStopIndicator = {}
+                showStopIndicator = false
             )
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(16.dp)
-            ) {
-                item(key = "app-info") {
-                    Surface(
-                        shape = MaterialTheme.shapes.large,
-                        color = MaterialTheme.colorScheme.surfaceContainerLow,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(item.appName, style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                item.packageName,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            item.message?.let {
-                                Text(it, color = MaterialTheme.colorScheme.error)
-                            }
-                        }
-                    }
-                }
-
-                if (
-                    showPatcherMemoryUsageGraph &&
-                    item.memoryUsageSamples.isNotEmpty()
+            val pinGraphs = pinResourceGraphs && showPatcherMemoryUsageGraph && item.memoryUsageSamples.isNotEmpty()
+            val resourceGraphs: @Composable () -> Unit = {
+                PatcherResourceUsageCards(
+                    compact = compactResourceGraphs,
+                    showExtraInfo = if (compactResourceGraphs) showCompactGraphExtraInfo else showGraphExtraInfo,
+                    samples = item.memoryUsageSamples,
+                    isActive = item.state == BatchItemState.RUNNING,
+                    graphState = resourceGraphState
+                )
+            }
+            ResourceUsageProgressLayout(
+                pinGraphs = pinGraphs,
+                graphContent = resourceGraphs
+            ) { progressModifier ->
+                LazyColumn(
+                    modifier = progressModifier,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(16.dp)
                 ) {
-                    item(key = "memory-usage") {
-                        PatcherResourceUsageCards(
-                            compact = compactResourceGraphs,
-                            showExtraInfo = if (compactResourceGraphs) showCompactGraphExtraInfo else showGraphExtraInfo,
-                            samples = item.memoryUsageSamples,
-                            isActive = item.state == BatchItemState.RUNNING,
-                            graphState = resourceGraphState
-                        )
-                    }
-                }
-
-                item(key = "patcher-information") {
-                    val parsedSessionInfo = remember(item.logLines) {
-                        parsePatcherSessionInfo(
-                            item.logLines.map { line -> line.substringAfter("]: ", line) }
-                        )
-                    }
-                    val sessionInfo = item.patcherSessionInfo.withFallback(parsedSessionInfo)
-                    val activeBundleIds = remember(item.selection) {
-                        item.selection.filterValues { patches -> patches.isNotEmpty() }.keys
-                    }
-                    val patchBundleLabels = remember(item.bundles, activeBundleIds) {
-                        item.bundles
-                            .filter { bundle -> bundle.uid in activeBundleIds }
-                            .map { bundle ->
-                                bundle.version
-                                    ?.takeIf(String::isNotBlank)
-                                    ?.let { version -> "${bundle.name} $version" }
-                                    ?: bundle.name
+                    item(key = "app-info") {
+                        Surface(
+                            shape = MaterialTheme.shapes.large,
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(item.appName, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    item.packageName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                item.message?.let {
+                                    Text(it, color = MaterialTheme.colorScheme.error)
+                                }
                             }
+                        }
                     }
-                    val localInput = item.input as? SelectedApp.Local
-                    val fallbackSplitApk by produceState<Boolean?>(
-                        initialValue = null,
-                        key1 = localInput?.file
+
+                    if (
+                        !pinGraphs && showPatcherMemoryUsageGraph &&
+                        item.memoryUsageSamples.isNotEmpty()
                     ) {
-                        value = localInput?.file?.let { file ->
-                            withContext(Dispatchers.IO) {
-                                SplitApkPreparer.isSplitArchive(file)
-                            }
+                        item(key = "memory-usage") {
+                            resourceGraphs()
                         }
                     }
-                    PatcherInformationCard(
-                        information = PatcherInformation(
-                            appVersion = item.version,
-                            appVersionCode = item.versionCode,
-                            patchCount = item.patchCount,
-                            patchBundles = patchBundleLabels,
-                            fallbackApkSizeBytes = localInput?.file
-                                ?.takeIf { it.isFile }
-                                ?.length(),
-                            fallbackSplitApk = fallbackSplitApk,
-                            fallbackPatcherEngine = item.patcherEngine,
-                            session = sessionInfo
-                        ),
-                        expanded = patcherInformationExpanded,
-                        onExpandedChange = { expanded ->
-                            coroutineScope.launch {
-                                prefs.patcherInformationExpanded.update(expanded)
+
+                    item(key = "patcher-information") {
+                        val parsedSessionInfo = remember(item.logLines) {
+                            parsePatcherSessionInfo(
+                                item.logLines.map { line -> line.substringAfter("]: ", line) }
+                            )
+                        }
+                        val sessionInfo = item.patcherSessionInfo.withFallback(parsedSessionInfo)
+                        val activeBundleIds = remember(item.selection) {
+                            item.selection.filterValues { patches -> patches.isNotEmpty() }.keys
+                        }
+                        val patchBundleLabels = remember(item.bundles, activeBundleIds) {
+                            item.bundles
+                                .filter { bundle -> bundle.uid in activeBundleIds }
+                                .map { bundle ->
+                                    bundle.version
+                                        ?.takeIf(String::isNotBlank)
+                                        ?.let { version -> "${bundle.name} $version" }
+                                        ?: bundle.name
+                                }
+                        }
+                        val localInput = item.input as? SelectedApp.Local
+                        val fallbackSplitApk by produceState<Boolean?>(
+                            initialValue = null,
+                            key1 = localInput?.file
+                        ) {
+                            value = localInput?.file?.let { file ->
+                                withContext(Dispatchers.IO) {
+                                    SplitApkPreparer.isSplitArchive(file)
+                                }
                             }
                         }
-                    )
-                }
-
-                items(
-                    items = groupedSteps.toList(),
-                    key = { (category, _) -> category }
-                ) { (category, steps) ->
-                    Steps(
-                        category = category,
-                        steps = steps,
-                        subStepsById = progressUi?.subStepsById.orEmpty(),
-                        isExpanded = expandedCategories.contains(category),
-                        autoExpandRunning = autoExpandRunningSteps,
-                        autoExpandRunningMainOnly = useExclusiveAutoExpand,
-                        continueOnPatchError = continueOnPatchError,
-                        onExpand = {
-                            if (useExclusiveAutoExpand) {
-                                expandedCategories.clear()
+                        PatcherInformationCard(
+                            information = PatcherInformation(
+                                appVersion = item.version,
+                                appVersionCode = item.versionCode,
+                                patchCount = item.patchCount,
+                                patchBundles = patchBundleLabels,
+                                fallbackApkSizeBytes = localInput?.file
+                                    ?.takeIf { it.isFile }
+                                    ?.length(),
+                                fallbackSplitApk = fallbackSplitApk,
+                                fallbackPatcherEngine = item.patcherEngine,
+                                session = sessionInfo
+                            ),
+                            expanded = patcherInformationExpanded,
+                            onExpandedChange = { expanded ->
+                                coroutineScope.launch {
+                                    prefs.patcherInformationExpanded.update(expanded)
+                                }
                             }
-                            expandedCategories.add(category)
-                        },
-                        onClick = {
-                            if (expandedCategories.contains(category)) {
-                                expandedCategories.remove(category)
-                            } else {
+                        )
+                    }
+
+                    items(
+                        items = groupedSteps.toList(),
+                        key = { (category, _) -> category }
+                    ) { (category, steps) ->
+                        Steps(
+                            category = category,
+                            steps = steps,
+                            subStepsById = progressUi?.subStepsById.orEmpty(),
+                            isExpanded = expandedCategories.contains(category),
+                            autoExpandRunning = autoExpandRunningSteps,
+                            autoExpandRunningMainOnly = useExclusiveAutoExpand,
+                            continueOnPatchError = continueOnPatchError,
+                            onExpand = {
+                                if (useExclusiveAutoExpand) {
+                                    expandedCategories.clear()
+                                }
                                 expandedCategories.add(category)
-                            }
-                        },
-                        autoCollapseCompleted = autoCollapsePatcherSteps
-                    )
-                }
+                            },
+                            onClick = {
+                                if (expandedCategories.contains(category)) {
+                                    expandedCategories.remove(category)
+                                } else {
+                                    expandedCategories.add(category)
+                                }
+                            },
+                            autoCollapseCompleted = autoCollapsePatcherSteps
+                        )
+                    }
 
-                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
-                    item(key = "legacy-memory-warning") {
+                    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
+                        item(key = "legacy-memory-warning") {
+                        }
                     }
                 }
             }

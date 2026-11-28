@@ -1,8 +1,11 @@
 package app.universal.patch.manager.ui.theme
 
+import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.shape.CornerBasedShape
 import android.app.Activity
 import android.graphics.Color as AndroidColor
 import android.os.Build
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
@@ -18,10 +21,13 @@ import androidx.compose.foundation.layout.windowInsetsStartWidth
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -29,6 +35,53 @@ import androidx.core.graphics.ColorUtils
 import androidx.core.view.WindowCompat
 import app.universal.patch.manager.R
 import kotlinx.serialization.Serializable
+
+internal val LocalExpressiveDesign = staticCompositionLocalOf { false }
+
+@Composable
+internal fun CornerBasedShape.withClassicCorner(radius: Dp): CornerBasedShape =
+    if (LocalExpressiveDesign.current) this else RoundedCornerShape(radius)
+
+/**
+ * The floating patch-selection action tray and its settings previews. It is opaque so the chips
+ * stay readable over the tabs beneath it; classic uses its elevated surface tone.
+ */
+@Composable
+internal fun actionTrayColor(): Color = if (LocalExpressiveDesign.current) {
+    MaterialTheme.colorScheme.surfaceContainerHighest
+} else {
+    MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp)
+}
+
+/** Resting cards are flat in the expressive design; floating surfaces keep their shadow. */
+@Composable
+internal fun Dp.restingShadow(): Dp = if (LocalExpressiveDesign.current) 0.dp else this
+
+private val ExpressiveShapes = Shapes(
+    extraSmall = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(20.dp),
+    large = RoundedCornerShape(24.dp),
+    largeIncreased = RoundedCornerShape(28.dp),
+    extraLarge = RoundedCornerShape(32.dp),
+    extraLargeIncreased = RoundedCornerShape(40.dp),
+    extraExtraLarge = RoundedCornerShape(48.dp)
+)
+
+private val ExpressiveTypography = Typography.copy(
+    displayLarge = Typography.displayLargeEmphasized,
+    displayMedium = Typography.displayMediumEmphasized,
+    displaySmall = Typography.displaySmallEmphasized,
+    headlineLarge = Typography.headlineLargeEmphasized,
+    headlineMedium = Typography.headlineMediumEmphasized,
+    headlineSmall = Typography.headlineSmallEmphasized,
+    titleLarge = Typography.titleLargeEmphasized,
+    titleMedium = Typography.titleMediumEmphasized,
+    titleSmall = Typography.titleSmallEmphasized,
+    labelSmall = Typography.labelSmallEmphasized,
+    labelMedium = Typography.labelMediumEmphasized,
+    labelLarge = Typography.labelLargeEmphasized
+)
 
 private val DarkColorScheme = darkColorScheme(
     primary = rv_theme_dark_primary,
@@ -60,6 +113,13 @@ private val DarkColorScheme = darkColorScheme(
     surfaceTint = rv_theme_dark_surfaceTint,
     outlineVariant = rv_theme_dark_outlineVariant,
     scrim = rv_theme_dark_scrim,
+    surfaceDim = rv_theme_dark_surfaceDim,
+    surfaceBright = rv_theme_dark_surfaceBright,
+    surfaceContainerLowest = rv_theme_dark_surfaceContainerLowest,
+    surfaceContainerLow = rv_theme_dark_surfaceContainerLow,
+    surfaceContainer = rv_theme_dark_surfaceContainer,
+    surfaceContainerHigh = rv_theme_dark_surfaceContainerHigh,
+    surfaceContainerHighest = rv_theme_dark_surfaceContainerHighest,
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -92,6 +152,13 @@ private val LightColorScheme = lightColorScheme(
     surfaceTint = rv_theme_light_surfaceTint,
     outlineVariant = rv_theme_light_outlineVariant,
     scrim = rv_theme_light_scrim,
+    surfaceDim = rv_theme_light_surfaceDim,
+    surfaceBright = rv_theme_light_surfaceBright,
+    surfaceContainerLowest = rv_theme_light_surfaceContainerLowest,
+    surfaceContainerLow = rv_theme_light_surfaceContainerLow,
+    surfaceContainer = rv_theme_light_surfaceContainer,
+    surfaceContainerHigh = rv_theme_light_surfaceContainerHigh,
+    surfaceContainerHighest = rv_theme_light_surfaceContainerHighest,
 )
 
 @Composable
@@ -104,6 +171,7 @@ fun UpmTheme(
     hasCustomBackground: Boolean = false,
     content: @Composable () -> Unit
 ) {
+    val expressive = LocalExpressiveDesign.current
     val baseScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
@@ -118,7 +186,8 @@ fun UpmTheme(
         applyCustomAccent(baseScheme, it, darkTheme)
     } ?: baseScheme
 
-    val schemeWithThemeColor = parseCustomColor(themeColorHex)?.let {
+    val customThemeColor = parseCustomColor(themeColorHex)
+    val schemeWithThemeColor = customThemeColor?.let {
         applyCustomThemeColor(schemeWithAccent, it, darkTheme)
     } ?: schemeWithAccent
     val finalScheme = if (darkTheme && pureBlackTheme) {
@@ -140,11 +209,12 @@ fun UpmTheme(
     } else {
         schemeWithThemeColor
     }
+    val surfaceScheme = if (expressive && customThemeColor != null) {
+        finalScheme.withReadableCustomSurfaces()
+    } else finalScheme
     val resolvedScheme = if (hasCustomBackground) {
-        finalScheme.copy(background = Color.Transparent)
-    } else {
-        finalScheme
-    }
+        surfaceScheme.copy(background = Color.Transparent)
+    } else surfaceScheme
     val systemBarBackground = finalScheme.surface
     val useDarkSystemBarIcons = systemBarBackground.contrastingForeground() == Color.Black
 
@@ -165,10 +235,7 @@ fun UpmTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = resolvedScheme,
-        typography = Typography
-    ) {
+    val body: @Composable () -> Unit = {
         Box(modifier = Modifier.fillMaxSize()) {
             content()
             if (hasCustomBackground) {
@@ -202,6 +269,14 @@ fun UpmTheme(
                 )
             }
         }
+    }
+    if (expressive) {
+        MaterialExpressiveTheme(
+            colorScheme = resolvedScheme, shapes = ExpressiveShapes, typography = ExpressiveTypography,
+            content = body
+        )
+    } else {
+        MaterialTheme(colorScheme = resolvedScheme, typography = Typography, content = body)
     }
 }
 
@@ -284,6 +359,27 @@ private fun applyCustomThemeColor(
     )
 }
 
+// Material components reuse onSurface and onSurfaceVariant across the container tones.
+internal fun ColorScheme.withReadableCustomSurfaces(): ColorScheme {
+    val foreground = onSurface.luminance() + 0.05f
+    fun readable(tone: Color): Color {
+        val background = tone.luminance() + 0.05f
+        val contrast = maxOf(foreground, background) / minOf(foreground, background)
+        return if (contrast >= 4.5f) tone else surface
+    }
+    return copy(
+        onSurfaceVariant = onSurface,
+        surfaceVariant = readable(surfaceVariant),
+        surfaceDim = readable(surfaceDim),
+        surfaceBright = readable(surfaceBright),
+        surfaceContainerLowest = readable(surfaceContainerLowest),
+        surfaceContainerLow = readable(surfaceContainerLow),
+        surfaceContainer = readable(surfaceContainer),
+        surfaceContainerHigh = readable(surfaceContainerHigh),
+        surfaceContainerHighest = readable(surfaceContainerHighest)
+    )
+}
+
 private fun Color.adjustLightness(delta: Float): Color {
     val hsl = FloatArray(3)
     ColorUtils.colorToHSL(this.toArgb(), hsl)
@@ -291,7 +387,7 @@ private fun Color.adjustLightness(delta: Float): Color {
     return Color(ColorUtils.HSLToColor(hsl))
 }
 
-private fun Color.contrastingForeground(): Color {
+internal fun Color.contrastingForeground(): Color {
     val background = toArgb() or 0xFF000000.toInt()
     val blackContrast = ColorUtils.calculateContrast(AndroidColor.BLACK, background)
     val whiteContrast = ColorUtils.calculateContrast(AndroidColor.WHITE, background)

@@ -1,5 +1,9 @@
 package app.universal.patch.manager
 
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import app.universal.patch.manager.ui.component.design.CircularProgressIndicator
+import android.app.ActivityManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.graphics.BitmapFactory
@@ -25,14 +29,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.graphics.drawable.toBitmap
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.compose.ui.platform.LocalContext
@@ -40,10 +48,12 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavOptionsBuilder
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import androidx.appcompat.app.AppCompatActivity
@@ -101,12 +111,14 @@ import app.universal.patch.manager.ui.screen.settings.AdvancedSettingsMode
 import app.universal.patch.manager.ui.screen.settings.ContributorSettingsScreen
 import app.universal.patch.manager.ui.screen.settings.DeveloperSettingsScreen
 import app.universal.patch.manager.ui.screen.settings.DownloadsSettingsScreen
+import app.universal.patch.manager.ui.screen.settings.DesignChange
 import app.universal.patch.manager.ui.screen.settings.GeneralSettingsScreen
 import app.universal.patch.manager.ui.screen.settings.ImportExportSettingsScreen
 import app.universal.patch.manager.ui.screen.settings.PatcherRuntimePluginsSettingsScreen
 import app.universal.patch.manager.ui.screen.settings.StorageSettingsScreen
 import app.universal.patch.manager.ui.screen.settings.update.ChangelogsSettingsScreen
 import app.universal.patch.manager.ui.screen.settings.update.UpdatesSettingsScreen
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
 import app.universal.patch.manager.ui.theme.UpmTheme
 import app.universal.patch.manager.ui.theme.Theme
 import app.universal.patch.manager.ui.viewmodel.BatchPatcherViewModel
@@ -116,7 +128,9 @@ import app.universal.patch.manager.ui.viewmodel.SelectedAppInfoViewModel
 import app.universal.patch.manager.ui.viewmodel.ThemePreset
 import app.universal.patch.manager.util.EventEffect
 import app.universal.patch.manager.util.AppForeground
+import app.universal.patch.manager.util.ManagerAppIcon
 import app.universal.patch.manager.util.PatchBundleFileIntent
+import app.universal.patch.manager.util.managerAppIcons
 import app.universal.patch.manager.R
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
@@ -127,15 +141,34 @@ import org.koin.androidx.compose.navigation.koinNavViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import org.koin.androidx.viewmodel.ext.android.getViewModel as getActivityViewModel
+import app.universal.patch.manager.util.toast
 import java.io.File
+import java.io.IOException
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
+    @Suppress("DEPRECATION")
+    private fun updateTaskIcon(icon: ManagerAppIcon) {
+        val label = getString(R.string.app_name)
+        val description = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ActivityManager.TaskDescription.Builder().setLabel(label).setIcon(icon.icon).build()
+        } else {
+            val size = (48 * resources.displayMetrics.density).toInt().coerceAtLeast(1)
+            val bitmap = AppCompatResources.getDrawable(this, icon.icon)?.toBitmap(size, size)
+            ActivityManager.TaskDescription(label, bitmap)
+        }
+        setTaskDescription(description)
+    }
+
     @ExperimentalAnimationApi
     override fun onCreate(savedInstanceState: Bundle?) {
         // Apply the normal app theme before AppCompat initializes or restores the activity.
         installSplashScreen()
         super.onCreate(savedInstanceState)
+
+        lifecycleScope.launch {
+            managerAppIcons.selected.collect(::updateTaskIcon)
+        }
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         enableEdgeToEdge()
@@ -143,7 +176,25 @@ class MainActivity : AppCompatActivity() {
         val vm: MainViewModel = getActivityViewModel()
         vm.handleInitialIntent(intent)
 
+        // Keep the active engine fixed until the activity is recreated.
+        val expressiveDesign = vm.prefs.expressiveDesign.getBlocking()
         setContent {
+            val navController = rememberNavController()
+            var confirmedDesignChange by rememberSaveable { mutableStateOf<DesignChange?>(null) }
+            LaunchedEffect(confirmedDesignChange) {
+                val change = confirmedDesignChange ?: return@LaunchedEffect
+                try {
+                    if (change == DesignChange.ResetTheme) vm.prefs.resetThemeSettings()
+                    else vm.prefs.expressiveDesign.update(change.expressive)
+                } catch (_: IOException) {
+                    confirmedDesignChange = null
+                    toast(getString(R.string.design_language_save_failed))
+                    return@LaunchedEffect
+                }
+                confirmedDesignChange = null
+                if (change.expressive != expressiveDesign) recreate()
+            }
+
             val launcher = rememberLauncherForActivityResult(
                 ActivityResultContracts.StartActivityForResult(),
                 onResult = vm::applyLegacySettings
@@ -206,6 +257,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             CompositionLocalProvider(
+                LocalExpressiveDesign provides expressiveDesign,
                 LocalPreventAccidentalTouching provides preventAccidentalTouching
             ) {
                 UpmTheme(
@@ -221,6 +273,8 @@ class MainActivity : AppCompatActivity() {
                         imageOverlayAlpha = customBackgroundImageOpacity
                     ) {
                         ReVancedManager(
+                            navController = navController,
+                            onConfirmDesignChange = { confirmedDesignChange = it },
                             vm = vm,
                             disableScreenSlideTransitions = !customBackgroundImageUri.isNullOrBlank()
                         )
@@ -331,10 +385,26 @@ private fun CustomBackgroundImage(
 
 @Composable
 private fun ReVancedManager(
+    navController: NavHostController,
+    onConfirmDesignChange: (DesignChange) -> Unit,
     vm: MainViewModel,
     disableScreenSlideTransitions: Boolean
 ) {
-    val navController = rememberNavController()
+    val runtimeRepository: app.universal.patch.manager.domain.repository.PatcherRuntimePluginRepository = koinInject()
+    val runtimeSetupRequired by runtimeRepository.runtimeSetupRequired.collectAsStateWithLifecycle(null)
+    if (runtimeSetupRequired == null) {
+        Box(
+            modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+            contentAlignment = androidx.compose.ui.Alignment.Center
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+    if (runtimeSetupRequired == true) {
+        app.universal.patch.manager.ui.screen.settings.RuntimeCatalogScreen(onboarding = true)
+        return
+    }
     val dashboardVm: DashboardViewModel = koinViewModel()
     val batchPatcherVm: BatchPatcherViewModel = koinViewModel()
     val manualBatchQueue: ManualBatchPatchQueue = koinInject()
@@ -371,6 +441,23 @@ private fun ReVancedManager(
             launchSingleTop = true
             popUpTo(Dashboard) { inclusive = false }
         }
+    }
+
+    EventEffect(vm.downloaderUpdateDeepLinkFlow) {
+        navController.navigate(Settings.Downloads) { launchSingleTop = true }
+    }
+    EventEffect(vm.rootMountDeepLinkFlow) { packageName ->
+        val current = navController.currentBackStackEntry
+        if (current?.destination?.hasRoute<InstalledApplicationInfo>() == true &&
+            current.toRoute<InstalledApplicationInfo>().packageName == packageName
+        ) {
+            return@EventEffect
+        }
+        navController.navigate(InstalledApplicationInfo(packageName))
+    }
+
+    EventEffect(vm.runtimeUpdateDeepLinkFlow) {
+        navController.navigate(Settings.PatcherRuntimes) { launchSingleTop = true }
     }
 
     EventEffect(vm.managerUpdateDeepLinkFlow) {
@@ -441,22 +528,41 @@ private fun ReVancedManager(
         }
     }
 
+    EventEffect(vm.patchedAppsRequestFlow) { packages ->
+        // Recreate Dashboard so a previously selected tab cannot hide the Apps tab.
+        navController.navigate(Dashboard) {
+            popUpTo(Dashboard) { inclusive = true }
+        }
+        packages.singleOrNull()?.let { packageName ->
+            navController.navigate(InstalledApplicationInfo(packageName)) {
+                launchSingleTop = true
+            }
+        }
+    }
+
+    val motion = if (LocalExpressiveDesign.current) MaterialTheme.motionScheme else null
     NavHost(
         navController = navController,
         startDestination = Dashboard,
         enterTransition = {
             if (disableScreenSlideTransitions) EnterTransition.None
+            else if (motion != null) slideInHorizontally(motion.defaultSpatialSpec()) { it / 6 } +
+                fadeIn(motion.defaultEffectsSpec())
             else slideInHorizontally(initialOffsetX = { it })
         },
         exitTransition = {
             if (disableScreenSlideTransitions) ExitTransition.None
+            else if (motion != null) fadeOut(motion.fastEffectsSpec())
             else slideOutHorizontally(targetOffsetX = { -it / 3 })
         },
         popEnterTransition = {
-            EnterTransition.None
+            if (!disableScreenSlideTransitions && motion != null) fadeIn(motion.defaultEffectsSpec())
+            else EnterTransition.None
         },
         popExitTransition = {
             if (disableScreenSlideTransitions) ExitTransition.None
+            else if (motion != null) slideOutHorizontally(motion.defaultSpatialSpec()) { it / 6 } +
+                fadeOut(motion.fastEffectsSpec())
             else slideOutHorizontally(targetOffsetX = { it })
         },
     ) {
@@ -594,10 +700,11 @@ private fun ReVancedManager(
                 scheduled = data.scheduled,
                 requestId = data.requestId,
                 onBackClick = navController::navigateUp,
-                onOpenProgress = { packageName ->
-                    navController.navigate(BatchPatchDetails(packageName))
+                onOpenProgress = { key ->
+                    navController.navigate(BatchPatchDetails(key))
                 },
-                onEditPatches = { params ->
+                onEditPatches = { key, params ->
+                    batchPatcherVm.editingItemKey = key
                     navController.navigateComplex(BatchPatchesSelector, params)
                 },
                 viewModel = batchPatcherVm
@@ -607,7 +714,7 @@ private fun ReVancedManager(
         composable<BatchPatchDetails> {
             val data = it.toRoute<BatchPatchDetails>()
             BatchPatchDetailsScreen(
-                packageName = data.packageName,
+                itemKey = data.itemKey,
                 onBackClick = navController::popBackStack,
                 viewModel = batchPatcherVm
             )
@@ -620,7 +727,7 @@ private fun ReVancedManager(
                 onBackClick = navController::popBackStack,
                 onSave = { patches, options, _ ->
                     batchPatcherVm.updateConfiguration(
-                        packageName = data.app.packageName,
+                        key = batchPatcherVm.editingItemKey ?: data.app.packageName,
                         patches = patches,
                         options = options
                     )
@@ -1048,7 +1155,10 @@ private fun ReVancedManager(
             }
 
             composable<Settings.General> {
-                GeneralSettingsScreen(onBackClick = navController::popBackStack)
+                GeneralSettingsScreen(
+                    onBackClick = navController::popBackStack,
+                    onConfirmDesignChange = onConfirmDesignChange
+                )
             }
 
             composable<Settings.Advanced> {

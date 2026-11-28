@@ -1,5 +1,8 @@
 package app.universal.patch.manager.ui.component.bundle
 
+import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsCard
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
+import app.universal.patch.manager.ui.component.design.IconButton
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.webkit.URLUtil.isValidUrl
@@ -35,7 +38,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -165,28 +167,28 @@ fun BundleInformationDialog(
     }
 
     fun onRepositoryPrereleasesChange(new: Boolean) = composableScope.launch {
-        val updatedSource = with(bundleRepo) {
-            (src as? JsonPatchBundle)?.setUsePrereleases(new)
-        } ?: return@launch
-        bundleRepo.update(updatedSource, showToast = true)
+        with(bundleRepo) {
+            (src as? JsonPatchBundle)?.updateRepositorySelection { current ->
+                current.repositorySettings.copy(usePrereleases = new, useLatest = false)
+            }
+        }
     }
 
     fun onRepositoryLatestChange(new: Boolean) = composableScope.launch {
-        val updatedSource = with(bundleRepo) {
-            (src as? JsonPatchBundle)?.setUseLatest(new)
-        } ?: return@launch
-        bundleRepo.update(updatedSource, showToast = true)
+        with(bundleRepo) {
+            (src as? JsonPatchBundle)?.updateRepositorySelection { current ->
+                current.repositorySettings.copy(useLatest = new)
+            }
+        }
     }
 
     fun onVersionSelectionChange(enabled: Boolean) = composableScope.launch {
-        val updated = with(bundleRepo) {
-            (src as? JsonPatchBundle)?.setVersionSelection(enabled)
-        } ?: return@launch
-        if (enabled && updated.selectedVersion == null) {
-            showVersionDialog = true
-        } else {
-            bundleRepo.update(updated, showToast = true)
-        }
+        val accepted = with(bundleRepo) {
+            (src as? JsonPatchBundle)?.updateRepositorySelection { current ->
+                current.repositorySettings.withVersionSelection(enabled)
+            }
+        } == true
+        if (accepted && enabled && (src as? JsonPatchBundle)?.selectedVersion == null) showVersionDialog = true
     }
 
     if (showVersionDialog && src is JsonPatchBundle && src.useSpecificVersion) {
@@ -196,8 +198,11 @@ fun BundleInformationDialog(
             onSelect = { asset ->
                 showVersionDialog = false
                 composableScope.launch {
-                    val updated = with(bundleRepo) { src.setVersionSelection(true, asset) }
-                    bundleRepo.update(updated, showToast = true)
+                    with(bundleRepo) {
+                        src.updateRepositorySelection { current ->
+                            current.repositorySettings.withVersionSelection(true, asset)
+                        }
+                    }
                 }
             }
         )
@@ -377,341 +382,357 @@ fun BundleInformationDialog(
                     }
                 }
 
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant
-                )
-
-                BundleListItem(
-                    headlineText = stringResource(R.string.bundle_type_label),
-                    supportingText = when (bundleInfo[src.uid]?.bundleType) {
-                        PatchBundleType.REVANCED -> stringResource(R.string.bundle_type_revanced)
-                        PatchBundleType.MORPHE -> stringResource(R.string.bundle_type_morphe)
-                        PatchBundleType.RESEAM -> stringResource(R.string.bundle_type_reseam)
-                        PatchBundleType.AMPLE -> stringResource(R.string.bundle_type_ample)
-                        null -> stringResource(field_not_set)
-                    }
-                )
-
-                if (showDisplayNameDialog) {
-                    TextInputDialog(
-                        initial = src.displayName.orEmpty(),
-                        title = stringResource(R.string.patches_display_name),
-                        onDismissRequest = { showDisplayNameDialog = false },
-                        onConfirm = { value ->
-                            composableScope.launch {
-                                val result = bundleRepo.setDisplayName(src.uid, value.trim().ifEmpty { null })
-                                when (result) {
-                                    DisplayNameUpdateResult.SUCCESS, DisplayNameUpdateResult.NO_CHANGE -> {
-                                        showDisplayNameDialog = false
-                                    }
-                                    DisplayNameUpdateResult.DUPLICATE -> {
-                                        context.toast(context.getString(R.string.patch_bundle_duplicate_name_error))
-                                    }
-                                    DisplayNameUpdateResult.NOT_FOUND -> {
-                                        context.toast(context.getString(R.string.patch_bundle_missing_error))
-                                    }
-                                }
-                            }
-                        },
-                        validator = { true }
+                if (!LocalExpressiveDesign.current) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant
                     )
                 }
 
-                BundleListItem(
-                    modifier = Modifier.clickable { showDisplayNameDialog = true },
-                    headlineText = stringResource(R.string.patches_display_name),
-                    supportingText = src.displayName?.takeUnless { it.isBlank() }
-                        ?: stringResource(field_not_set)
-                )
-
-                if (isLocal) {
-                    val identifierValue = src.uid.toString()
+                BundleDetailsGroup {
                     BundleListItem(
-                        headlineText = stringResource(R.string.bundle_uid),
-                        supportingText = identifierValue,
-                        trailingContent = {
-                            IconButton(
-                                onClick = {
-                                    clipboard?.setPrimaryClip(
-                                        ClipData.newPlainText(
-                                            context.getString(R.string.bundle_uid),
-                                            identifierValue
-                                        )
-                                    )
-                                    context.toast(context.getString(R.string.toast_copied_to_clipboard))
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.ContentCopy,
-                                    contentDescription = stringResource(R.string.copy_to_clipboard)
-                                )
-                            }
+                        headlineText = stringResource(R.string.bundle_type_label),
+                        supportingText = when (bundleInfo[src.uid]?.bundleType) {
+                            PatchBundleType.REVANCED -> stringResource(R.string.bundle_type_revanced)
+                            PatchBundleType.MORPHE -> stringResource(R.string.bundle_type_morphe)
+                            PatchBundleType.RESEAM -> stringResource(R.string.bundle_type_reseam)
+                            PatchBundleType.AMPLE -> stringResource(R.string.bundle_type_ample)
+                            null -> stringResource(field_not_set)
                         }
                     )
-                }
 
-                if (autoUpdate != null) {
-                    BundleListItem(
-                        headlineText = stringResource(auto_update),
-                        supportingText = stringResource(auto_update_description),
-                        trailingContent = {
-                            ExpressiveSettingsSwitch(
-                                checked = autoUpdate,
-                                onCheckedChange = ::onAutoUpdateChange
-                            )
-                        },
-                        modifier = Modifier.clickable {
-                            onAutoUpdateChange(!autoUpdate)
-                        }
-                    )
-                }
-                if (searchUpdate != null) {
-                    BundleListItem(
-                        headlineText = stringResource(R.string.bundle_search_update),
-                        supportingText = stringResource(R.string.bundle_search_update_description),
-                        trailingContent = {
-                            ExpressiveSettingsSwitch(
-                                checked = searchUpdate,
-                                onCheckedChange = ::onSearchUpdateChange
-                            )
-                        },
-                        modifier = Modifier.clickable {
-                            onSearchUpdateChange(!searchUpdate)
-                        }
-                    )
-                }
-
-                (src as? JsonPatchBundle)?.takeIf { it.supportsPrereleases }?.let { repositoryBundle ->
-                    BundleListItem(
-                        headlineText = stringResource(R.string.repository_bundle_prereleases),
-                        supportingText = stringResource(R.string.repository_bundle_prereleases_description),
-                        trailingContent = {
-                            ExpressiveSettingsSwitch(
-                                checked = repositoryBundle.usePrereleases,
-                                enabled = !repositoryBundle.useSpecificVersion && !repositoryBundle.useLatest,
-                                onCheckedChange = ::onRepositoryPrereleasesChange
-                            )
-                        },
-                        modifier = Modifier
-                            .alpha(if (repositoryBundle.useSpecificVersion || repositoryBundle.useLatest) 0.38f else 1f)
-                            .clickable(enabled = !repositoryBundle.useSpecificVersion && !repositoryBundle.useLatest) {
-                                onRepositoryPrereleasesChange(!repositoryBundle.usePrereleases)
-                            }
-                    )
-
-                    BundleListItem(
-                        headlineText = stringResource(R.string.repository_bundle_latest),
-                        supportingText = stringResource(R.string.repository_bundle_latest_description),
-                        trailingContent = {
-                            ExpressiveSettingsSwitch(
-                                checked = repositoryBundle.useLatest,
-                                enabled = !repositoryBundle.useSpecificVersion,
-                                onCheckedChange = ::onRepositoryLatestChange
-                            )
-                        },
-                        modifier = Modifier
-                            .alpha(if (repositoryBundle.useSpecificVersion) 0.38f else 1f)
-                            .clickable(enabled = !repositoryBundle.useSpecificVersion) {
-                                onRepositoryLatestChange(!repositoryBundle.useLatest)
-                            }
-                    )
-
-                    BundleListItem(
-                        headlineText = stringResource(R.string.bundle_use_specific_version),
-                        supportingText = stringResource(R.string.bundle_use_specific_version_description),
-                        trailingContent = {
-                            ExpressiveSettingsSwitch(
-                                checked = repositoryBundle.useSpecificVersion,
-                                onCheckedChange = ::onVersionSelectionChange
-                            )
-                        },
-                        modifier = Modifier.clickable {
-                            onVersionSelectionChange(!repositoryBundle.useSpecificVersion)
-                        }
-                    )
-                    BundleListItem(
-                        headlineText = stringResource(R.string.bundle_select_version),
-                        supportingText = repositoryBundle.selectedVersion?.version
-                            ?: stringResource(R.string.field_not_set),
-                        trailingContent = {
-                            Icon(Icons.AutoMirrored.Outlined.ArrowRight, contentDescription = null)
-                        },
-                        modifier = Modifier
-                            .alpha(if (repositoryBundle.useSpecificVersion) 1f else 0.38f)
-                            .clickable(enabled = repositoryBundle.useSpecificVersion) {
-                                showVersionDialog = true
-                            }
-                    )
-                }
-
-                endpoint?.let { url ->
-                    val remote = src.asRemoteOrNull
-                    var showUrlInputDialog by rememberSaveable {
-                        mutableStateOf(false)
-                    }
-                    if (showUrlInputDialog) {
+                    if (showDisplayNameDialog) {
                         TextInputDialog(
-                            initial = url,
-                            title = stringResource(patches_url),
-                            onDismissRequest = { showUrlInputDialog = false },
-                            singleLine = false,
-                            minLines = 2,
-                            maxLines = 4,
-                            onConfirm = { newUrl ->
-                                if (remote == null) {
-                                    showUrlInputDialog = false
-                                    return@TextInputDialog
-                                }
-                                val trimmed = newUrl.trim()
-                                if (trimmed.isEmpty() || trimmed == url) {
-                                    showUrlInputDialog = false
-                                    return@TextInputDialog
-                                }
-                                showUrlInputDialog = false
+                            initial = src.displayName.orEmpty(),
+                            title = stringResource(R.string.patches_display_name),
+                            onDismissRequest = { showDisplayNameDialog = false },
+                            onConfirm = { value ->
                                 composableScope.launch {
-                                    bundleRepo.updateRemoteEndpoint(
-                                        src = remote,
-                                        newUrl = trimmed
-                                    )
+                                    val result = bundleRepo.setDisplayName(src.uid, value.trim().ifEmpty { null })
+                                    when (result) {
+                                        DisplayNameUpdateResult.SUCCESS, DisplayNameUpdateResult.NO_CHANGE -> {
+                                            showDisplayNameDialog = false
+                                        }
+                                        DisplayNameUpdateResult.DUPLICATE -> {
+                                            context.toast(context.getString(R.string.patch_bundle_duplicate_name_error))
+                                        }
+                                        DisplayNameUpdateResult.NOT_FOUND -> {
+                                            context.toast(context.getString(R.string.patch_bundle_missing_error))
+                                        }
+                                    }
                                 }
                             },
-                            validator = {
-                                if (it.isEmpty()) return@TextInputDialog false
-
-                                isValidUrl(it)
-                            }
+                            validator = { true }
                         )
                     }
 
                     BundleListItem(
-                        headlineText = stringResource(patches_url),
-                        supportingText = url.ifEmpty {
-                            stringResource(field_not_set)
-                        },
-                        trailingContent = {
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
+                        modifier = Modifier.clickable { showDisplayNameDialog = true },
+                        headlineText = stringResource(R.string.patches_display_name),
+                        supportingText = src.displayName?.takeUnless { it.isBlank() }
+                            ?: stringResource(field_not_set)
+                    )
+
+                    if (isLocal) {
+                        val identifierValue = src.uid.toString()
+                        BundleListItem(
+                            headlineText = stringResource(R.string.bundle_uid),
+                            supportingText = identifierValue,
+                            trailingContent = {
                                 IconButton(
                                     onClick = {
                                         clipboard?.setPrimaryClip(
                                             ClipData.newPlainText(
-                                                context.getString(patches_url),
-                                                url
+                                                context.getString(R.string.bundle_uid),
+                                                identifierValue
                                             )
                                         )
-                                        context.toast(context.getString(R.string.patch_bundle_url_copied))
-                                    },
-                                    enabled = url.isNotEmpty()
+                                        context.toast(context.getString(R.string.toast_copied_to_clipboard))
+                                    }
                                 ) {
                                     Icon(
                                         imageVector = Icons.Outlined.ContentCopy,
                                         contentDescription = stringResource(R.string.copy_to_clipboard)
                                     )
                                 }
-                                IconButton(
-                                    onClick = { showUrlInputDialog = true }
+                            }
+                        )
+                    }
+
+                    if (autoUpdate != null) {
+                        BundleListItem(
+                            headlineText = stringResource(auto_update),
+                            supportingText = stringResource(auto_update_description),
+                            trailingContent = {
+                                ExpressiveSettingsSwitch(
+                                    checked = autoUpdate,
+                                    onCheckedChange = ::onAutoUpdateChange
+                                )
+                            },
+                            modifier = Modifier.clickable {
+                                onAutoUpdateChange(!autoUpdate)
+                            }
+                        )
+                    }
+                    if (searchUpdate != null) {
+                        BundleListItem(
+                            headlineText = stringResource(R.string.bundle_search_update),
+                            supportingText = stringResource(R.string.bundle_search_update_description),
+                            trailingContent = {
+                                ExpressiveSettingsSwitch(
+                                    checked = searchUpdate,
+                                    onCheckedChange = ::onSearchUpdateChange
+                                )
+                            },
+                            modifier = Modifier.clickable {
+                                onSearchUpdateChange(!searchUpdate)
+                            }
+                        )
+                    }
+
+                    remoteSource?.let { DiscoveryBundleReleaseSettings(it) }
+
+                    (src as? JsonPatchBundle)?.takeIf { it.supportsPrereleases }?.let { repositoryBundle ->
+                        BundleListItem(
+                            headlineText = stringResource(R.string.repository_bundle_prereleases),
+                            supportingText = stringResource(R.string.repository_bundle_prereleases_description),
+                            trailingContent = {
+                                ExpressiveSettingsSwitch(
+                                    checked = repositoryBundle.usePrereleases && !repositoryBundle.useLatest && !repositoryBundle.useSpecificVersion,
+                                    enabled = !repositoryBundle.useSpecificVersion && !repositoryBundle.useLatest,
+                                    onCheckedChange = ::onRepositoryPrereleasesChange
+                                )
+                            },
+                            modifier = Modifier
+                                .alpha(if (repositoryBundle.useSpecificVersion || repositoryBundle.useLatest) 0.38f else 1f)
+                                .clickable(enabled = !repositoryBundle.useSpecificVersion && !repositoryBundle.useLatest) {
+                                    onRepositoryPrereleasesChange(!repositoryBundle.usePrereleases)
+                                }
+                        )
+
+                        BundleListItem(
+                            headlineText = stringResource(R.string.repository_bundle_latest),
+                            supportingText = stringResource(R.string.repository_bundle_latest_description),
+                            trailingContent = {
+                                ExpressiveSettingsSwitch(
+                                    checked = repositoryBundle.useLatest && !repositoryBundle.useSpecificVersion,
+                                    enabled = !repositoryBundle.useSpecificVersion,
+                                    onCheckedChange = ::onRepositoryLatestChange
+                                )
+                            },
+                            modifier = Modifier
+                                .alpha(if (repositoryBundle.useSpecificVersion) 0.38f else 1f)
+                                .clickable(enabled = !repositoryBundle.useSpecificVersion) {
+                                    onRepositoryLatestChange(!repositoryBundle.useLatest)
+                                }
+                        )
+
+                        BundleListItem(
+                            headlineText = stringResource(R.string.bundle_use_specific_version),
+                            supportingText = stringResource(R.string.bundle_use_specific_version_description),
+                            trailingContent = {
+                                ExpressiveSettingsSwitch(
+                                    checked = repositoryBundle.useSpecificVersion,
+                                    onCheckedChange = ::onVersionSelectionChange
+                                )
+                            },
+                            modifier = Modifier.clickable {
+                                onVersionSelectionChange(!repositoryBundle.useSpecificVersion)
+                            }
+                        )
+                        BundleListItem(
+                            headlineText = stringResource(R.string.bundle_select_version),
+                            supportingText = repositoryBundle.selectedVersion?.version
+                                ?: stringResource(R.string.field_not_set),
+                            trailingContent = {
+                                Icon(Icons.AutoMirrored.Outlined.ArrowRight, contentDescription = null)
+                            },
+                            modifier = Modifier
+                                .alpha(if (repositoryBundle.useSpecificVersion) 1f else 0.38f)
+                                .clickable(enabled = repositoryBundle.useSpecificVersion) {
+                                    showVersionDialog = true
+                                }
+                        )
+                    }
+
+                    endpoint?.let { url ->
+                        val remote = src.asRemoteOrNull
+                        var showUrlInputDialog by rememberSaveable {
+                            mutableStateOf(false)
+                        }
+                        if (showUrlInputDialog) {
+                            TextInputDialog(
+                                initial = url,
+                                title = stringResource(patches_url),
+                                onDismissRequest = { showUrlInputDialog = false },
+                                singleLine = false,
+                                minLines = 2,
+                                maxLines = 4,
+                                onConfirm = { newUrl ->
+                                    if (remote == null) {
+                                        showUrlInputDialog = false
+                                        return@TextInputDialog
+                                    }
+                                    val trimmed = newUrl.trim()
+                                    if (trimmed.isEmpty() || trimmed == url) {
+                                        showUrlInputDialog = false
+                                        return@TextInputDialog
+                                    }
+                                    showUrlInputDialog = false
+                                    composableScope.launch {
+                                        bundleRepo.updateRemoteEndpoint(
+                                            src = remote,
+                                            newUrl = trimmed
+                                        )
+                                    }
+                                },
+                                validator = {
+                                    if (it.isEmpty()) return@TextInputDialog false
+
+                                    isValidUrl(it)
+                                }
+                            )
+                        }
+
+                        BundleListItem(
+                            headlineText = stringResource(patches_url),
+                            supportingText = url.ifEmpty {
+                                stringResource(field_not_set)
+                            },
+                            trailingContent = {
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Edit,
-                                        contentDescription = stringResource(R.string.edit)
-                                    )
+                                    IconButton(
+                                        onClick = {
+                                            clipboard?.setPrimaryClip(
+                                                ClipData.newPlainText(
+                                                    context.getString(patches_url),
+                                                    url
+                                                )
+                                            )
+                                            context.toast(context.getString(R.string.patch_bundle_url_copied))
+                                        },
+                                        enabled = url.isNotEmpty()
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.ContentCopy,
+                                            contentDescription = stringResource(R.string.copy_to_clipboard)
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { showUrlInputDialog = true }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Edit,
+                                            contentDescription = stringResource(R.string.edit)
+                                        )
+                                    }
                                 }
                             }
-                        }
-                    )
-                }
-
-                val patchesClickable = patchCount > 0
-                BundleListItem(
-                    headlineText = stringResource(patches),
-                    supportingText = stringResource(view_patches),
-                    modifier = Modifier.clickable(
-                        enabled = patchesClickable,
-                        onClick = {
-                            viewCurrentBundlePatches = true
-                        }
-                    )
-                ) {
-                    if (patchesClickable) {
-                        Icon(
-                            Icons.AutoMirrored.Outlined.ArrowRight,
-                            stringResource(patches)
                         )
                     }
-                }
 
-                src.asRemoteOrNull?.let {
+                    val patchesClickable = patchCount > 0
                     BundleListItem(
-                        headlineText = stringResource(R.string.bundle_latest_changelog),
-                        supportingText = stringResource(R.string.bundle_view_changelog),
-                        modifier = Modifier.clickable {
-                            viewBundleChangelog = true
-                        }
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Outlined.ArrowRight,
-                            stringResource(R.string.bundle_latest_changelog)
+                        headlineText = stringResource(patches),
+                        supportingText = stringResource(view_patches),
+                        modifier = Modifier.clickable(
+                            enabled = patchesClickable,
+                            onClick = {
+                                viewCurrentBundlePatches = true
+                            }
                         )
+                    ) {
+                        if (patchesClickable) {
+                            Icon(
+                                Icons.AutoMirrored.Outlined.ArrowRight,
+                                stringResource(patches)
+                            )
+                        }
                     }
 
-                    if (supportsHistoricalChangelog) {
-                        val previousEntries = changelogHistory.drop(1)
-                        val hasPrevious = previousEntries.isNotEmpty()
-                        val previousSupportingText = when {
-                            changelogHistoryLoading -> stringResource(R.string.changelog_loading)
-                            hasPrevious -> stringResource(R.string.bundle_view_previous_changelogs)
-                            changelogHistoryFetchedOnce && changelogHistoryError == null ->
-                                stringResource(R.string.bundle_previous_changelogs_empty)
-                            else -> stringResource(R.string.bundle_view_previous_changelogs)
-                        }
+                    src.asRemoteOrNull?.let {
                         BundleListItem(
-                            headlineText = stringResource(R.string.bundle_previous_changelogs),
-                            supportingText = previousSupportingText,
+                            headlineText = stringResource(R.string.bundle_latest_changelog),
+                            supportingText = stringResource(R.string.bundle_view_changelog),
                             modifier = Modifier.clickable {
-                                viewBundleChangelogHistory = true
+                                viewBundleChangelog = true
                             }
                         ) {
                             Icon(
                                 Icons.AutoMirrored.Outlined.ArrowRight,
-                                stringResource(R.string.bundle_previous_changelogs)
+                                stringResource(R.string.bundle_latest_changelog)
                             )
                         }
-                    }
-                }
 
-                src.error?.let {
-                    var showDialog by rememberSaveable {
-                        mutableStateOf(false)
+                        if (supportsHistoricalChangelog) {
+                            val previousEntries = changelogHistory.drop(1)
+                            val hasPrevious = previousEntries.isNotEmpty()
+                            val previousSupportingText = when {
+                                changelogHistoryLoading -> stringResource(R.string.changelog_loading)
+                                hasPrevious -> stringResource(R.string.bundle_view_previous_changelogs)
+                                changelogHistoryFetchedOnce && changelogHistoryError == null ->
+                                    stringResource(R.string.bundle_previous_changelogs_empty)
+                                else -> stringResource(R.string.bundle_view_previous_changelogs)
+                            }
+                            BundleListItem(
+                                headlineText = stringResource(R.string.bundle_previous_changelogs),
+                                supportingText = previousSupportingText,
+                                modifier = Modifier.clickable {
+                                    viewBundleChangelogHistory = true
+                                }
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Outlined.ArrowRight,
+                                    stringResource(R.string.bundle_previous_changelogs)
+                                )
+                            }
+                        }
                     }
-                    if (showDialog) ExceptionViewerDialog(
-                        onDismiss = { showDialog = false },
-                        text = remember(it) { it.stackTraceToString() }
-                    )
 
-                    BundleListItem(
-                        headlineText = stringResource(R.string.patches_error),
-                        supportingText = stringResource(R.string.patches_error_description),
-                        trailingContent = {
-                            Icon(
-                                Icons.AutoMirrored.Outlined.ArrowRight,
-                                null
-                            )
-                        },
-                        modifier = Modifier.clickable { showDialog = true }
-                    )
-                }
-                if (src.state is PatchBundleSource.State.Missing && !isLocal) {
-                    BundleListItem(
-                        headlineText = stringResource(R.string.patches_error),
-                        supportingText = stringResource(R.string.patches_not_downloaded),
-                        modifier = Modifier.clickable(onClick = onUpdate)
-                    )
+                    src.error?.let {
+                        var showDialog by rememberSaveable {
+                            mutableStateOf(false)
+                        }
+                        if (showDialog) ExceptionViewerDialog(
+                            onDismiss = { showDialog = false },
+                            text = remember(it) { it.stackTraceToString() }
+                        )
+
+                        BundleListItem(
+                            headlineText = stringResource(R.string.patches_error),
+                            supportingText = stringResource(R.string.patches_error_description),
+                            trailingContent = {
+                                Icon(
+                                    Icons.AutoMirrored.Outlined.ArrowRight,
+                                    null
+                                )
+                            },
+                            modifier = Modifier.clickable { showDialog = true }
+                        )
+                    }
+                    if (src.state is PatchBundleSource.State.Missing && !isLocal) {
+                        BundleListItem(
+                            headlineText = stringResource(R.string.patches_error),
+                            supportingText = stringResource(R.string.patches_not_downloaded),
+                            modifier = Modifier.clickable(onClick = onUpdate)
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+/** Expressive gathers the bundle settings rows into one card, matching App info. */
+@Composable
+private fun BundleDetailsGroup(content: @Composable () -> Unit) {
+    if (LocalExpressiveDesign.current) {
+        ExpressiveSettingsCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), content = content)
+    } else {
+        Column { content() }
     }
 }
 

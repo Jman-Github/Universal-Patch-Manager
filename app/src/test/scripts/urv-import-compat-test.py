@@ -93,6 +93,9 @@ def models(directory, legacy=False):
     names = ["PatchBundleExportFile", "PatchBundleSnapshot", "PatchProfileExportFile",
              "ManagerSettingsExportFile", "EverythingExportFile", "PatchSelectionExportFile",
              "PatchSelectionBundleExport"]
+    if not legacy:
+        # Older baselines predate saved section states.
+        names.append("PatchSectionStateExport")
     body = "\n\n".join(constructor(vm, name) for name in names)
     body += "\n@Serializable\n" + re.search(r"enum class OfficialBundleState\s*\{[^}]*\}", vm)[0] + "\n"
     write("BackupModels.kt", "ui.viewmodel",

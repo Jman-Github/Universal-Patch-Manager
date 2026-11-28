@@ -1,5 +1,21 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.component.design.verticalScrollFade
+import app.universal.patch.manager.ui.component.settings.ExpressiveSettingsSwitch
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.AssistChip
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import app.universal.patch.manager.ui.component.design.horizontalScrollFade
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.CircularProgressIndicator
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.TextButton
+import app.universal.patch.manager.ui.component.CollectionDialog
+import app.universal.patch.manager.ui.component.minimalActionButtons
 import app.universal.patch.manager.util.managerStorageContext
 
 import android.graphics.drawable.ColorDrawable
@@ -52,16 +68,14 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
@@ -552,7 +566,7 @@ fun PatchProfilesScreen(
             }
             val expanded = expandedProfiles[profile.id] == true
             val isSelected = profile.id in viewModel.selectedProfiles
-            val cardShape = RoundedCornerShape(16.dp)
+            val cardShape = MaterialTheme.shapes.large.withClassicCorner(16.dp)
             val cardColor = if (isSelected) {
                 MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp)
             } else {
@@ -638,6 +652,17 @@ fun PatchProfilesScreen(
                                     filesystem = filesystem,
                                     modifier = Modifier.size(44.dp)
                                 )
+                            } else {
+                                // The package's app icon, in the same 44dp slot as the APK icon so
+                                // profile names line up whether or not an APK is saved.
+                                Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+                                    AppIcon(
+                                        packageInfo = null,
+                                        packageName = profile.packageName,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                }
                             }
                             Column(
                                 modifier = Modifier.weight(1f),
@@ -653,10 +678,6 @@ fun PatchProfilesScreen(
                                     text = profile.packageName,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Divider(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    color = MaterialTheme.colorScheme.surfaceVariant
                                 )
                             }
                             if (loadingProfileId == profile.id) {
@@ -689,12 +710,11 @@ fun PatchProfilesScreen(
                             val actionScrollState = rememberScrollState()
                             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(
-                                        8.dp,
-                                        Alignment.CenterHorizontally
-                                    ),
+                                    // Actions sit on the start edge like the other tabs' cards.
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.Start),
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
+                                        .horizontalScrollFade(actionScrollState)
                                         .widthIn(min = maxWidth)
                                         .consumeHorizontalScroll(actionScrollState)
                                 ) {
@@ -866,7 +886,7 @@ fun PatchProfilesScreen(
                                             }
                                         }
                                         Spacer(modifier = Modifier.height(2.dp))
-                                        Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                                     }
                                 }
                                 val patchCountText = pluralStringResource(
@@ -882,7 +902,7 @@ fun PatchProfilesScreen(
                                 }
                                 Surface(
                                     modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
+                                    shape = MaterialTheme.shapes.medium.withClassicCorner(12.dp),
                                     tonalElevation = 1.dp,
                                     color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
                                 ) {
@@ -932,7 +952,8 @@ fun PatchProfilesScreen(
                                                             Icon(
                                                                 imageVector = Icons.Outlined.MoreVert,
                                                                 contentDescription = stringResource(R.string.patch_profile_view_options),
-                                                                tint = MaterialTheme.colorScheme.primary,
+                                                                tint = if (LocalExpressiveDesign.current) LocalContentColor.current
+                                                                    else MaterialTheme.colorScheme.primary,
                                                                 modifier = Modifier.size(18.dp)
                                                             )
                                                         }
@@ -943,11 +964,14 @@ fun PatchProfilesScreen(
                                                 }
                                             }
                                         }
-                                        Scrollbar(
-                                            scrollState = patchScrollState,
-                                            modifier = Modifier.align(Alignment.CenterEnd),
-                                            prominent = true
-                                        )
+                                        // matchParentSize keeps the scrollbar from stretching a short list to the cap.
+                                        Box(Modifier.matchParentSize()) {
+                                            Scrollbar(
+                                                scrollState = patchScrollState,
+                                                modifier = Modifier.align(Alignment.CenterEnd),
+                                                prominent = true
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1222,248 +1246,179 @@ fun PatchProfilesScreen(
                 }
             },
             title = { CenteredDialogTitle(stringResource(R.string.patch_profile_settings_title, settingsProfile.name)) },
+            // Wider than the platform default so the setting rows keep room for their descriptions.
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+            modifier = Modifier.padding(horizontal = 16.dp),
             text = {
+                fun clearApk() {
+                    if (apkPickerBusy) return
+                    apkPickerBusy = true
+                    scope.launch {
+                        try {
+                            when (viewModel.updateProfileApk(settingsProfile.id, null)) {
+                                PatchProfilesViewModel.ApkSelectionResult.CLEARED -> context.toast(
+                                    context.getString(R.string.patch_profile_apk_cleared_toast, settingsProfile.name)
+                                )
+                                PatchProfilesViewModel.ApkSelectionResult.PROFILE_NOT_FOUND,
+                                PatchProfilesViewModel.ApkSelectionResult.FAILED,
+                                PatchProfilesViewModel.ApkSelectionResult.SUCCESS,
+                                PatchProfilesViewModel.ApkSelectionResult.INVALID_FILE,
+                                PatchProfilesViewModel.ApkSelectionResult.PACKAGE_MISMATCH -> context.toast(
+                                    context.getString(R.string.patch_profile_apk_failed_toast)
+                                )
+                            }
+                        } finally {
+                            apkPickerBusy = false
+                        }
+                    }
+                }
+                fun saveInstaller(token: String?, autoInstall: Boolean) {
+                    if (installerUpdating) return
+                    installerUpdating = true
+                    scope.launch {
+                        if (!viewModel.updateProfileInstaller(settingsProfile.id, token, autoInstall)) {
+                            context.toast(context.getString(R.string.patch_profile_save_failed_toast))
+                        }
+                        installerUpdating = false
+                    }
+                }
+                fun saveAutoPatch(enabled: Boolean) {
+                    if (autoPatchUpdating) return
+                    autoPatchUpdating = true
+                    scope.launch {
+                        if (!viewModel.updateProfileAutoPatch(settingsProfile.id, enabled)) {
+                            context.toast(context.getString(R.string.patch_profile_save_failed_toast))
+                        }
+                        autoPatchUpdating = false
+                    }
+                }
+                val settingsScrollState = rememberScrollState()
                 Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    modifier = Modifier
+                        // Rows fade out at either end instead of being cut off on a hard line.
+                        .verticalScrollFade(settingsScrollState)
+                        .verticalScroll(settingsScrollState),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = stringResource(R.string.patch_profile_apk_section_title),
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        val apkScrollState = rememberScrollState()
-                        Text(
-                            text = apkDisplayPath ?: stringResource(R.string.patch_profile_apk_not_set),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Visible,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .consumeHorizontalScroll(apkScrollState)
-                        )
-                        if (hasMissingApk) {
-                            Text(
-                                text = stringResource(R.string.patch_profile_apk_missing),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            TextButton(
-                                onClick = {
-                                    if (apkPickerBusy) return@TextButton
-                                    apkPickerProfile = settingsProfile
-                                }
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.patch_profile_apk_select),
-                                    maxLines = 1
-                                )
-                            }
-                            TextButton(
-                                onClick = {
-                                    if (apkPickerBusy) return@TextButton
-                                    downloadedApkPickerProfile = settingsProfile
-                                }
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.downloaded_apps),
-                                    maxLines = 1
-                                )
-                            }
-                            if (apkPath != null) {
-                                TextButton(
-                                    onClick = {
-                                        if (apkPickerBusy) return@TextButton
-                                        apkPickerBusy = true
-                                        scope.launch {
-                                            try {
-                                                when (viewModel.updateProfileApk(settingsProfile.id, null)) {
-                                                    PatchProfilesViewModel.ApkSelectionResult.CLEARED -> context.toast(
-                                                        context.getString(
-                                                            R.string.patch_profile_apk_cleared_toast,
-                                                            settingsProfile.name
-                                                        )
-                                                    )
-                                                    PatchProfilesViewModel.ApkSelectionResult.PROFILE_NOT_FOUND,
-                                                    PatchProfilesViewModel.ApkSelectionResult.FAILED,
-                                                    PatchProfilesViewModel.ApkSelectionResult.SUCCESS,
-                                                    PatchProfilesViewModel.ApkSelectionResult.INVALID_FILE,
-                                                    PatchProfilesViewModel.ApkSelectionResult.PACKAGE_MISMATCH -> context.toast(
-                                                        context.getString(R.string.patch_profile_apk_failed_toast)
-                                                    )
-                                                }
-                                            } finally {
-                                                apkPickerBusy = false
+                    ProfileSettingsSection(
+                        title = stringResource(R.string.patch_profile_settings_section_source),
+                        rows = listOf(
+                            {
+                                ProfileSettingRow(
+                                    title = stringResource(R.string.patch_profile_apk_section_title),
+                                    summary = apkDisplayPath ?: stringResource(R.string.patch_profile_apk_not_set),
+                                    scrollableSummary = apkDisplayPath != null,
+                                    warning = if (hasMissingApk) stringResource(R.string.patch_profile_apk_missing) else null,
+                                    below = {
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            ProfileSettingChip(
+                                                label = stringResource(R.string.patch_profile_apk_select)
+                                            ) {
+                                                if (!apkPickerBusy) apkPickerProfile = settingsProfile
+                                            }
+                                            ProfileSettingChip(
+                                                label = stringResource(R.string.downloaded_apps)
+                                            ) {
+                                                if (!apkPickerBusy) downloadedApkPickerProfile = settingsProfile
+                                            }
+                                            if (apkPath != null) {
+                                                ProfileSettingChip(
+                                                    label = stringResource(R.string.patch_profile_apk_clear),
+                                                    onClick = ::clearApk
+                                                )
                                             }
                                         }
                                     }
-                                ) {
-                                    Text(
-                                        text = stringResource(R.string.patch_profile_apk_clear),
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = stringResource(R.string.patch_profile_version_override_action),
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = versionSummary,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        TextButton(
-                            onClick = {
-                                if (apkPickerBusy) return@TextButton
-                                versionDialogProfile = settingsProfile
-                                versionDialogValue = effectiveVersion.orEmpty()
-                                versionDialogUseSelectedApkVersion =
-                                    settingsProfile.useSelectedApkVersion && hasAvailableApk
-                                versionDialogAllVersions =
-                                    !versionDialogUseSelectedApkVersion && effectiveVersion.isNullOrBlank()
-                                settingsDialogProfile = null
-                            }
-                        ) {
-                            Text(stringResource(R.string.edit))
-                        }
-                    }
-                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = stringResource(R.string.patch_profile_installer_title),
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = selectedInstaller?.label
-                                ?: stringResource(R.string.patch_profile_installer_default),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(
-                                onClick = {
-                                    installerPickerProfile = settingsProfile
-                                    settingsDialogProfile = null
-                                },
-                                enabled = !installerUpdating
-                            ) {
-                                Text(stringResource(R.string.patch_profile_installer_choose))
-                            }
-                            if (settingsProfile.installerToken != null) {
-                                TextButton(
+                                )
+                            },
+                            {
+                                ProfileSettingRow(
+                                    title = stringResource(R.string.patch_profile_version_override_action),
+                                    summary = versionSummary,
                                     onClick = {
-                                        if (installerUpdating) return@TextButton
-                                        installerUpdating = true
-                                        scope.launch {
-                                            val saved = viewModel.updateProfileInstaller(
-                                                settingsProfile.id,
-                                                null,
-                                                false
-                                            )
-                                            if (!saved) {
-                                                context.toast(context.getString(R.string.patch_profile_save_failed_toast))
+                                        if (apkPickerBusy) return@ProfileSettingRow
+                                        versionDialogProfile = settingsProfile
+                                        versionDialogValue = effectiveVersion.orEmpty()
+                                        versionDialogUseSelectedApkVersion =
+                                            settingsProfile.useSelectedApkVersion && hasAvailableApk
+                                        versionDialogAllVersions =
+                                            !versionDialogUseSelectedApkVersion && effectiveVersion.isNullOrBlank()
+                                        settingsDialogProfile = null
+                                    },
+                                    trailing = {
+                                        Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.edit))
+                                    }
+                                )
+                            }
+                        )
+                    )
+                    ProfileSettingsSection(
+                        title = stringResource(R.string.patch_profile_settings_section_install),
+                        rows = listOf(
+                            {
+                                ProfileSettingRow(
+                                    title = stringResource(R.string.patch_profile_installer_title),
+                                    summary = selectedInstaller?.label
+                                        ?: stringResource(R.string.patch_profile_installer_default),
+                                    enabled = !installerUpdating,
+                                    onClickLabel = stringResource(R.string.patch_profile_installer_choose),
+                                    onClick = {
+                                        installerPickerProfile = settingsProfile
+                                        settingsDialogProfile = null
+                                    },
+                                    trailing = {
+                                        if (settingsProfile.installerToken != null) {
+                                            IconButton(
+                                                onClick = { saveInstaller(null, false) },
+                                                enabled = !installerUpdating
+                                            ) {
+                                                Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.clear))
                                             }
-                                            installerUpdating = false
+                                        } else {
+                                            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null)
                                         }
                                     }
-                                ) {
-                                    Text(stringResource(R.string.clear))
-                                }
-                            }
-                        }
-                    }
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        HapticCheckbox(
-                            checked = settingsProfile.autoInstall,
-                            enabled = settingsProfile.installerToken != null && !installerUpdating,
-                            onCheckedChange = { enabled ->
-                                if (installerUpdating) return@HapticCheckbox
-                                installerUpdating = true
-                                scope.launch {
-                                    val updated = viewModel.updateProfileInstaller(
-                                        settingsProfile.id,
-                                        settingsProfile.installerToken,
-                                        enabled
-                                    )
-                                    if (!updated) {
-                                        context.toast(context.getString(R.string.patch_profile_save_failed_toast))
-                                    }
-                                    installerUpdating = false
-                                }
+                                )
+                            },
+                            {
+                                ProfileSettingToggleRow(
+                                    title = stringResource(R.string.patch_profile_auto_install_label),
+                                    summary = stringResource(R.string.patch_profile_auto_install_description),
+                                    checked = settingsProfile.autoInstall,
+                                    enabled = settingsProfile.installerToken != null && !installerUpdating,
+                                    onCheckedChange = { saveInstaller(settingsProfile.installerToken, it) }
+                                )
                             }
                         )
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = stringResource(R.string.patch_profile_auto_install_label),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Text(
-                                text = stringResource(R.string.patch_profile_auto_install_description),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Text(
-                        stringResource(R.string.patch_profile_signature_workflow_title),
-                        style = MaterialTheme.typography.titleSmall
                     )
-                    PatchProfileSignatureWorkflowOption(
-                        checked = settingsProfile.signatureWorkflow.enabled,
-                        enabled = !signatureWorkflowUpdating,
-                        title = stringResource(R.string.patch_profile_signature_workflow_enable),
-                        description = stringResource(R.string.patch_profile_signature_workflow_enable_description),
-                        onCheckedChange = { enabled ->
-                            saveSignatureWorkflow(settingsProfile.signatureWorkflow.copy(enabled = enabled))
-                        }
-                    )
-                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        HapticCheckbox(
-                            checked = settingsProfile.autoPatch,
-                            onCheckedChange = { enabled ->
-                                if (autoPatchUpdating) return@HapticCheckbox
-                                autoPatchUpdating = true
-                                scope.launch {
-                                    val updated = viewModel.updateProfileAutoPatch(settingsProfile.id, enabled)
-                                    if (!updated) {
-                                        context.toast(context.getString(R.string.patch_profile_save_failed_toast))
+                    ProfileSettingsSection(
+                        title = stringResource(R.string.patch_profile_settings_section_patching),
+                        rows = listOf(
+                            {
+                                ProfileSettingToggleRow(
+                                    title = stringResource(R.string.patch_profile_signature_workflow_title),
+                                    summary = stringResource(R.string.patch_profile_signature_workflow_enable_description),
+                                    checked = settingsProfile.signatureWorkflow.enabled,
+                                    enabled = !signatureWorkflowUpdating,
+                                    onCheckedChange = { enabled ->
+                                        saveSignatureWorkflow(settingsProfile.signatureWorkflow.copy(enabled = enabled))
                                     }
-                                    autoPatchUpdating = false
-                                }
+                                )
+                            },
+                            {
+                                ProfileSettingToggleRow(
+                                    title = stringResource(R.string.patch_profile_auto_patch_label),
+                                    summary = stringResource(R.string.patch_profile_auto_patch_description),
+                                    checked = settingsProfile.autoPatch,
+                                    enabled = !autoPatchUpdating,
+                                    onCheckedChange = ::saveAutoPatch
+                                )
                             }
                         )
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = stringResource(R.string.patch_profile_auto_patch_label),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Text(
-                                text = stringResource(R.string.patch_profile_auto_patch_description),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+                    )
                 }
             }
         )
@@ -1740,7 +1695,7 @@ private fun PatchProfilesOrderDialog(
         workingOrder.add(to.index, workingOrder.removeAt(from.index))
     }
 
-    AlertDialog(
+    CollectionDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {
             TextButton(onClick = { onConfirm(workingOrder.toList()) }, enabled = workingOrder.isNotEmpty()) {
@@ -1754,16 +1709,17 @@ private fun PatchProfilesOrderDialog(
         },
         title = { CenteredDialogTitle(text = stringResource(R.string.patch_profiles_reorder_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     text = stringResource(R.string.patch_profiles_reorder_description),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LazyColumnWithScrollbar(
+                    thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 320.dp),
+                        .weight(1f, fill = false),
                     reserveScrollbarSpace = true,
                     state = lazyListState
                 ) {
@@ -1838,7 +1794,7 @@ private fun ProfileActionText(
         style = MaterialTheme.typography.labelSmall,
         color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(MaterialTheme.shapes.small.withClassicCorner(8.dp))
             .clickable(enabled = enabled) { onClick() }
             .padding(horizontal = 8.dp, vertical = 4.dp)
     )
@@ -1878,7 +1834,7 @@ private fun ProfileActionPill(
                 tint = contentColor,
                 modifier = Modifier.size(14.dp)
             )
-            Text(
+            if (!minimalActionButtons("profiles")) Text(
                 text = text,
                 style = MaterialTheme.typography.labelSmall,
                 color = contentColor,
@@ -1917,7 +1873,7 @@ private fun PatchProfileApkIcon(
     filesystem: Filesystem,
     modifier: Modifier = Modifier
 ) {
-    val containerShape = RoundedCornerShape(12.dp)
+    val containerShape = MaterialTheme.shapes.medium.withClassicCorner(12.dp)
     val containerColor = MaterialTheme.colorScheme.surfaceVariant
     val containerBorder = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
     val apkFile = remember(apkPath) { File(apkPath) }
@@ -1950,7 +1906,7 @@ private fun PatchProfileApkIcon(
                     contentDescription = null,
                     modifier = Modifier
                         .size(28.dp)
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(MaterialTheme.shapes.small.withClassicCorner(6.dp))
                 )
             } else {
                 Icon(
@@ -1964,32 +1920,149 @@ private fun PatchProfileApkIcon(
     }
 }
 
+/**
+ * A titled group of profile settings. Expressive draws each row as a connected segment; classic
+ * keeps plain rows under the section label.
+ */
 @Composable
-private fun PatchProfileSignatureWorkflowOption(
-    checked: Boolean,
-    enabled: Boolean,
-    title: String,
-    description: String,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        HapticCheckbox(
-            checked = checked,
-            enabled = enabled,
-            onCheckedChange = onCheckedChange
+private fun ProfileSettingsSection(title: String, rows: List<@Composable () -> Unit>) {
+    val expressive = LocalExpressiveDesign.current
+    Column(verticalArrangement = Arrangement.spacedBy(if (expressive) 2.dp else 0.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = profileSettingInset(), bottom = 8.dp)
         )
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium)
-            Text(
-                description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        rows.forEachIndexed { index, row ->
+            if (expressive) {
+                val outer = 16.dp
+                val inner = 4.dp
+                val shape = RoundedCornerShape(
+                    topStart = if (index == 0) outer else inner,
+                    topEnd = if (index == 0) outer else inner,
+                    bottomStart = if (index == rows.lastIndex) outer else inner,
+                    bottomEnd = if (index == rows.lastIndex) outer else inner
+                )
+                Surface(shape = shape, color = MaterialTheme.colorScheme.surfaceContainerHighest) { row() }
+            } else {
+                row()
+            }
         }
     }
+}
+
+@Composable
+private fun profileSettingInset() = if (LocalExpressiveDesign.current) 16.dp else 8.dp
+
+@Composable
+private fun ProfileSettingRow(
+    title: String,
+    summary: String?,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    scrollableSummary: Boolean = false,
+    warning: String? = null,
+    onClickLabel: String? = null,
+    onClick: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+    below: (@Composable () -> Unit)? = null
+) {
+    val inset = profileSettingInset()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            // Classic rows have no container, so the press ripple gets its own rounded bounds. The clip
+            // comes before the caller's modifier so a toggleable row's ripple is rounded as well.
+            .then(if (LocalExpressiveDesign.current) Modifier else Modifier.clip(RoundedCornerShape(12.dp)))
+            .then(modifier)
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(enabled = enabled, onClickLabel = onClickLabel, onClick = onClick)
+                } else Modifier
+            )
+            .padding(horizontal = inset, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = if (below == null) Alignment.CenterVertically else Alignment.Top
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .alpha(if (enabled) 1f else 0.38f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            if (summary != null) {
+                if (scrollableSummary) {
+                    val scrollState = rememberScrollState()
+                    Text(
+                        text = summary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier
+                            .horizontalScrollFade(scrollState)
+                            .consumeHorizontalScroll(scrollState)
+                    )
+                } else {
+                    Text(
+                        text = summary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            if (warning != null) {
+                Text(
+                    text = warning,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            if (below != null) {
+                Spacer(Modifier.height(8.dp))
+                below()
+            }
+        }
+        trailing?.invoke()
+    }
+}
+
+/** A setting row whose whole surface toggles its switch, announced as one switch. */
+@Composable
+private fun ProfileSettingToggleRow(
+    title: String,
+    summary: String,
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    ProfileSettingRow(
+        title = title,
+        summary = summary,
+        enabled = enabled,
+        modifier = Modifier.toggleable(
+            value = checked,
+            enabled = enabled,
+            role = Role.Switch,
+            onValueChange = onCheckedChange
+        ),
+        trailing = {
+            ExpressiveSettingsSwitch(
+                checked = checked,
+                enabled = enabled,
+                onCheckedChange = onCheckedChange,
+                modifier = Modifier.clearAndSetSemantics { }
+            )
+        }
+    )
+}
+
+/** Text-only so the package actions fit on one line of the dialog. */
+@Composable
+private fun ProfileSettingChip(label: String, onClick: () -> Unit) {
+    AssistChip(onClick = onClick, label = { Text(label, maxLines = 1) })
 }
 
 private fun resolveApkUriDisplayName(context: android.content.Context, uri: Uri): String =

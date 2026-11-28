@@ -17,7 +17,9 @@ compiler = [artifact("org.jetbrains.kotlin", name, "2.4.10") for name in (
     "kotlin-compiler-embeddable", "kotlin-stdlib", "kotlin-reflect", "kotlin-script-runtime")]
 compiler += [artifact("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm", "1.10.2"),
              artifact("org.jetbrains", "annotations", "13.0")]
-core = ROOT / "upm-patcher-core/build/libs/upm-patcher-core.jar"
+runtime_classpath = os.pathsep.join(map(str, [
+    artifact("org.jetbrains.kotlin", "kotlin-stdlib", "2.4.10"),
+    artifact("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm", "1.10.2")]))
 fixtures = {
     "Binder.kt": """
 package android.os
@@ -67,13 +69,13 @@ class Context {
     "Service.kt": """
 package app.universal.patch.manager.patcher.runtime.jvm
 import android.os.*
-data class JvmLaunch(val libjvm: String, val preload: List<String>, val options: List<String>,
+data class JvmLaunch(val command: List<String>, val options: List<String>,
     val mainClass: String, val entryClass: String,
     val runtimeClassPath: String? = null, val nativeLibraryDir: String? = null)
 interface IPatcherService {
     fun asBinder(): IBinder
     fun prepare(launch: JvmLaunch, bundles: Array<String>): Int
-    fun run(request: String, events: ParcelFileDescriptor)
+    fun run(request: String, events: ParcelFileDescriptor): Int
     object Stub { fun asInterface(binder: IBinder) = binder as IPatcherService }
 }
 class FakeService : IBinder, IPatcherService {
@@ -97,7 +99,7 @@ class FakeService : IBinder, IPatcherService {
         if (dead) throw RemoteException()
         return 1234
     }
-    override fun run(request: String, events: ParcelFileDescriptor) = Unit
+    override fun run(request: String, events: ParcelFileDescriptor) = 2345
 }
 open class PatcherService
 class PatcherService1 : PatcherService()
@@ -116,7 +118,7 @@ import kotlinx.coroutines.*
 fun main() = runBlocking {
     val context = Context()
     val pool = BoundArtRuntimes.get(context)
-    val launch = JvmLaunch("libjvm", emptyList(), emptyList(), "main", "entry")
+    val launch = JvmLaunch(listOf("loader", "java"), emptyList(), "main", "entry")
     withTimeout(3000) {
         repeat(16) { index ->
             val worker = if (index % 2 == 0) pool.take(RuntimeEngine.TOOLS, null, null)
@@ -188,7 +190,7 @@ with tempfile.TemporaryDirectory(prefix="runtime-worker-test-", dir=ROOT / "buil
     classes = work / "classes"
     subprocess.run([str(JAVA), "-cp", os.pathsep.join(map(str, compiler)),
         "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler", "-no-stdlib", "-no-reflect",
-        "-jvm-target", "17", "-classpath", str(core), "-d", str(classes),
+        "-jvm-target", "17", "-classpath", runtime_classpath, "-d", str(classes),
         *map(str, sources)], check=True, timeout=90)
-    subprocess.run([str(JAVA), "-cp", os.pathsep.join(map(str, [classes, core])), "MainKt"],
+    subprocess.run([str(JAVA), "-cp", os.pathsep.join([str(classes), runtime_classpath]), "MainKt"],
                    check=True, timeout=10)

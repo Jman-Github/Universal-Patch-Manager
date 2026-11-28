@@ -1,5 +1,15 @@
 package app.universal.patch.manager.ui.screen.settings
 
+import androidx.compose.ui.window.DialogProperties
+import app.universal.patch.manager.ui.component.design.horizontalScrollFade
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
+import app.universal.patch.manager.ui.component.design.CircularProgressIndicator
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.FilledTonalButton
+import app.universal.patch.manager.ui.component.design.OutlinedButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.ClipData
@@ -46,27 +56,20 @@ import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -76,6 +79,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -95,6 +99,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.patch.manager.domain.installer.InstallerManager
 import app.universal.patch.manager.domain.manager.PreferencesManager
+import kotlinx.coroutines.flow.first
 import app.universal.patch.manager.R
 import app.universal.patch.manager.data.room.apps.downloaded.DownloadedApp
 import app.universal.patch.manager.data.platform.Filesystem
@@ -174,7 +179,8 @@ fun DownloadsSettingsScreen(
         }.toSet()
     }
     val remoteSourceBusyState = viewModel.remoteSourceBusyState
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     var showHelpDialog by rememberSaveable { mutableStateOf(false) } // From PR #37: https://github.com/Jman-Github/Universal-Patch-Manager/pull/37
@@ -192,6 +198,7 @@ fun DownloadsSettingsScreen(
     var pendingExportConfirmation by remember { mutableStateOf<PendingDownloadedAppsExportConfirmation?>(null) }
     var exportInProgress by rememberSaveable { mutableStateOf(false) }
     var showDeleteAppsConfirmation by rememberSaveable { mutableStateOf(false) }
+    var showDownloaderCatalog by rememberSaveable { mutableStateOf(false) }
     var showImportUrlDialog by rememberSaveable { mutableStateOf(false) }
     var sourceIdPendingDeletion by rememberSaveable { mutableStateOf<String?>(null) }
     var sourceIdPendingTrustRevoke by rememberSaveable { mutableStateOf<String?>(null) }
@@ -278,6 +285,18 @@ fun DownloadsSettingsScreen(
     LaunchedEffect(searchTarget) {
         val target = searchTarget
         if (target?.destination == Settings.Downloads) {
+            val itemCount = androidx.compose.runtime.snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > 0 }
+            val index = when (target.targetId) {
+                R.string.download_behavior_section, R.string.downloader_auto_save_title,
+                R.string.downloader_auto_save_latest_only_title -> 0
+                R.string.downloader_plugins -> 2
+                R.string.downloader_catalog_title -> 3
+                else -> 4 + sourceStates.size + pluginStates.size +
+                    apkDownloadHelpers.filterNot { it.packageName in managedHelperPackages }
+                        .distinctBy { it.packageName }.size +
+                    (if (pluginStates.isEmpty() && sourceStates.isEmpty() && apkDownloadHelpers.isEmpty()) 1 else 0)
+            }
+            listState.scrollToItem(index.coerceIn(0, itemCount - 1))
             highlightTarget = target.targetId
             SettingsSearchState.clear()
         }
@@ -307,6 +326,10 @@ fun DownloadsSettingsScreen(
             }
         )
     }
+    if (showDownloaderCatalog) {
+        DownloaderCatalogDialog(onDismiss = { showDownloaderCatalog = false },
+            onImportUrl = { showDownloaderCatalog = false; showImportUrlDialog = true })
+    }
     if (showImportUrlDialog) {
         ImportDownloaderSourceDialog(
             onDismiss = { showImportUrlDialog = false },
@@ -329,31 +352,37 @@ fun DownloadsSettingsScreen(
         )
     }
     appPendingInstallerChoice?.let { app ->
-        InstallerPickerDialog(
-            title = stringResource(R.string.installer_choose_for_this_install_title),
-            options = installerManager.listEntries(
-                target = InstallerManager.InstallTarget.SAVED_APP,
-                includeNone = false
-            ),
-            onDismiss = { appPendingInstallerChoice = null },
-            onConfirm = { token -> viewModel.installApp(app, token) },
-            onOpenShizuku = installerManager::openShizukuApp
-        )
+        val entries by key(app) {
+            produceState<List<InstallerManager.Entry>?>(null) {
+                value = try {
+                    viewModel.installerEntriesFor(app)
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    if (appPendingInstallerChoice == app) {
+                        context.toast(context.getString(R.string.failed_to_load_apk))
+                        appPendingInstallerChoice = null
+                    }
+                    null
+                }
+            }
+        }
+        entries?.let { options ->
+            InstallerPickerDialog(
+                title = stringResource(R.string.installer_choose_for_this_install_title),
+                options = options,
+                onDismiss = { appPendingInstallerChoice = null },
+                onConfirm = { token -> viewModel.installApp(app, token) },
+                onOpenShizuku = installerManager::openShizukuApp
+            )
+        }
     }
     when {
         installProgress != null -> {
-            val progress = requireNotNull(installProgress)
             TransparentLoadingDialog(
-                message = progress.status,
+                message = requireNotNull(installProgress),
                 cancelButtonText = stringResource(R.string.cancel),
-                onCancel = viewModel::cancelInstall,
-                logTitle = if (progress.showMergeLog) {
-                    stringResource(R.string.downloaded_app_install_merge_log)
-                } else {
-                    null
-                },
-                logLines = progress.logLines,
-                emptyLogMessage = stringResource(R.string.downloaded_app_install_merge_log_waiting)
+                onCancel = viewModel::cancelInstall
             )
         }
         remoteSourceBusyState != null -> TransparentLoadingDialog()
@@ -545,14 +574,13 @@ fun DownloadsSettingsScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.7f)
-                            .height(4.dp)
                             .clip(RoundedCornerShape(999.dp))
                     )
                 }
             },
             confirmButton = {},
             dismissButton = {},
-            shape = RoundedCornerShape(28.dp)
+            shape = MaterialTheme.shapes.extraLarge.withClassicCorner(28.dp)
         )
     }
 
@@ -587,13 +615,22 @@ fun DownloadsSettingsScreen(
             modifier = Modifier.padding(paddingValues)
         ) {
             LazyColumnWithScrollbar(
+                thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
+                state = listState,
                 modifier = Modifier.fillMaxSize()
             ) {
                 item {
-                    GroupHeader(
-                        stringResource(R.string.download_behavior_section),
-                        icon = SettingsSectionIcons.DownloadBehavior
-                    )
+                    SettingsSearchHighlight(
+                        targetKey = R.string.download_behavior_section,
+                        activeKey = highlightTarget,
+                        onHighlightComplete = { highlightTarget = null }
+                    ) { highlightModifier ->
+                        GroupHeader(
+                            stringResource(R.string.download_behavior_section),
+                            icon = SettingsSectionIcons.DownloadBehavior,
+                            modifier = highlightModifier
+                        )
+                    }
                 }
                 item {
                     ExpressiveSettingsCard(
@@ -650,10 +687,17 @@ fun DownloadsSettingsScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
                     ) {
-                        ExpressiveSettingsItem(
-                            headlineContent = stringResource(R.string.downloader_import_url),
-                            supportingContent = stringResource(R.string.downloader_import_url_description)
-                        )
+                        SettingsSearchHighlight(
+                            targetKey = R.string.downloader_catalog_title,
+                            activeKey = highlightTarget,
+                            onHighlightComplete = { highlightTarget = null }
+                        ) { modifier ->
+                            ExpressiveSettingsItem(
+                                headlineContent = stringResource(R.string.downloader_catalog_title),
+                                supportingContent = stringResource(R.string.downloader_catalog_description),
+                                modifier = modifier
+                            )
+                        }
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -661,7 +705,7 @@ fun DownloadsSettingsScreen(
                             horizontalArrangement = Arrangement.End
                         ) {
                             FilledTonalButton(
-                                onClick = { showImportUrlDialog = true },
+                                onClick = { showDownloaderCatalog = true },
                                 enabled = remoteSourceBusyState == null
                             ) {
                                 Text(stringResource(R.string.import_))
@@ -669,7 +713,8 @@ fun DownloadsSettingsScreen(
                         }
                     }
                 }
-                sourceStates.forEach { (sourceId, source) ->
+                sourceStates.entries.sortedBy { it.value.name.toDownloaderMainName().lowercase() }
+                    .forEach { (sourceId, source) ->
                     item(key = "source:$sourceId") {
                         var showExceptionViewer by remember { mutableStateOf(false) }
                         var showTrustDialog by remember { mutableStateOf(false) }
@@ -679,8 +724,10 @@ fun DownloadsSettingsScreen(
                         val sourceIsHelper = helperSource != null || untrustedSource?.helperApp == true
                         val helperPackageName = helperSource?.packageName
                             ?: untrustedSource?.packageName?.takeIf { untrustedSource.helperApp }
-                        val helperInstalled = helperPackageName != null &&
-                            apkDownloadHelpers.any { it.packageName == helperPackageName }
+                        val helperInstalled = helperSource?.installed == true || (helperPackageName != null &&
+                            apkDownloadHelpers.any { it.packageName == helperPackageName })
+                        val installedRemoteHelper = sourceIsHelper && helperInstalled && source.repoUrl.isNotBlank()
+                        val canUpdateHelper = sourceIsHelper && helperInstalled
                         val installingHelper =
                             remoteSourceBusyState == DownloadsViewModel.RemoteSourceBusyState.InstallingHelper(sourceId)
                         val uninstallingHelper = helperPackageName != null &&
@@ -741,6 +788,7 @@ fun DownloadsSettingsScreen(
 
                         DownloaderPluginCard(
                             title = source.name.toDownloaderMainName(),
+                            icon = { DownloaderSourceIcon(source, viewModel) },
                             version = source.version,
                             status = stringResource(
                                 when (source.state) {
@@ -756,7 +804,7 @@ fun DownloadsSettingsScreen(
                                             source.state.installedVersion != null &&
                                             source.version != source.state.installedVersion ->
                                             R.string.downloader_helper_source_update_downloaded
-                                        else -> R.string.installed
+                                        else -> R.string.downloader_source_state_loaded
                                     }
 
                                     is DownloaderPluginSourceState.State.Missing ->
@@ -768,25 +816,31 @@ fun DownloadsSettingsScreen(
                                     is DownloaderPluginSourceState.State.Failed ->
                                         R.string.downloader_source_state_failed
                                 }
-                            ),
-                            type = if (sourceIsHelper) DownloaderPluginType.Helper else DownloaderPluginType.Remote,
-                            detail = source.repoUrl.toGitHubRepoDisplayName(),
+                            ) + if (helperSource != null && !helperInstalled && !installingHelper) {
+                                "\n" + stringResource(R.string.downloader_source_state_loaded)
+                            } else "",
+                            type = when {
+                                source.repoUrl.isBlank() -> DownloaderPluginType.Local
+                                else -> DownloaderPluginType.Remote
+                            },
+                            detail = source.repoUrl.takeIf { it.isNotBlank() }?.toGitHubRepoDisplayName()
+                                ?: source.entry.assetSelector,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                             secondaryActionLabel = stringResource(
-                                if (sourceIsHelper) R.string.settings else R.string.delete
+                                if (installedRemoteHelper) R.string.settings else R.string.delete
                             ),
                             onSecondaryAction = {
-                                if (sourceIsHelper) {
+                                if (installedRemoteHelper) {
                                     sourceIdInSettings = sourceId
                                 } else {
                                     sourceIdPendingDeletion = sourceId
                                 }
                             },
                             middleActionLabel = stringResource(
-                                if (sourceIsHelper) R.string.update else R.string.settings
+                                if (canUpdateHelper) R.string.update else R.string.settings
                             ),
                             onMiddleAction = {
-                                if (sourceIsHelper) {
+                                if (canUpdateHelper) {
                                     viewModel.updatePluginSource(sourceId)
                                 } else {
                                     sourceIdInSettings = sourceId
@@ -816,8 +870,10 @@ fun DownloadsSettingsScreen(
                                     else -> viewModel.updatePluginSource(sourceId)
                                 }
                             },
-                            primaryActionEnabled = remoteSourceBusyState == null,
-                            middleActionEnabled = remoteSourceBusyState == null,
+                            primaryActionEnabled = remoteSourceBusyState == null &&
+                                (sourceIsHelper || untrustedSource != null || source.repoUrl.isNotBlank()),
+                            middleActionEnabled = remoteSourceBusyState == null &&
+                                (!canUpdateHelper || source.repoUrl.isNotBlank()),
                             secondaryActionEnabled = remoteSourceBusyState == null,
                             footerActionLabel = when {
                                 sourceIsHelper && helperInstalled -> stringResource(R.string.uninstall)
@@ -854,6 +910,7 @@ fun DownloadsSettingsScreen(
                 apkDownloadHelpers
                     .filterNot { it.packageName in managedHelperPackages }
                     .distinctBy { it.packageName }
+                    .sortedBy { it.label.toDownloaderMainName().lowercase() }
                     .forEach { helper ->
                         item(key = "helper:${helper.packageName}") {
                             var showTrustDialog by remember { mutableStateOf(false) }
@@ -926,12 +983,26 @@ fun DownloadsSettingsScreen(
 
                             DownloaderPluginCard(
                                 title = helper.label.toDownloaderMainName(),
+                                icon = {
+                                    val apk by androidx.compose.runtime.produceState<java.io.File?>(
+                                        null, helper.packageName, helper.version
+                                    ) {
+                                        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            viewModel.pm.getPackageInfo(helper.packageName)
+                                                ?.applicationInfo?.sourceDir?.let { java.io.File(it) }
+                                        }
+                                    }
+                                    app.universal.patch.manager.ui.component.RuntimePluginIcon(
+                                        apk, viewModel.pm, null, Modifier.size(44.dp),
+                                        cacheKey = helper.packageName + ":" + helper.version
+                                    )
+                                },
                                 version = helper.version,
                                 status = stringResource(
-                                    if (trusted) R.string.installed
+                                    if (trusted) R.string.downloader_source_state_loaded
                                     else R.string.downloader_plugin_state_untrusted
                                 ),
-                                type = DownloaderPluginType.Helper,
+                                type = DownloaderPluginType.Local,
                                 detail = helper.packageName,
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                                 primaryActionLabel = stringResource(
@@ -1064,6 +1135,11 @@ fun DownloadsSettingsScreen(
 
                         DownloaderPluginCard(
                             title = pluginTitle,
+                            icon = {
+                                app.universal.patch.manager.ui.component.AppIcon(
+                                    packageInfo, null, Modifier.size(44.dp)
+                                )
+                            },
                             version = packageInfo.versionName,
                             status = stringResource(
                                 when (state) {
@@ -1123,7 +1199,7 @@ fun DownloadsSettingsScreen(
                     SettingsSearchHighlight(
                         targetKey = R.string.downloaded_apps,
                         activeKey = highlightTarget,
-                        extraKeys = setOf(R.string.downloaded_apps_export),
+                        extraKeys = setOf(R.string.downloaded_apps_export, R.string.download_export_section),
                         onHighlightComplete = { highlightTarget = null }
                     ) { highlightModifier ->
                         GroupHeader(
@@ -1195,7 +1271,7 @@ private fun DownloadedAppCard(
     onDelete: () -> Unit,
     onInstall: () -> Unit
 ) {
-    val cardShape = RoundedCornerShape(18.dp)
+    val cardShape = MaterialTheme.shapes.large.withClassicCorner(18.dp)
     val elevation = if (selected) 6.dp else 2.dp
     val cardBackground = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
     val headerBackground = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp)
@@ -1227,6 +1303,7 @@ private fun DownloadedAppCard(
                 }
                 AppIcon(
                     packageInfo = displayInfo?.packageInfo,
+                    packageName = app.packageName,
                     contentDescription = null,
                     iconOverride = displayInfo?.icon,
                     modifier = Modifier.size(32.dp)
@@ -1287,6 +1364,7 @@ private fun DownloadedAppCard(
                 BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier
+                            .horizontalScrollFade(actionScrollState)
                             .widthIn(min = maxWidth)
                             .consumeHorizontalScroll(actionScrollState),
                         horizontalArrangement = Arrangement.spacedBy(
@@ -1427,8 +1505,7 @@ private data class PendingDownloadedAppsExportConfirmation(
 
 private enum class DownloaderPluginType(@StringRes val labelRes: Int) {
     Local(R.string.downloader_plugin_type_legacy),
-    Remote(R.string.downloader_plugin_type_modern),
-    Helper(R.string.downloader_plugin_type_helper)
+    Remote(R.string.downloader_plugin_type_modern)
 }
 
 private enum class DownloaderActionStyle {
@@ -1473,7 +1550,8 @@ private fun DownloaderPluginCard(
     primaryActionEnabled: Boolean = true,
     secondaryActionEnabled: Boolean = true,
     middleActionEnabled: Boolean = true,
-    footerActionEnabled: Boolean = true
+    footerActionEnabled: Boolean = true,
+    icon: (@Composable () -> Unit)? = null
 ) {
     val context = LocalContext.current
     val clipboard = remember(context) { context.getSystemService(ClipboardManager::class.java) }
@@ -1504,7 +1582,7 @@ private fun DownloaderPluginCard(
             headlineContent = title,
             supportingContentSlot = supportingSlot,
             leadingContent = {
-                DownloaderPluginLeadingIcon(type = type)
+                if (icon != null) icon() else DownloaderPluginLeadingIcon(type = type)
             },
             trailingContent = version.toPluginVersionLabel()?.let { pluginVersion ->
                 {
@@ -1627,10 +1705,9 @@ private fun DownloaderPluginLeadingIcon(
     val icon = when (type) {
         DownloaderPluginType.Local -> Icons.Outlined.Folder
         DownloaderPluginType.Remote -> Icons.Outlined.Link
-        DownloaderPluginType.Helper -> Icons.Outlined.Download
     }
     Card(
-        shape = RoundedCornerShape(18.dp),
+        shape = MaterialTheme.shapes.large.withClassicCorner(18.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
         )
@@ -1660,7 +1737,7 @@ private fun DownloaderPluginDetailBox(
     ) {
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
+                .clip(MaterialTheme.shapes.small.withClassicCorner(10.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
         ) {
             Text(
@@ -1690,128 +1767,135 @@ private fun DownloaderSourceSettingsDialog(
     val sourceLabel = remember(source.name) { source.name.toDownloaderDisplayLabel() }
     AlertDialog(
         onDismissRequest = onDismiss,
+        // Wider than the platform default so the switch rows keep room for their descriptions.
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.padding(horizontal = 16.dp),
         title = { CenteredDialogTitle(stringResource(R.string.downloader_source_settings_title, sourceLabel)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text(
-                    text = source.repoUrl.toGitHubRepoDisplayName(),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            if (source.repoUrl.isBlank()) {
+                Text(stringResource(R.string.downloader_local_source_description))
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text(
+                        text = source.repoUrl.toGitHubRepoDisplayName(),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.weight(1f)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(
-                                    text = stringResource(R.string.downloader_source_auto_update),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    text = stringResource(R.string.auto_update_description),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.downloader_source_auto_update),
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.auto_update_description),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                ExpressiveSettingsSwitch(
+                                    checked = source.entry.autoUpdate,
+                                    onCheckedChange = onAutoUpdateChanged
                                 )
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            ExpressiveSettingsSwitch(
-                                checked = source.entry.autoUpdate,
-                                onCheckedChange = onAutoUpdateChanged
-                            )
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(
-                                    text = stringResource(R.string.downloader_source_prerelease),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    text = stringResource(R.string.downloader_source_prerelease_description),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                Column(
+                                    modifier = Modifier.weight(1f).alpha(if (source.entry.latest) 0.38f else 1f)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.downloader_source_prerelease),
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.downloader_source_prerelease_description),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                ExpressiveSettingsSwitch(
+                                    checked = source.entry.prerelease && !source.entry.latest,
+                                    onCheckedChange = onPrereleaseChanged,
+                                    enabled = !source.entry.latest
                                 )
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            ExpressiveSettingsSwitch(
-                                checked = source.entry.prerelease && !source.entry.latest,
-                                onCheckedChange = onPrereleaseChanged,
-                                enabled = !source.entry.latest
-                            )
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(
-                                    text = stringResource(R.string.downloader_source_latest),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    text = stringResource(R.string.downloader_source_latest_description),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.downloader_source_latest),
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.downloader_source_latest_description),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                ExpressiveSettingsSwitch(
+                                    checked = source.entry.latest,
+                                    onCheckedChange = onLatestChanged
                                 )
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            ExpressiveSettingsSwitch(
-                                checked = source.entry.latest,
-                                onCheckedChange = onLatestChanged
-                            )
                         }
                     }
-                }
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.downloader_source_repo_url),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
-                                text = source.repoUrl,
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodySmall,
+                                text = stringResource(R.string.downloader_source_repo_url),
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            IconButton(onClick = onCopyRepoUrl) {
-                                Icon(
-                                    imageVector = Icons.Outlined.ContentCopy,
-                                    contentDescription = stringResource(R.string.copy_to_clipboard)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = source.repoUrl,
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                IconButton(onClick = onCopyRepoUrl) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.ContentCopy,
+                                        contentDescription = stringResource(R.string.copy_to_clipboard)
+                                    )
+                                }
                             }
                         }
                     }
@@ -2096,5 +2180,19 @@ private fun PluginFailedDialog(
                 }
             }
         }
+    )
+}
+
+@Composable
+private fun DownloaderSourceIcon(source: DownloaderPluginSourceState, viewModel: DownloadsViewModel) {
+    val apk by androidx.compose.runtime.produceState<java.io.File?>(null, source.entry, source.version) {
+        value = viewModel.pluginSourceApk(source.entry.id)
+    }
+    app.universal.patch.manager.ui.component.RuntimePluginIcon(
+        apk = apk, pm = viewModel.pm, previewUrl = null, modifier = Modifier.size(44.dp),
+        cacheKey = source.entry.id + ":" + source.entry.versionKey + ":" + source.version,
+        previewResource = app.universal.patch.manager.ui.component.downloaderCatalogPreviewIcon(
+            source.repoUrl, source.entry.assetSelector
+        )
     )
 }

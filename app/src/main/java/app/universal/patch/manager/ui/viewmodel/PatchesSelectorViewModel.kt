@@ -67,12 +67,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
@@ -117,7 +119,6 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         get() = packageName
     val currentAppVersion: String?
         get() = appVersion
-    private var currentBundles: List<PatchBundleInfo.Scoped> = emptyList()
     private val installerType = installerTypeFor(input.useMount)
     private val patchAvailabilityEnabled = prefs.patchAvailabilityEnabled.getBlocking()
     private val removeGmsCoreForMount = input.useMount &&
@@ -134,7 +135,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         private set
     private val suggestedVersionSafeguardEnabled = prefs.suggestedVersionSafeguard.getBlocking()
     private val allowUniversalPatchesFlow = prefs.disableUniversalPatchCheck.flow
-    val bundlesFlow =
+    private val scopedBundlesFlow =
         combine(appVersionState, selectedAppInfo) { version, info ->
             val resolvedVersionCode =
                 info?.takeIf { it.versionName == version }?.let(pm::getVersionCode)
@@ -144,8 +145,31 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         }.flatMapLatest { (version, versionCode) ->
             patchBundleRepository.scopedBundleInfoFlow(packageName, version, versionCode)
         }.combine(allowUniversalPatchesFlow) { bundles, allowUniversal ->
-            if (allowUniversal) bundles else bundles.map(PatchBundleInfo.Scoped::withoutUniversalPatches)
+            bundles.map { bundle ->
+                (if (allowUniversal) bundle else bundle.withoutUniversalPatches()).forSelection()
+            }
         }
+
+    // Publish the leading section with the same bundle snapshot used by selection actions.
+    val patchSectionsFlow = scopedBundlesFlow
+        .mapLatest { bundles -> bundles to loadNewPatchNames(bundles) }
+        .shareIn(viewModelScope, SharingStarted.Lazily, replay = 1)
+    val bundlesFlow = patchSectionsFlow.map { it.first }.distinctUntilChanged()
+    private val currentBundles: List<PatchBundleInfo.Scoped>
+        get() = patchSectionsFlow.replayCache.lastOrNull()?.first.orEmpty()
+
+    fun setPatchSectionsVisible(visible: Boolean) = viewModelScope.launch {
+        prefs.patchSelectionShowCustomSections.update(visible)
+    }
+
+    fun togglePatchSection(sectionId: String) = viewModelScope.launch {
+        prefs.edit {
+            val overrides = prefs.patchSelectionSectionOverrides.value
+            prefs.patchSelectionSectionOverrides.value =
+                if (sectionId in overrides) overrides - sectionId else overrides + sectionId
+        }
+    }
+
     val bundleDisplayNames =
         patchBundleRepository.sources.map { sources ->
             sources.associate { source ->
@@ -210,8 +234,6 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         }
     var showNewPatchesSection by mutableStateOf(prefs.patchSelectionShowNewPatches.getBlocking())
         private set
-    private val _newPatchNamesByBundle = MutableStateFlow<Map<Int, Set<String>>>(emptyMap())
-    val newPatchNamesByBundle = _newPatchNamesByBundle.asStateFlow()
     val suggestedVersionsByBundle = patchBundleRepository.suggestedVersionsByBundle
 
     init {
@@ -259,9 +281,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         }
 
         viewModelScope.launch {
-            bundlesFlow.collect { bundles ->
-                currentBundles = bundles
-                _newPatchNamesByBundle.value = loadNewPatchNames(bundles)
+            bundlesFlow.collect {
                 if (!allowUniversalPatches) pruneSelectionsAndOptions()
             }
         }
@@ -754,31 +774,36 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         bundle.uid.takeIf { required.isNotEmpty() }?.let { it to required }
     }.toMap().toPersistentMap()
 
-    val profiles = combine(
-        patchProfileRepository.profilesForPackageFlow(packageName),
-        patchBundleRepository.bundleInfoFlow,
-        patchBundleRepository.sources
-    ) { profiles, bundleInfoSnapshot, sources ->
-        if (profiles.isEmpty()) return@combine emptyList()
+    val profiles = patchProfileRepository.profilesForPackageFlow(packageName).flatMapLatest { profiles ->
+        flow {
+            // Saved profiles must remain selectable while bundle metadata loads
+            // or legacy local-bundle remapping performs runtime inspection.
+            emit(profiles)
+            if (profiles.isEmpty()) return@flow
+            emitAll(combine(
+                patchBundleRepository.bundleInfoFlow,
+                patchBundleRepository.sources
+            ) { bundleInfoSnapshot, sources ->
+                withContext(Dispatchers.Default) {
+                    val signatureMap = bundleInfoSnapshot.mapValues { (_, info) ->
+                        info.patches.map { it.name.trim().lowercase() }.toSet()
+                    }
 
-        val signatureMap = bundleInfoSnapshot.mapValues { (_, info) ->
-            info.patches.map { it.name.trim().lowercase() }.toSet()
-        }
-
-        profiles.map { profile ->
-            val remappedPayload = profile.payload.remapLocalBundles(sources, signatureMap)
-            if (remappedPayload !== profile.payload) {
-                viewModelScope.launch(Dispatchers.Default) {
-                    patchProfileRepository.updateProfile(
-                        uid = profile.uid,
-                        packageName = profile.packageName,
-                        appVersion = profile.appVersion,
-                        name = profile.name,
-                        payload = remappedPayload
-                    )
+                    profiles.map { profile ->
+                        val remappedPayload = profile.payload.remapLocalBundles(sources, signatureMap)
+                        if (remappedPayload !== profile.payload) {
+                            viewModelScope.launch(Dispatchers.Default) {
+                                patchProfileRepository.updateRemappedPayload(
+                                    uid = profile.uid,
+                                    expectedPayload = profile.payload,
+                                    payload = remappedPayload
+                                )
+                            }
+                            profile.copy(payload = remappedPayload)
+                        } else profile
+                    }
                 }
-                profile.copy(payload = remappedPayload)
-            } else profile
+            })
         }
     }
 

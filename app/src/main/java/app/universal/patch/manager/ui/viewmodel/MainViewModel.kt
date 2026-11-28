@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.viewmodel
 
+import app.universal.patch.manager.data.platform.SharedApkFiles
 import android.app.Activity
 import android.app.Application
 import android.content.Intent
@@ -25,6 +26,7 @@ import app.universal.patch.manager.ui.model.navigation.SelectedApplicationInfo
 import app.universal.patch.manager.ui.theme.Theme
 import app.universal.patch.manager.util.PatchSelection
 import app.universal.patch.manager.util.AnnouncementDeepLinkIntent
+import app.universal.patch.manager.worker.RootMountReconcileWorker
 import app.universal.patch.manager.util.BatchPatchIntents
 import app.universal.patch.manager.util.BundleDeepLink
 import app.universal.patch.manager.util.BundleDeepLinkIntent
@@ -69,6 +71,8 @@ class MainViewModel(
     val legacyImportActivityFlow = legacyImportActivityChannel.receiveAsFlow()
     private val bundleDeepLinkChannel = Channel<BundleDeepLink>(Channel.BUFFERED)
     val bundleDeepLinkFlow = bundleDeepLinkChannel.receiveAsFlow()
+    private val runtimeUpdateDeepLinkChannel = Channel<Unit>(Channel.BUFFERED)
+    val runtimeUpdateDeepLinkFlow = runtimeUpdateDeepLinkChannel.receiveAsFlow()
     private val managerUpdateDeepLinkChannel = Channel<Unit>(Channel.BUFFERED)
     val managerUpdateDeepLinkFlow = managerUpdateDeepLinkChannel.receiveAsFlow()
     private val announcementDeepLinkChannel =
@@ -82,6 +86,8 @@ class MainViewModel(
     val batchPatchRequestFlow = batchPatchRequestChannel.receiveAsFlow()
     private val dashboardRequestChannel = Channel<Unit>(Channel.BUFFERED)
     val dashboardRequestFlow = dashboardRequestChannel.receiveAsFlow()
+    private val patchedAppsRequestChannel = Channel<List<String>>(Channel.BUFFERED)
+    val patchedAppsRequestFlow = patchedAppsRequestChannel.receiveAsFlow()
     private var initialIntentHandled = false
 
     private suspend fun suggestedVersion(packageName: String): String? {
@@ -123,7 +129,7 @@ class MainViewModel(
         val sourcePath = sourceRecord.repatchSourcePath
             ?.takeIf(String::isNotBlank)
             ?: return null
-        val file = File(sourcePath).takeIf(File::isFile) ?: return null
+        val file = SharedApkFiles.resolve(File(sourcePath)).takeIf(File::isFile) ?: return null
         return SelectedApp.Local(
             packageName = packageName,
             version = sourceRecord.version,
@@ -201,8 +207,27 @@ class MainViewModel(
         handleIntent(intent)
     }
 
+    private val downloaderUpdateDeepLinkChannel = Channel<Unit>(Channel.BUFFERED)
+    val downloaderUpdateDeepLinkFlow = downloaderUpdateDeepLinkChannel.receiveAsFlow()
+    private val rootMountDeepLinkChannel = Channel<String>(Channel.BUFFERED)
+    val rootMountDeepLinkFlow = rootMountDeepLinkChannel.receiveAsFlow()
+
     fun handleIntent(intent: Intent?) {
+        if (intent?.action == RootMountReconcileWorker.ACTION_OPEN_ROOT_MOUNT) {
+            intent.data?.takeIf { it.scheme == "package" }?.schemeSpecificPart
+                ?.takeIf { it.matches(Regex("[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)+")) }
+                ?.let { rootMountDeepLinkChannel.trySend(it) }
+            return
+        }
+        if (intent?.getBooleanExtra("open_downloaders", false) == true) {
+            downloaderUpdateDeepLinkChannel.trySend(Unit)
+            return
+        }
         if (handleBatchIntent(intent)) return
+        if (intent?.getBooleanExtra("open_patcher_runtimes", false) == true) {
+            runtimeUpdateDeepLinkChannel.trySend(Unit)
+            return
+        }
         if (ManagerUpdateDeepLinkIntent.shouldOpenManagerUpdate(intent)) {
             managerUpdateDeepLinkChannel.trySend(Unit)
         }
@@ -235,7 +260,8 @@ class MainViewModel(
         if (action !in setOf(
                 BatchPatchIntents.ACTION_PATCH_APP,
                 BatchPatchIntents.ACTION_CHECK_UPDATES,
-                BatchPatchIntents.ACTION_SHOW_RESULT
+                BatchPatchIntents.ACTION_SHOW_RESULT,
+                BatchPatchIntents.ACTION_SHOW_APPS
             )
         ) return false
 
@@ -246,6 +272,9 @@ class MainViewModel(
         }
 
         when (action) {
+            BatchPatchIntents.ACTION_SHOW_APPS -> {
+                patchedAppsRequestChannel.trySend(BatchPatchIntents.packageNames(intent))
+            }
             BatchPatchIntents.ACTION_SHOW_RESULT -> {
                 val packages = BatchPatchIntents.packageNames(intent)
                 if (packages.isEmpty()) {

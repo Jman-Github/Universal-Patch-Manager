@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.component
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,6 +29,7 @@ import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -36,11 +39,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import app.universal.patch.manager.ui.theme.LocalExpressiveDesign
 import androidx.compose.ui.unit.dp
 
 object SettingsSectionIcons {
     val NavigationTabs: ImageVector = Icons.Outlined.Apps
     val Theme: ImageVector = Icons.Outlined.Palette
+    val AppIcons: ImageVector = Icons.Outlined.Widgets
     val Background: ImageVector = Icons.Outlined.Image
     val AppBehavior: ImageVector = Icons.Outlined.Tune
     val NetworkIntegrations: ImageVector = Icons.Outlined.Api
@@ -72,27 +77,32 @@ fun GroupHeader(
     icon: ImageVector? = null,
     modifier: Modifier = Modifier
 ) {
+    val expressive = LocalExpressiveDesign.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp)
             .semantics { heading() }
             .then(modifier),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (expressive) 12.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (icon != null) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
-                modifier = Modifier.size(18.dp)
+                tint = if (expressive) MaterialTheme.colorScheme.onSecondaryContainer
+                    else MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                modifier = if (expressive) {
+                    Modifier.background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+                        .padding(7.dp).size(18.dp)
+                } else Modifier.size(18.dp)
             )
         }
         Text(
             text = title,
             color = MaterialTheme.colorScheme.primary,
-            style = MaterialTheme.typography.titleSmall,
+            style = if (expressive) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
             modifier = Modifier.weight(1f)
         )
     }

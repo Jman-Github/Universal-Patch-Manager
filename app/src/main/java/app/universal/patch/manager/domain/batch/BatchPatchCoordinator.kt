@@ -5,6 +5,7 @@
 
 package app.universal.patch.manager.domain.batch
 
+import app.universal.patch.manager.data.platform.SharedApkFiles
 import android.app.Activity
 import android.app.Application
 import android.content.Intent
@@ -82,6 +83,7 @@ import app.universal.patch.manager.util.buildSavedAppVariantIdentity
 import app.universal.patch.manager.util.isSavedAppEntryForPackage
 import app.universal.patch.manager.util.simpleMessage
 import app.universal.patch.manager.util.toastHandle
+import app.universal.patch.manager.util.versionCodeFor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -368,8 +370,9 @@ class BatchPatchCoordinator(
                 throw cancelled
             } catch (error: Exception) {
                 nextPhase = BatchPhase.FINISHED
-                entries.distinctBy { it.input.packageName }.map { entry ->
+                entries.distinctBy { it.key }.map { entry ->
                     BatchPatchItem(
+                        key = entry.key,
                         packageName = entry.input.packageName,
                         appName = entry.input.packageName,
                         version = entry.input.version,
@@ -409,10 +412,10 @@ class BatchPatchCoordinator(
             installJob?.isActive == true
         ) return false
 
-        val retryPackages = snapshot.items.filter {
+        val retryKeys = snapshot.items.filter {
             it.state == BatchItemState.FAILED || it.state == BatchItemState.CANCELLED
-        }.map { it.packageName }.distinct()
-        if (retryPackages.isEmpty() || !tryAcquireExecution()) return false
+        }.map { it.key }.distinct()
+        if (retryKeys.isEmpty() || !tryAcquireExecution()) return false
 
         job = scope.launch {
             mutableState.value = snapshot.copy(
@@ -424,24 +427,25 @@ class BatchPatchCoordinator(
             )
             val replacements = try {
                 if (manualEntries == null) {
+                    // Planned batches key each app by its package name.
                     resolver.resolve(
-                        retryPackages,
+                        retryKeys,
                         forcedUseMount = batchForcedUseMount(
                             snapshot.scheduled,
                             prefs.autoPatchInstallWithShizuku.get()
                         )
                     )
                 } else {
-                    val retrySet = retryPackages.toSet()
+                    val retrySet = retryKeys.toSet()
                     resolver.resolveManual(
-                        manualEntries.filter { it.input.packageName in retrySet }
+                        manualEntries.filter { it.key in retrySet }
                     )
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                retryPackages.map { packageName ->
-                    snapshot.items.first { it.packageName == packageName }.copy(
+                retryKeys.map { key ->
+                    snapshot.items.first { it.key == key }.copy(
                         state = BatchItemState.FAILED,
                         message = error.message ?: "Unable to prepare retry",
                         progressEvents = emptyList(),
@@ -449,13 +453,13 @@ class BatchPatchCoordinator(
                         memoryUsageSamples = emptyList()
                     )
                 }
-            }.associateBy { it.packageName }
+            }.associateBy { it.key }
 
             val items = snapshot.items.map { item ->
-                if (item.packageName !in retryPackages) {
+                if (item.key !in retryKeys) {
                     item
                 } else {
-                    replacements[item.packageName] ?: item.copy(
+                    replacements[item.key] ?: item.copy(
                         state = BatchItemState.FAILED,
                         message = "The retry source is no longer available",
                         progressEvents = emptyList(),
@@ -483,10 +487,10 @@ class BatchPatchCoordinator(
         job = scope.launch { runQueue() }
     }
 
-    fun reorder(packageNames: List<String>) {
+    fun reorder(keys: List<String>) {
         mutableState.update { current ->
             current?.takeIf { it.phase == BatchPhase.PREFLIGHT }?.let { snapshot ->
-                snapshot.copy(items = reorderBatchItems(snapshot.items, packageNames))
+                snapshot.copy(items = reorderBatchItems(snapshot.items, keys))
             } ?: current
         }
     }
@@ -641,8 +645,8 @@ class BatchPatchCoordinator(
                 mutableState.update { current ->
                     current?.takeIf { it.phase == BatchPhase.RUNNING }?.copy(
                         phase = BatchPhase.INSTALLING,
-                        activeIndex = current.activeInstallPackageName?.let { packageName ->
-                            current.items.indexOfFirst { it.packageName == packageName }
+                        activeIndex = current.activeInstallKey?.let { key ->
+                            current.items.indexOfFirst { it.key == key }
                         },
                         detail = null
                     ) ?: current
@@ -664,7 +668,7 @@ class BatchPatchCoordinator(
                     afterPatch.copy(
                         phase = BatchPhase.FINISHED,
                         activeIndex = null,
-                        activeInstallPackageName = null,
+                        activeInstallKey = null,
                         progress = 1f,
                         detail = null
                     )
@@ -695,7 +699,7 @@ class BatchPatchCoordinator(
     }
 
     private suspend fun hasOriginalSignatureMetadata(item: BatchPatchItem): Boolean {
-        val source = item.repatchSourcePath?.let(::File)?.takeIf(File::isFile) ?: return false
+        val source = item.repatchSourcePath?.let { SharedApkFiles.resolve(File(it)) }?.takeIf(File::isFile) ?: return false
         return try {
             signatureMetadataInjector.analyzeSignatureSource(source)
             true
@@ -1099,6 +1103,9 @@ class BatchPatchCoordinator(
             ?.takeIf { mutableState.value?.scheduled == true }
             ?.let { savedVariantIdentity(it) }
         val sourceSavedEntry = sourceEntry
+            // The same app queued with several bundle sets shares one source entry; each output
+            // then keeps its own saved entry instead of replacing that source in turn.
+            ?.takeUnless { sharesBatchSourceEntry(mutableState.value?.items.orEmpty(), item) }
             ?.takeIf { sourceEntry ->
                 sourceEntry.installType == InstallType.SAVED &&
                     (
@@ -1173,7 +1180,9 @@ class BatchPatchCoordinator(
                 useMount = item.useMount,
                 resetCreatedAt = true,
                 repatchSourcePath = item.repatchSourcePath,
-                updateRepatchSource = true
+                updateRepatchSource = true,
+                versionCode = info?.versionCodeFor(version),
+                updateVersionCode = true
             )
         } catch (error: Throwable) {
             if (copiedOutput && replacementStarted) {
@@ -1285,50 +1294,50 @@ class BatchPatchCoordinator(
         )
     }
 
-    suspend fun saveForLater(packageName: String): Boolean =
-        saveForLater(setOf(packageName))
+    suspend fun saveForLater(key: String): Boolean =
+        saveForLater(setOf(key))
 
     suspend fun saveAllForLater(): Boolean {
-        val packageNames = mutableState.value?.unsavedPatchedItems
+        val keys = mutableState.value?.unsavedPatchedItems
             .orEmpty()
-            .mapTo(mutableSetOf()) { it.packageName }
-        return packageNames.isEmpty() || saveForLater(packageNames)
+            .mapTo(mutableSetOf()) { it.key }
+        return keys.isEmpty() || saveForLater(keys)
     }
 
-    private suspend fun saveForLater(packageNames: Set<String>): Boolean {
+    private suspend fun saveForLater(keys: Set<String>): Boolean {
         val snapshot = mutableState.value ?: return false
         if (
             snapshot.phase != BatchPhase.FINISHED ||
             installJob?.isActive == true ||
             snapshot.items.any { it.saving } ||
-            packageNames.isEmpty() ||
+            keys.isEmpty() ||
             !tryAcquireExecution()
         ) return false
 
         mutableState.update { current ->
             current?.copy(
                 items = current.items.map { item ->
-                    item.copy(saving = item.packageName in packageNames && item.needsSaveBeforeLeaving)
+                    item.copy(saving = item.key in keys && item.needsSaveBeforeLeaving)
                 }
             )
         }
         var allSaved = true
         try {
-            packageNames.forEach { packageName ->
+            keys.forEach { key ->
                 val currentItem = mutableState.value?.items
-                    ?.firstOrNull { it.packageName == packageName }
+                    ?.firstOrNull { it.key == key }
                     ?: return@forEach
                 if (!currentItem.needsSaveBeforeLeaving) return@forEach
                 val sourceFile = currentItem.patchedFile?.takeIf(File::isFile)
                 if (sourceFile == null) {
                     allSaved = false
-                    updateItemByPackage(packageName) { it.copy(saving = false) }
+                    updateItemByKey(key) { it.copy(saving = false) }
                     return@forEach
                 }
                 try {
                     val persistedItem = persistPatchedItem(currentItem, sourceFile)
                     fs.deleteRepatchInputStagingFile(currentItem.repatchSourcePath)
-                    updateItemByPackage(packageName) {
+                    updateItemByKey(key) {
                         it.copy(
                             patchedFile = persistedItem.file,
                             repatchSourcePath = persistedItem.repatchSourcePath,
@@ -1342,8 +1351,8 @@ class BatchPatchCoordinator(
                     throw cancelled
                 } catch (error: Exception) {
                     allSaved = false
-                    Log.e(TAG, "Failed to save batch patched APK for $packageName", error)
-                    updateItemByPackage(packageName) {
+                    Log.e(TAG, "Failed to save batch patched APK for ${currentItem.packageName}", error)
+                    updateItemByKey(key) {
                         it.copy(
                             saving = false,
                             message = error.message ?: "Unable to save the patched APK"
@@ -1391,10 +1400,10 @@ class BatchPatchCoordinator(
         mutableState.update { it?.copy(policy = policy) }
     }
 
-    fun toggleExcluded(packageName: String) {
+    fun toggleExcluded(key: String) {
         mutableState.update { state ->
             state?.copy(items = state.items.map { item ->
-                if (item.packageName != packageName) item
+                if (item.key != key) item
                 else if (item.state == BatchItemState.EXCLUDED) {
                     item.copy(
                         state = item.restoreState ?: BatchItemState.READY,
@@ -1407,10 +1416,10 @@ class BatchPatchCoordinator(
         }
     }
 
-    fun forceVersion(packageName: String) {
+    fun forceVersion(key: String) {
         mutableState.update { state ->
             state?.copy(items = state.items.map { item ->
-                if (item.packageName == packageName &&
+                if (item.key == key &&
                     item.state == BatchItemState.VERSION_MISMATCH
                 ) {
                     item.copy(
@@ -1427,14 +1436,14 @@ class BatchPatchCoordinator(
     }
 
     fun updateConfiguration(
-        packageName: String,
+        key: String,
         selection: app.universal.patch.manager.util.PatchSelection,
         options: app.universal.patch.manager.util.Options
     ) {
         val normalizedSelection = selection.filterValues { it.isNotEmpty() }
         mutableState.update { state ->
             state?.copy(items = state.items.map { item ->
-                if (item.packageName != packageName) item
+                if (item.key != key) item
                 else item.copy(
                     selection = normalizedSelection,
                     options = options,
@@ -1467,7 +1476,7 @@ class BatchPatchCoordinator(
             mutableState.update { state ->
                 state?.copy(items = state.items.map { item ->
                     if (
-                        item.packageName == packageName &&
+                        item.key == key &&
                         item.selection == normalizedSelection
                     ) {
                         item.copy(patcherEngine = patcherEngine)
@@ -1480,11 +1489,11 @@ class BatchPatchCoordinator(
     }
 
     suspend fun attachApk(
-        packageName: String,
+        key: String,
         file: File
     ): BatchPatchItem? {
         val current = mutableState.value ?: return null
-        val index = current.items.indexOfFirst { it.packageName == packageName }
+        val index = current.items.indexOfFirst { it.key == key }
         if (index < 0) return null
         val resolved = resolver.reattach(current.items[index], file)
         updateItem(index) { resolved }
@@ -1492,11 +1501,11 @@ class BatchPatchCoordinator(
     }
 
     suspend fun attachSource(
-        packageName: String,
+        key: String,
         input: app.universal.patch.manager.ui.model.SelectedApp
     ): BatchPatchItem? {
         val current = mutableState.value ?: return null
-        val index = current.items.indexOfFirst { it.packageName == packageName }
+        val index = current.items.indexOfFirst { it.key == key }
         if (index < 0) return null
         val resolved = resolver.reattach(current.items[index], input)
         updateItem(index) { resolved }
@@ -1513,14 +1522,14 @@ class BatchPatchCoordinator(
                 prefs.chooseInstallerPerInstall.getBlocking()
             )
         ) return
-        val packages = snapshot.patchedItems
+        val keys = snapshot.patchedItems
             .filter { it.installOutcome != BatchInstallOutcome.INSTALLED }
-            .map { it.packageName }
-        if (packages.isEmpty() || !tryAcquireExecution()) return
+            .map { it.key }
+        if (keys.isEmpty() || !tryAcquireExecution()) return
         mutableState.value = snapshot.copy(
             phase = BatchPhase.INSTALLING,
             items = snapshot.items.map { item ->
-                item.copy(installing = item.packageName in packages)
+                item.copy(installing = item.key in keys)
             }
         )
         installJob = launchInstall {
@@ -1533,24 +1542,24 @@ class BatchPatchCoordinator(
         forceShizuku: Boolean = false
     ) {
         val snapshot = initial ?: mutableState.value ?: return
-        val packages = snapshot.patchedItems
+        val keys = snapshot.patchedItems
             .filter { it.installOutcome != BatchInstallOutcome.INSTALLED }
-            .map { it.packageName }
+            .map { it.key }
         mutableState.value = snapshot.copy(
             phase = BatchPhase.INSTALLING,
             activeIndex = null,
             detail = null,
             items = snapshot.items.map { item ->
-                item.copy(installing = item.packageName in packages)
+                item.copy(installing = item.key in keys)
             }
         )
-        for (packageName in packages) {
-            installOne(packageName, forceShizuku = forceShizuku)
+        for (key in keys) {
+            installOne(key, forceShizuku = forceShizuku)
         }
         val finished = mutableState.value?.copy(
             phase = BatchPhase.FINISHED,
             activeIndex = null,
-            activeInstallPackageName = null,
+            activeInstallKey = null,
             detail = null,
             items = mutableState.value?.items.orEmpty().map { it.copy(installing = false) }
         ) ?: return
@@ -1559,11 +1568,11 @@ class BatchPatchCoordinator(
 
     @Synchronized
     fun install(
-        packageName: String,
+        key: String,
         installerToken: InstallerManager.Token? = null
     ) {
         val snapshot = mutableState.value ?: return
-        val item = snapshot.items.firstOrNull { it.packageName == packageName } ?: return
+        val item = snapshot.items.firstOrNull { it.key == key } ?: return
         if (
             !snapshot.canInstallBatchItem(item) ||
             installJob?.isActive == true ||
@@ -1574,23 +1583,23 @@ class BatchPatchCoordinator(
             current?.copy(
                 phase = if (whilePatching) current.phase else BatchPhase.INSTALLING,
                 activeIndex = if (whilePatching) current.activeIndex
-                    else current.items.indexOfFirst { it.packageName == packageName },
-                activeInstallPackageName = packageName,
+                    else current.items.indexOfFirst { it.key == key },
+                activeInstallKey = key,
                 items = current.items.map {
-                    if (it.packageName == packageName) it.copy(installing = true) else it
+                    if (it.key == key) it.copy(installing = true) else it
                 }
             )
         }
         installJob = launchInstall(
-            concurrentPackageName = packageName.takeIf { whilePatching }
+            concurrentKey = key.takeIf { whilePatching }
         ) {
-            installOne(packageName, installerToken = installerToken)
+            installOne(key, installerToken = installerToken)
             if (!whilePatching) {
                 val current = mutableState.value ?: return@launchInstall
                 finish(current.copy(
                     phase = BatchPhase.FINISHED,
                     activeIndex = null,
-                    activeInstallPackageName = null,
+                    activeInstallKey = null,
                     detail = null,
                     items = current.items.map { it.copy(installing = false) }
                 ))
@@ -1599,11 +1608,11 @@ class BatchPatchCoordinator(
     }
 
     private fun launchInstall(
-        concurrentPackageName: String? = null,
+        concurrentKey: String? = null,
         block: suspend () -> Unit
     ): Job = scope.launch {
         suspend fun interrupted(error: Throwable) {
-            if (concurrentPackageName == null) {
+            if (concurrentKey == null) {
                 finishInterruptedInstall(error)
             } else {
                 withContext(NonCancellable) {
@@ -1615,7 +1624,7 @@ class BatchPatchCoordinator(
                     }
                     mutableState.update { current ->
                         current?.let {
-                            interruptBatchItemInstall(it, concurrentPackageName, message)
+                            interruptBatchItemInstall(it, concurrentKey, message)
                         }
                     }
                 }
@@ -1631,7 +1640,7 @@ class BatchPatchCoordinator(
             interrupted(error)
         } finally {
             mutableState.update { current ->
-                current?.copy(activeInstallPackageName = null)
+                current?.copy(activeInstallKey = null)
             }
         }
     }
@@ -1684,7 +1693,7 @@ class BatchPatchCoordinator(
             version = sourceVersionName,
             versionCode = sourceVersionCode
         )
-        val repatchSource = item.repatchSourcePath?.let(::File)
+        val repatchSource = item.repatchSourcePath?.let { SharedApkFiles.resolve(File(it)) }
         val localSource = (item.input as? SelectedApp.Local)?.file
         return (sequenceOf(repatchSource, localSource).filterNotNull() + retainedOriginals.asSequence())
             .distinctBy { it.absolutePath }
@@ -1887,8 +1896,8 @@ class BatchPatchCoordinator(
         )
     }
 
-    suspend fun supportsRootMountModeOverride(packageName: String): Boolean {
-        val item = mutableState.value?.items?.firstOrNull { it.packageName == packageName }
+    suspend fun supportsRootMountModeOverride(key: String): Boolean {
+        val item = mutableState.value?.items?.firstOrNull { it.key == key }
             ?: return false
         val patchedFile = item.patchedFile?.takeIf(File::isFile) ?: return false
         return canSelectRootMountForPatchedOutput(
@@ -1898,7 +1907,7 @@ class BatchPatchCoordinator(
     }
 
     private suspend fun installOne(
-        packageName: String,
+        key: String,
         forceShizuku: Boolean = false,
         installerToken: InstallerManager.Token? = null
     ) {
@@ -1906,12 +1915,12 @@ class BatchPatchCoordinator(
         val allowAutomaticUninstall = state.scheduled &&
             forceShizuku &&
             prefs.autoPatchUninstallOnConflictWithShizuku.get()
-        val index = state.items.indexOfFirst { it.packageName == packageName }
+        val index = state.items.indexOfFirst { it.key == key }
         val item = state.items.getOrNull(index) ?: return
         mutableState.update { current ->
             current?.copy(
                 activeIndex = if (current.phase == BatchPhase.RUNNING) current.activeIndex else index,
-                activeInstallPackageName = packageName
+                activeInstallKey = key
             )
         }
         val file = item.patchedFile?.takeIf { it.exists() }
@@ -2259,7 +2268,7 @@ class BatchPatchCoordinator(
                 )
             ) {
                 installOne(
-                    packageName = packageName,
+                    key = key,
                     installerToken = fallbackToken
                 )
                 return
@@ -2752,7 +2761,8 @@ class BatchPatchCoordinator(
         installType: InstallType,
         customInstallerPackageName: String?
     ): PersistedBatchPatchedItem {
-        val version = pm.getPackageInfo(sourceFile)?.versionName?.takeIf(String::isNotBlank)
+        val info = pm.getPackageInfo(sourceFile)
+        val version = info?.versionName?.takeIf(String::isNotBlank)
             ?: item.version
             ?: "unknown"
         val selectionPayload = (item.selectionPayload
@@ -2854,7 +2864,9 @@ class BatchPatchCoordinator(
                     sortOrderOverride = replacementSortOrder,
                     customInstallerPackageName = customInstallerPackageName,
                     repatchSourcePath = item.repatchSourcePath,
-                    updateRepatchSource = true
+                    updateRepatchSource = true,
+                    versionCode = info?.versionCodeFor(version),
+                    updateVersionCode = true
                 )
             }
             if (pendingHistoricalEntry != null) {
@@ -3120,7 +3132,7 @@ class BatchPatchCoordinator(
             val cancelled = mutableState.value?.copy(
                 phase = BatchPhase.FINISHED,
                 activeIndex = null,
-                activeInstallPackageName = null,
+                activeInstallKey = null,
                 detail = null,
                 items = mutableState.value?.items.orEmpty().map { item ->
                     if (
@@ -3207,6 +3219,7 @@ class BatchPatchCoordinator(
                     installOutcome != BatchInstallOutcome.INSTALLED &&
                     item.selectionPayload == null
                 BatchPatchItem(
+                    key = item.key ?: item.packageName,
                     packageName = item.packageName,
                     appName = item.appName,
                     version = item.version,
@@ -3303,6 +3316,7 @@ class BatchPatchCoordinator(
             scheduled = state.scheduled,
             items = state.items.map { item ->
                 BatchResultItemSnapshot(
+                    key = item.key,
                     packageName = item.packageName,
                     appName = item.appName,
                     version = item.version,
@@ -3416,13 +3430,13 @@ class BatchPatchCoordinator(
         }
     }
 
-    private fun updateItemByPackage(
-        packageName: String,
+    private fun updateItemByKey(
+        key: String,
         transform: (BatchPatchItem) -> BatchPatchItem
     ) {
         mutableState.update { state ->
             state?.copy(items = state.items.map { item ->
-                if (item.packageName == packageName) transform(item) else item
+                if (item.key == key) transform(item) else item
             })
         }
     }

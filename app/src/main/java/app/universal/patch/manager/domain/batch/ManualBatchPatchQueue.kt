@@ -19,7 +19,38 @@ data class ManualBatchPatchEntry(
     val useMount: Boolean,
     val signatureWorkflow: PatchProfilePayload.SignatureWorkflow? = null,
     val sourceEntryKey: String? = null,
+    // Identifies the entry: the same app can be queued once for each set of patch bundles.
+    val key: String = input.packageName,
 )
+
+/**
+ * The entry an upsert replaces: the one with [key] when given, otherwise the same app patched
+ * with the same bundles. Queueing the app with other bundles adds a separate entry.
+ */
+internal fun manualBatchEntryIndex(
+    entries: List<ManualBatchPatchEntry>,
+    key: String?,
+    packageName: String,
+    selection: PatchSelection
+): Int = if (key != null) {
+    entries.indexOfFirst { it.key == key }
+} else {
+    entries.indexOfFirst {
+        it.input.packageName == packageName && it.selection.keys == selection.keys
+    }
+}
+
+/** The package name for an app's first entry, then a numbered key for each further entry. */
+internal fun nextManualBatchEntryKey(
+    entries: List<ManualBatchPatchEntry>,
+    packageName: String
+): String {
+    val used = entries.mapTo(mutableSetOf()) { it.key }
+    if (packageName !in used) return packageName
+    return generateSequence(2) { it + 1 }
+        .map { "$packageName#$it" }
+        .first { it !in used }
+}
 
 class ManualBatchPatchQueue(
     private val filesystem: Filesystem,
@@ -39,6 +70,7 @@ class ManualBatchPatchQueue(
         useMount: Boolean,
         signatureWorkflow: PatchProfilePayload.SignatureWorkflow? = null,
         sourceEntryKey: String? = null,
+        key: String? = null,
     ) {
         val generationAtStart = synchronized(lock) { queueGeneration }
         val (preparedInput, ownedPath) = prepareInput(input)
@@ -50,24 +82,29 @@ class ManualBatchPatchQueue(
                 }
                 ownedPath?.let(ownedSourcePaths::add)
                 val current = mutableEntries.value
-                val previous = current.firstOrNull {
-                    it.input.packageName == preparedInput.packageName
-                }
+                val queuedSelection = selection.filterValues { it.isNotEmpty() }
+                val index = manualBatchEntryIndex(
+                    current,
+                    key,
+                    preparedInput.packageName,
+                    queuedSelection
+                )
+                val previous = current.getOrNull(index)
                 val replacement = ManualBatchPatchEntry(
                     input = preparedInput,
-                    selection = selection.filterValues { it.isNotEmpty() },
+                    selection = queuedSelection,
                     options = options,
                     useMount = useMount,
                     signatureWorkflow = signatureWorkflow,
                     sourceEntryKey = sourceEntryKey,
+                    key = previous?.key
+                        ?: key
+                        ?: nextManualBatchEntryKey(current, preparedInput.packageName),
                 )
                 mutableEntries.value = if (previous == null) {
                     current + replacement
                 } else {
-                    current.map { entry ->
-                        if (entry.input.packageName == preparedInput.packageName) replacement
-                        else entry
-                    }
+                    current.toMutableList().also { it[index] = replacement }
                 }
                 deleteOwnedInput(previous?.input, except = preparedInput)
                 reconcileOptions()
@@ -76,13 +113,13 @@ class ManualBatchPatchQueue(
     }
 
     fun updateConfiguration(
-        packageName: String,
+        key: String,
         selection: PatchSelection,
         options: Options
     ) {
         synchronized(lock) {
             mutableEntries.value = mutableEntries.value.map { entry ->
-                if (entry.input.packageName == packageName) {
+                if (entry.key == key) {
                     entry.copy(
                         selection = selection.filterValues { it.isNotEmpty() },
                         options = options
@@ -95,14 +132,10 @@ class ManualBatchPatchQueue(
         }
     }
 
-    fun remove(packageName: String) {
+    fun remove(key: String) {
         synchronized(lock) {
-            val previous = mutableEntries.value.firstOrNull {
-                it.input.packageName == packageName
-            }
-            mutableEntries.value = mutableEntries.value.filterNot {
-                it.input.packageName == packageName
-            }
+            val previous = mutableEntries.value.firstOrNull { it.key == key }
+            mutableEntries.value = mutableEntries.value.filterNot { it.key == key }
             deleteOwnedInput(previous?.input)
             reconcileOptions()
         }
@@ -124,13 +157,13 @@ class ManualBatchPatchQueue(
         mutableEntries.value.toList()
     }
 
-    fun reorder(packageNames: List<String>) {
+    fun reorder(keys: List<String>) {
         synchronized(lock) {
-            val order = packageNames.distinct().withIndex().associate { it.value to it.index }
+            val order = keys.distinct().withIndex().associate { it.value to it.index }
             mutableEntries.value = mutableEntries.value.withIndex()
                 .sortedWith(
                     compareBy<IndexedValue<ManualBatchPatchEntry>> {
-                        order[it.value.input.packageName] ?: Int.MAX_VALUE
+                        order[it.value.key] ?: Int.MAX_VALUE
                     }.thenBy { it.index }
                 )
                 .map { it.value }

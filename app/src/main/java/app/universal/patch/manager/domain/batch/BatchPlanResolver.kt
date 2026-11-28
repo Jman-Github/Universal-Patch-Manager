@@ -5,6 +5,7 @@
 
 package app.universal.patch.manager.domain.batch
 
+import app.universal.patch.manager.data.platform.SharedApkFiles
 import androidx.core.content.pm.PackageInfoCompat
 import app.universal.patch.manager.data.platform.Filesystem
 import app.universal.patch.manager.data.room.apps.installed.InstallType
@@ -64,14 +65,18 @@ class BatchPlanResolver(
         forcedUseMount: Boolean? = null
     ): List<BatchPatchItem> = coroutineScope {
         packageNames.distinct().map { packageName ->
-            async { resolve(packageName, forcedUseMount = forcedUseMount) }
+            async {
+                // Keyed by the requested target, so a retry resolves the same saved variant.
+                resolve(packageName, forcedUseMount = forcedUseMount).copy(key = packageName)
+            }
         }.awaitAll()
     }
 
     suspend fun resolveManual(
         entries: List<ManualBatchPatchEntry>
     ): List<BatchPatchItem> = coroutineScope {
-        entries.distinctBy { it.input.packageName }.map { entry ->
+        // Each entry is its own item: the same app may be queued once per set of bundles.
+        entries.distinctBy { it.key }.map { entry ->
             async {
                 val resolved = resolve(
                     targetIdentifier = entry.sourceEntryKey ?: entry.input.packageName,
@@ -103,7 +108,8 @@ class BatchPlanResolver(
                     sourceEntryKey = entry.sourceEntryKey ?: resolved.sourceEntryKey,
                     patcherEngine = patcherEngine,
                     state = state,
-                    message = null
+                    message = null,
+                    key = entry.key
                 )
             }
         }.awaitAll()
@@ -172,7 +178,7 @@ class BatchPlanResolver(
         val rememberedSourceFile = installedRecord
             ?.repatchSourcePath
             ?.takeIf(String::isNotBlank)
-            ?.let(::File)
+            ?.let { SharedApkFiles.resolve(File(it)) }
             ?.takeIf(File::isFile)
         val rememberedSourceInfo = rememberedSourceFile?.let { file ->
             if (SplitApkPreparer.isSplitArchive(file)) {
@@ -469,9 +475,7 @@ class BatchPlanResolver(
         val savedOptions = validSavedConfiguration?.second
             ?: patchOptionsRepository.getOptions(
                 resolvedPackageName,
-                bundles.associate { bundle ->
-                    bundle.uid to bundle.patches.associateBy { it.name }
-                }
+                patchesByBundle
             )
         val options = savedOptions.mapNotNull { (uid, patchOptions) ->
             val selectedPatches = selection[uid].orEmpty()
@@ -641,7 +645,8 @@ class BatchPlanResolver(
             state = state,
             message = null,
             forceVersionMismatch = forcedMismatch,
-            signatureWorkflow = item.signatureWorkflow
+            signatureWorkflow = item.signatureWorkflow,
+            key = item.key
         )
     }
 
@@ -684,7 +689,7 @@ class BatchPlanResolver(
             installerTypeFor(item.useMount),
             bundles.associate { bundle ->
                 val selectable = selectableByBundle[bundle.uid].orEmpty()
-                bundle.uid to bundle.patches
+                bundle.uid to bundle.forSelection().patches
                     .filter { it.name in selectable }
                     .associateBy(PatchInfo::name)
             },

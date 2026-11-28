@@ -23,11 +23,13 @@ import com.gigamole.composescrollbars.scrolltype.knobtype.ScrollbarsStaticKnobTy
 fun Scrollbar(
     scrollState: ScrollState,
     modifier: Modifier = Modifier,
-    prominent: Boolean = false
+    prominent: Boolean = false,
+    thumbLength: Dp? = DASHBOARD_SCROLLBAR_THUMB_LENGTH
 ) {
     Scrollbar(
         ScrollbarsScrollType.Scroll(
-            knobType = ScrollbarsStaticKnobType.Auto(),
+            knobType = thumbLength?.let { ScrollbarsStaticKnobType.Exact(size = it) }
+                ?: ScrollbarsStaticKnobType.Auto(),
             state = scrollState
         ),
         modifier,
@@ -40,7 +42,7 @@ fun Scrollbar(
     lazyListState: LazyListState,
     modifier: Modifier = Modifier,
     prominent: Boolean = false,
-    thumbLength: Dp? = null
+    thumbLength: Dp? = DASHBOARD_SCROLLBAR_THUMB_LENGTH
 ) {
     LazyListScrollbar(lazyListState, modifier, prominent, thumbLength)
 }
@@ -53,14 +55,16 @@ private fun Scrollbar(
 ) {
     val thickness = if (prominent) 6.dp else 4.dp
     val idleAlpha = if (prominent) 0.6f else 0.35f
+    // ComposeScrollbars installs touch handlers across its entire overlay when enabled.
+    // Leave input with the scrollable content underneath the indicator.
     val visibilityType = if (prominent) {
         ScrollbarsVisibilityType.Dynamic.Fade(
-            isVisibleOnTouchDown = true,
+            isVisibleOnTouchDown = false,
             isStaticWhenScrollPossible = true
         )
     } else {
         ScrollbarsVisibilityType.Dynamic.Fade(
-            isVisibleOnTouchDown = true,
+            isVisibleOnTouchDown = false,
             isStaticWhenScrollPossible = false
         )
     }

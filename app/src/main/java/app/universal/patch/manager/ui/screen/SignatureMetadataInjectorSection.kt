@@ -1,5 +1,10 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.CircularProgressIndicator
+import app.universal.patch.manager.ui.component.design.OutlinedButton
+import app.universal.patch.manager.ui.component.design.TextButton
+import app.universal.patch.manager.ui.component.design.Button
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -13,7 +18,7 @@ import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.lazy.LazyColumn
+import app.universal.patch.manager.ui.component.LazyColumnWithScrollbar
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +28,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Android
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -39,24 +43,20 @@ import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -862,7 +862,7 @@ fun SignatureMetadataInjectorSection(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Surface(
-                shape = RoundedCornerShape(12.dp),
+                shape = MaterialTheme.shapes.medium.withClassicCorner(12.dp),
                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
                 modifier = Modifier.size(42.dp)
             ) {
@@ -1350,7 +1350,7 @@ private fun SignatureMetadataAppPickerDialog(
                 )
             }
         ) { padding ->
-            LazyColumn(
+            LazyColumnWithScrollbar(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1378,7 +1378,7 @@ private fun SignatureMetadataAppPickerDialog(
                         Surface(
                             modifier = Modifier.fillMaxWidth()
                                 .clickable { onInstalledSelected(app) },
-                            shape = RoundedCornerShape(20.dp),
+                            shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
                             tonalElevation = 2.dp
                         ) {
                             Row(
@@ -1431,7 +1431,7 @@ private fun SignatureMetadataAppPickerDialog(
                         Surface(
                             modifier = Modifier.fillMaxWidth()
                                 .clickable { onDownloadedSelected(app) },
-                            shape = RoundedCornerShape(20.dp),
+                            shape = MaterialTheme.shapes.large.withClassicCorner(20.dp),
                             tonalElevation = 2.dp
                         ) {
                             Column(

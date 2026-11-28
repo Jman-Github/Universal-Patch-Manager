@@ -1,5 +1,11 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.ui.theme.withClassicCorner
+import app.universal.patch.manager.ui.component.design.LinearProgressIndicator
+import app.universal.patch.manager.ui.component.design.CircularProgressIndicator
+import app.universal.patch.manager.ui.component.design.IconButton
+import app.universal.patch.manager.ui.component.design.FilledTonalButton
+import app.universal.patch.manager.ui.component.design.TextButton
 import android.os.Build
 import android.net.Uri
 import android.content.ClipData
@@ -37,19 +43,14 @@ import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -69,7 +70,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -94,6 +95,7 @@ import app.universal.patch.manager.ui.component.patcher.InstallerPickerDialog
 import app.universal.patch.manager.ui.component.patcher.PatcherInformation
 import app.universal.patch.manager.ui.component.patcher.PatcherInformationCard
 import app.universal.patch.manager.ui.component.patcher.PatcherResourceUsageCards
+import app.universal.patch.manager.ui.component.patcher.ResourceUsageProgressLayout
 import app.universal.patch.manager.ui.component.patcher.rememberResourceGraphState
 import app.universal.patch.manager.ui.component.patcher.Steps
 import app.universal.patch.manager.ui.model.StepCategory
@@ -149,6 +151,7 @@ fun PatcherScreen(
     val pickerScope = rememberCoroutineScope()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val showPatcherMemoryUsageGraph by prefs.showPatcherMemoryUsageGraph.getAsState()
+    val pinResourceGraphs by prefs.pinPatcherResourceGraphs.getAsState()
     val compactResourceGraphs by prefs.compactPatcherResourceGraphs.getAsState()
     val showGraphExtraInfo by prefs.showPatcherResourceGraphExtraInfo.getAsState()
     val showCompactGraphExtraInfo by prefs.showCompactPatcherResourceGraphExtraInfo.getAsState()
@@ -384,7 +387,7 @@ fun PatcherScreen(
     }
 
     fun requestLeave(toDashboard: Boolean) = when {
-        isPatchingActive -> {
+        viewModel.shouldConfirmPatchingCancellation() -> {
             leaveToDashboardRequested = toDashboard
             showDismissConfirmationDialog = true
         }
@@ -672,14 +675,13 @@ fun PatcherScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.7f)
-                            .height(4.dp)
                             .clip(RoundedCornerShape(999.dp))
                     )
                 }
             },
             confirmButton = {},
             dismissButton = {},
-            shape = RoundedCornerShape(28.dp)
+            shape = MaterialTheme.shapes.extraLarge.withClassicCorner(28.dp)
         )
     }
 
@@ -817,14 +819,13 @@ fun PatcherScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.7f)
-                            .height(4.dp)
                             .clip(RoundedCornerShape(999.dp))
                     )
                 }
             },
             confirmButton = {},
             dismissButton = {},
-            shape = RoundedCornerShape(28.dp)
+            shape = MaterialTheme.shapes.extraLarge.withClassicCorner(28.dp)
         )
     }
     exportFileDialogState?.let { state ->
@@ -905,14 +906,13 @@ fun PatcherScreen(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth(0.7f)
-                            .height(4.dp)
                             .clip(RoundedCornerShape(999.dp))
                     )
                 }
             },
             confirmButton = {},
             dismissButton = {},
-            shape = RoundedCornerShape(28.dp)
+            shape = MaterialTheme.shapes.extraLarge.withClassicCorner(28.dp)
         )
     }
 
@@ -1010,23 +1010,12 @@ fun PatcherScreen(
     if (viewModel.isPreparingSplitSelection) {
         val downloadProgress = viewModel.prePatchDownloadProgress
         val downloadFraction = downloadProgress?.fraction
-        val message = when {
-            downloadProgress == null ->
-                stringResource(R.string.patcher_preparing_split_selection)
-            downloadFraction != null ->
-                stringResource(
-                    R.string.patcher_downloading_apk_progress,
-                    (downloadFraction * 100).toInt()
-                )
-            else -> stringResource(R.string.patcher_downloading_apk)
-        }
         TransparentLoadingDialog(
-            message = message,
-            cancelButtonText = stringResource(R.string.cancel),
-            onCancel = {
-                viewModel.cancelSplitSelectionPreparation()
-                onPageBack()
-            },
+            message = if (downloadProgress != null) {
+                if (downloadFraction != null) stringResource(
+                    R.string.patcher_downloading_apk_progress, (downloadFraction * 100).toInt()
+                ) else stringResource(R.string.patcher_downloading_apk)
+            } else null,
             progress = downloadFraction
         )
     }
@@ -1442,7 +1431,7 @@ fun PatcherScreen(
                                                 bottomEnd = 0.dp
                                             )
                                         } else {
-                                            RoundedCornerShape(16.dp)
+                                            MaterialTheme.shapes.large.withClassicCorner(16.dp)
                                         }
                                     )
                                     if (showMountFallbackMenu && !viewModel.isInstalling) {
@@ -1503,75 +1492,84 @@ fun PatcherScreen(
             LinearProgressIndicator(
                 progress = { patcherProgress.progress },
                 modifier = Modifier.fillMaxWidth(),
-                drawStopIndicator = {}
+                showStopIndicator = false
             )
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(16.dp)
-            ) {
-                if (showPatcherMemoryUsageGraph && viewModel.patcherMemoryUsageSamples.isNotEmpty()) {
-                    item(key = "memory-usage") {
-                        PatcherResourceUsageCards(
-                            compact = compactResourceGraphs,
-                            showExtraInfo = if (compactResourceGraphs) showCompactGraphExtraInfo else showGraphExtraInfo,
-                            samples = viewModel.patcherMemoryUsageSamples,
-                            isActive = isPatchingActive,
-                            graphState = resourceGraphState
+            val pinGraphs = pinResourceGraphs && showPatcherMemoryUsageGraph && viewModel.patcherMemoryUsageSamples.isNotEmpty()
+            val resourceGraphs: @Composable () -> Unit = {
+                PatcherResourceUsageCards(
+                    compact = compactResourceGraphs,
+                    showExtraInfo = if (compactResourceGraphs) showCompactGraphExtraInfo else showGraphExtraInfo,
+                    samples = viewModel.patcherMemoryUsageSamples,
+                    isActive = isPatchingActive,
+                    graphState = resourceGraphState
+                )
+            }
+            ResourceUsageProgressLayout(
+                pinGraphs = pinGraphs,
+                graphContent = resourceGraphs
+            ) { progressModifier ->
+                LazyColumn(
+                    modifier = progressModifier,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(16.dp)
+                ) {
+                    if (!pinGraphs && showPatcherMemoryUsageGraph && viewModel.patcherMemoryUsageSamples.isNotEmpty()) {
+                        item(key = "memory-usage") {
+                            resourceGraphs()
+                        }
+                    }
+                    item(key = "patcher-information") {
+                        PatcherInformationCard(
+                            information = PatcherInformation(
+                                appVersion = viewModel.informationAppVersion,
+                                appVersionCode = viewModel.informationAppVersionCode,
+                                patchCount = viewModel.selectedPatchCount,
+                                patchBundles = viewModel.selectedPatchBundleLabels,
+                                fallbackApkSizeBytes = viewModel.fallbackInputSizeBytes,
+                                fallbackSplitApk = viewModel.fallbackInputIsSplitApk,
+                                fallbackPatcherEngine = viewModel.fallbackPatcherEngine,
+                                session = viewModel.patcherSessionInfo
+                            ),
+                            expanded = patcherInformationExpanded,
+                            onExpandedChange = { expanded ->
+                                pickerScope.launch {
+                                    prefs.patcherInformationExpanded.update(expanded)
+                                }
+                            }
                         )
                     }
-                }
-                item(key = "patcher-information") {
-                    PatcherInformationCard(
-                        information = PatcherInformation(
-                            appVersion = viewModel.informationAppVersion,
-                            appVersionCode = viewModel.informationAppVersionCode,
-                            patchCount = viewModel.selectedPatchCount,
-                            patchBundles = viewModel.selectedPatchBundleLabels,
-                            fallbackApkSizeBytes = viewModel.fallbackInputSizeBytes,
-                            fallbackSplitApk = viewModel.fallbackInputIsSplitApk,
-                            fallbackPatcherEngine = viewModel.fallbackPatcherEngine,
-                            session = viewModel.patcherSessionInfo
-                        ),
-                        expanded = patcherInformationExpanded,
-                        onExpandedChange = { expanded ->
-                            pickerScope.launch {
-                                prefs.patcherInformationExpanded.update(expanded)
-                            }
-                        }
-                    )
-                }
-                items(
-                    items = steps.toList(),
-                    key = { it.first }
-                ) { (category, steps) ->
-                    Steps(
-                        category = category,
-                        steps = steps,
-                        subStepsById = patcherProgress.subStepsById,
-                        isExpanded = expandedCategories.contains(category),
-                        autoExpandRunning = autoExpandRunningSteps,
-                        autoExpandRunningMainOnly = useExclusiveAutoExpand,
-                        continueOnPatchError = continueOnPatchError,
-                        onExpand = {
-                            if (useExclusiveAutoExpand) {
-                                expandedCategories.clear()
-                            }
-                            expandedCategories.add(category)
-                        },
-                        onClick = {
-                            if (expandedCategories.contains(category)) {
-                                expandedCategories.remove(category)
-                            } else {
+                    items(
+                        items = steps.toList(),
+                        key = { it.first }
+                    ) { (category, steps) ->
+                        Steps(
+                            category = category,
+                            steps = steps,
+                            subStepsById = patcherProgress.subStepsById,
+                            isExpanded = expandedCategories.contains(category),
+                            autoExpandRunning = autoExpandRunningSteps,
+                            autoExpandRunningMainOnly = useExclusiveAutoExpand,
+                            continueOnPatchError = continueOnPatchError,
+                            onExpand = {
+                                if (useExclusiveAutoExpand) {
+                                    expandedCategories.clear()
+                                }
                                 expandedCategories.add(category)
-                            }
-                        },
-                        autoCollapseCompleted = autoCollapsePatcherSteps
-                    )
-                }
-                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
-                    item(key = "legacy-android-memory-warning") {
+                            },
+                            onClick = {
+                                if (expandedCategories.contains(category)) {
+                                    expandedCategories.remove(category)
+                                } else {
+                                    expandedCategories.add(category)
+                                }
+                            },
+                            autoCollapseCompleted = autoCollapsePatcherSteps
+                        )
+                    }
+                    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
+                        item(key = "legacy-android-memory-warning") {
+                        }
                     }
                 }
             }

@@ -1,0 +1,10 @@
+{
+  "uniqueId": "org.gnu:libgcc",
+  "name": "GCC runtime libraries",
+  "description": "The native GCC libraries used by the patcher JVM. Build recipes: https://github.com/termux-pacman/glibc-packages",
+  "website": "https://gcc.gnu.org/",
+  "licenses": [
+    "GPL-3.0-or-later",
+    "GCC-exception-3.1"
+  ]
+}

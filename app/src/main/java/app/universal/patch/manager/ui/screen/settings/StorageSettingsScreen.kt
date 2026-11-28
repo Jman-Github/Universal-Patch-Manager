@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.screen.settings
 
+import app.universal.patch.manager.ui.component.rememberAppBarScrollBehavior
+import app.universal.patch.manager.ui.component.design.TextButton
 import app.universal.patch.manager.util.managerStorageRoot
 
 import app.universal.patch.manager.util.managerStorageContext
@@ -44,9 +46,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -60,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -123,7 +123,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
     val filesystem: Filesystem = koinInject()
     val repatchSourceCleanup: RepatchSourceCleanup = koinInject()
     val coroutineScope = rememberCoroutineScope()
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = rememberAppBarScrollBehavior()
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
     val autoClearCacheInterval by prefs.autoClearCacheInterval.getAsState()
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -396,6 +396,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         ColumnWithScrollbar(
+            thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
             modifier = Modifier
                 .padding(paddingValues)
                 .fillMaxSize()
@@ -459,7 +460,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 val areas = snapshot?.areas.orEmpty()
-                val showUsageShimmer = isLoading || snapshot == null
+                val showUsageShimmer = snapshot == null
                 if (showUsageShimmer) {
                     val placeholderCount = snapshot?.areas?.size ?: STORAGE_AREA_PLACEHOLDER_COUNT
                     repeat(placeholderCount) { index ->
@@ -694,12 +695,38 @@ private fun StorageAreaItem(
                 Text(
                     text = stringResource(
                         R.string.storage_item_count,
-                        area.stats.fileCount,
-                        area.stats.directoryCount
+                        pluralStringResource(
+                            R.plurals.storage_file_count,
+                            area.stats.fileCount.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                            area.stats.fileCount
+                        ),
+                        pluralStringResource(
+                            R.plurals.storage_folder_count,
+                            area.stats.directoryCount.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                            area.stats.directoryCount
+                        )
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (area.clearTarget == null) {
+                    TextButton(
+                        onClick = onManage,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Settings,
+                            contentDescription = null,
+                            modifier = Modifier.width(18.dp).height(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(R.string.storage_manage_area),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
             }
         },
         trailingContent = {
@@ -729,12 +756,8 @@ private fun StorageAreaItem(
                         )
                     }
                 }
-                when (val clearTarget = area.clearTarget) {
-                    null -> StorageAreaActionButton(
-                        text = stringResource(R.string.storage_manage_area),
-                        onClick = onManage
-                    )
-                    else -> StorageAreaActionButton(
+                area.clearTarget?.let { clearTarget ->
+                    StorageAreaActionButton(
                         text = stringResource(R.string.clear),
                         enabled = !isLoading && (area.clearableBytes ?: area.stats.bytes) > 0L
                     ) { onClear(clearTarget) }
@@ -1040,6 +1063,7 @@ private suspend fun loadStorageSnapshot(
     val downloaderPluginsDir = context.privateAppDir("managed_downloader_plugins")
     val patcherRuntimePluginsDir = context.privateAppDir("managed_patcher_runtime_plugins")
     val patchedAppsDir = context.privateAppDir("patched-apps")
+    val sharedApksStats = context.privateAppDir("shared-apks").directoryStats()
     val retainedOriginalsDir = context.privateAppDir("original-apps")
     val repatchInputsDir = context.privateAppDir("repatch-inputs")
     val repatchInputStagingDir = context.privateAppDir("repatch-input-staging")
@@ -1102,6 +1126,7 @@ private suspend fun loadStorageSnapshot(
         patcherRuntimePluginsStats,
         patchedAppsStats,
         retainedOriginalsStats,
+        sharedApksStats,
         repatchInputsStats,
         patchProfileInputsStats,
         temporaryWorkspaceStats,
@@ -1140,6 +1165,13 @@ private suspend fun loadStorageSnapshot(
     )
 
     val areas = listOf(
+        StorageAreaUsage(
+            targetKey = R.string.storage_shared_apks,
+            title = context.getString(R.string.storage_shared_apks),
+            description = context.getString(R.string.storage_shared_apks_description),
+            stats = sharedApksStats,
+            clearTarget = null
+        ),
         StorageAreaUsage(
             targetKey = R.string.storage_internal_cache,
             title = context.getString(R.string.storage_internal_cache),

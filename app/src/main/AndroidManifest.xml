@@ -48,7 +48,7 @@
 
         <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
         <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
-        <!-- ART-only workers for Android JNI engines and JVM startup fallback. -->
+        <!-- Disposable patcher workers on ART or supervising a Liberica JVM child. -->
         <service
             android:name="app.universal.patch.manager.patcher.runtime.jvm.PatcherService"
             android:exported="false"
@@ -83,11 +83,6 @@
             android:exported="true"
             android:launchMode="singleTop"
             android:theme="@style/Theme.ReVancedManager">
-
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
 
             <intent-filter>
                 <action android:name="app.universal.patch.manager.action.PATCH_APP" />

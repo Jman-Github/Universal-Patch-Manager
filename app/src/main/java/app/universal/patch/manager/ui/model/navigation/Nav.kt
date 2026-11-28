@@ -27,7 +27,7 @@ data class BatchPatcher(
 )
 
 @Serializable
-data class BatchPatchDetails(val packageName: String)
+data class BatchPatchDetails(val itemKey: String)
 
 @Serializable
 data object BatchPatchesSelector :
