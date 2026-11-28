@@ -127,6 +127,8 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -154,6 +156,8 @@ import app.universal.patch.manager.patcher.patch.Option
 import app.universal.patch.manager.patcher.patch.PatchBundleInfo
 import app.universal.patch.manager.patcher.patch.PatchInfo
 import app.universal.patch.manager.patcher.patch.PatchLockState
+import app.universal.patch.manager.domain.manager.PATCH_CATEGORY_SECTION_PREFIX
+import app.universal.patch.manager.domain.manager.patchSectionKey
 import app.universal.patch.manager.domain.repository.PatchProfile
 import app.universal.patch.manager.domain.repository.resolvePatchProfileAppVersion
 import app.universal.patch.manager.ui.component.AppTopBar
@@ -288,6 +292,7 @@ fun PatchesSelectorScreen(
     val showOptionPreviews by viewModel.prefs.patchSelectionShowOptionPreviews.getAsState()
     val showCustomSections by viewModel.prefs.patchSelectionShowCustomSections.getAsState()
     val sectionOverrides by viewModel.prefs.patchSelectionSectionOverrides.getAsState()
+    val expandCategories by viewModel.prefs.patchSelectionExpandCategories.getAsState()
     var patchVersionsDialogState by remember { mutableStateOf<PatchVersionsDialogState?>(null) }
     val disablePatchSelectionTabSwipe by viewModel.prefs.disablePatchSelectionTabSwipe.getAsState()
     val preventAccidentalTouching by viewModel.prefs.preventAccidentalTouching.getAsState()
@@ -1180,16 +1185,26 @@ fun PatchesSelectorScreen(
         ) {
             val count = compatibleRows.size + incompatibleRows.size
             if (count == 0) return
-            val sectionKey = "${viewModel.appPackageName}:$uid:$id"
+            val sectionKey = patchSectionKey(viewModel.appPackageName, uid, id)
             val searching = query.isNotBlank()
+            // Built-in sections open expanded; categories follow the setting. A remembered
+            // override flips the section from that default.
+            val defaultExpanded = categoryTitle == null || expandCategories
             val expanded = if (searching) {
                 sectionKey !in searchCollapsedSections
             } else {
-                (sectionKey in sectionOverrides) == (categoryTitle != null)
+                (sectionKey in sectionOverrides) != defaultExpanded
             }
             item(key = "section:$uid:$id", contentType = 0) {
+                // Matches the rows: incompatible patches count only when they can be selected.
+                val selectedCount = compatibleRows.count { viewModel.isSelected(uid, it) } +
+                    if (viewModel.allowIncompatiblePatches) {
+                        incompatibleRows.count { viewModel.isSelected(uid, it) }
+                    } else 0
                 PatchSectionHeader(
                     title = categoryTitle ?: pluralStringResource(quantityRes, count),
+                    patchCount = count,
+                    selectedCount = selectedCount,
                     expanded = expanded,
                     onToggle = {
                         if (searching) {
@@ -1251,7 +1266,7 @@ fun PatchesSelectorScreen(
                 .sortedWith(compareBy({ it.lowercase(Locale.ROOT) }, { it }))
             for (category in categories) {
                 addSection(
-                    id = "category:$category",
+                    id = PATCH_CATEGORY_SECTION_PREFIX + category,
                     compatibleRows = compatibleByCategory[category].orEmpty(),
                     incompatibleRows = incompatibleByCategory[category].orEmpty(),
                     categoryTitle = category
@@ -3133,6 +3148,8 @@ private enum class PatchSortSelectionMode {
 @Composable
 private fun PatchSectionHeader(
     title: String,
+    patchCount: Int,
+    selectedCount: Int,
     expanded: Boolean,
     onToggle: () -> Unit,
     onHelpClick: (() -> Unit)?
@@ -3152,12 +3169,30 @@ private fun PatchSectionHeader(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                title,
-                modifier = Modifier.weight(1f, fill = false),
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.labelLarge
-            )
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    title,
+                    modifier = Modifier.weight(1f, fill = false),
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelLarge,
+                    // Long bundle category names wrap once before they are cut short.
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    pluralStringResource(R.plurals.patch_count, patchCount, patchCount),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1
+                )
+            }
+            if (selectedCount > 0) {
+                PatchSectionSelectedBadge(selectedCount)
+            }
             Icon(
                 if (expanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
                 contentDescription = null
@@ -3172,6 +3207,27 @@ private fun PatchSectionHeader(
             IconButton(onClick = onHelpClick) {
                 Icon(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.help))
             }
+        }
+    }
+}
+
+/** How many patches in a section are selected, as a check and a number. */
+@Composable
+private fun PatchSectionSelectedBadge(selectedCount: Int) {
+    val description = stringResource(R.string.patch_section_selected_count, selectedCount)
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        modifier = Modifier.clearAndSetSemantics { contentDescription = description }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(14.dp))
+            Text(selectedCount.toString(), style = MaterialTheme.typography.labelMedium)
         }
     }
 }

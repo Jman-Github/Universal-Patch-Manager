@@ -358,6 +358,14 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.download_behavior_section, null, R.string.downloads, Settings.Downloads),
             SearchEntry(R.string.download_export_section, null, R.string.downloads, Settings.Downloads),
             SearchEntry(R.string.navigation_tabs_section, null, R.string.general, Settings.General),
+            SearchEntry(
+                R.string.apps_tab_layout, R.string.apps_tab_layout_description, R.string.general, Settings.General,
+                keywords = listOf(R.string.dashboard_layout_keywords)
+            ),
+            SearchEntry(
+                R.string.bundles_tab_layout, R.string.bundles_tab_layout_description, R.string.general, Settings.General,
+                keywords = listOf(R.string.dashboard_layout_keywords)
+            ),
             SearchEntry(R.string.action_buttons_section, null, R.string.general, Settings.General),
             SearchEntry(R.string.theme_section, null, R.string.general, Settings.General),
             SearchEntry(R.string.background_section, null, R.string.general, Settings.General),
@@ -644,6 +652,11 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.patch_selection_version_tags_title, R.string.patch_selection_version_tags_description, R.string.patch_list_display_section, Settings.Patcher),
             SearchEntry(R.string.patch_selection_option_previews_title, R.string.patch_selection_option_previews_description, R.string.patch_list_display_section, Settings.Patcher),
             SearchEntry(R.string.patch_selection_show_custom_sections_title, R.string.patch_selection_show_custom_sections_description, R.string.patch_list_display_section, Settings.Patcher),
+            SearchEntry(
+                R.string.patch_selection_expand_categories_title, R.string.patch_selection_expand_categories_description,
+                R.string.patch_list_display_section, Settings.Patcher,
+                keywords = listOf(R.string.patch_selection_categories_keywords)
+            ),
             SearchEntry(R.string.patch_bundle_action_order_title, R.string.patch_bundle_action_order_description, R.string.action_buttons_section, Settings.General),
             SearchEntry(R.string.patch_bundle_action_visibility_title, R.string.patch_bundle_action_visibility_description, R.string.action_buttons_section, Settings.General),
             SearchEntry(R.string.batch_result_action_order_title, R.string.batch_result_action_order_description, R.string.action_buttons_section, Settings.General),

@@ -1813,6 +1813,7 @@ fun AdvancedSettingsScreen(
                 !showPatchSelectionVersionTags && !showPatchSelectionOptionPreviews
 
             val showCustomPatchSections by viewModel.prefs.patchSelectionShowCustomSections.getAsState()
+            val expandPatchCategories by viewModel.prefs.patchSelectionExpandCategories.getAsState()
             SettingsSearchHighlight(
                 targetKey = R.string.patch_list_display_section,
                 activeKey = highlightTarget,
@@ -1901,6 +1902,25 @@ fun AdvancedSettingsScreen(
                         },
                         headline = R.string.patch_selection_show_custom_sections_title,
                         description = R.string.patch_selection_show_custom_sections_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.patch_selection_expand_categories_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = expandPatchCategories,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.setPatchCategoriesExpanded(value)
+                            }
+                        },
+                        headline = R.string.patch_selection_expand_categories_title,
+                        description = R.string.patch_selection_expand_categories_description,
+                        enabled = showCustomPatchSections
                     )
                 }
             }

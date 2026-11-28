@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -32,6 +33,13 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import app.universal.patch.manager.domain.manager.DashboardListLayout
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -85,6 +93,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun BundleItem(
     modifier: Modifier = Modifier,
+    layout: DashboardListLayout = DashboardListLayout.CARDS,
     src: PatchBundleSource,
     patchCount: Int,
     manualUpdateInfo: PatchBundleRepository.ManualBundleUpdateInfo?,
@@ -321,6 +330,55 @@ fun BundleItem(
     val headerBase = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp)
     val cardBackground = cardBase.copy(alpha = if (src.enabled) 1f else 0.6f)
     val headerBackground = headerBase.copy(alpha = if (src.enabled) 1f else 0.7f)
+
+    if (layout != DashboardListLayout.CARDS) {
+        val versionText = src.version?.let {
+            if (it.startsWith("v", ignoreCase = true)) it else "v$it"
+        }
+        val patchCountText = if (src.state is PatchBundleSource.State.Available) {
+            pluralStringResource(R.plurals.patch_count, patchCount, patchCount)
+        } else null
+        val status = when (src.state) {
+            is PatchBundleSource.State.Failed ->
+                Triple(Icons.Outlined.ErrorOutline, stringResource(R.string.patches_error), true)
+            is PatchBundleSource.State.Missing ->
+                Triple(Icons.Outlined.Warning, stringResource(R.string.patches_missing), true)
+            is PatchBundleSource.State.Available -> manualUpdateBadge?.let {
+                Triple(Icons.Outlined.Update, stringResource(R.string.bundle_update_manual_available), false)
+            }
+        }
+        BundleSummaryEntry(
+            layout = layout,
+            modifier = modifier,
+            title = src.displayTitle,
+            version = versionText,
+            detail = listOfNotNull(versionText, patchCountText).joinToString(" • "),
+            icon = {
+                if (remoteSource != null) {
+                    CatalogIcon(
+                        bundleIcon.url,
+                        bundleIcon.avatar,
+                        src.displayTitle,
+                        modifier = Modifier.size(it),
+                        isOfficial = bundleIcon.url == BundleIconRepository.OFFICIAL_ICON_URL,
+                        onUnavailable = { error -> iconLoadFailure = error }
+                    )
+                } else {
+                    LocalBundleIcon(Modifier.size(it))
+                }
+            },
+            status = status,
+            containerColor = cardBackground,
+            titleColor = primaryTextColor,
+            detailColor = secondaryTextColor,
+            selectable = selectable,
+            selected = isBundleSelected,
+            toggleSelection = toggleSelection,
+            onClick = { viewBundleDialogPage = true },
+            onLongClick = onSelect
+        )
+        return
+    }
 
     Surface(
         modifier = modifier
@@ -586,6 +644,163 @@ fun BundleItem(
     }
 }
 
+/** A bundle as one short row ([DashboardListLayout.COMPACT]) or an icon tile ([DashboardListLayout.GRID]). */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun BundleSummaryEntry(
+    layout: DashboardListLayout,
+    modifier: Modifier,
+    title: String,
+    version: String?,
+    detail: String,
+    icon: @Composable (androidx.compose.ui.unit.Dp) -> Unit,
+    status: Triple<androidx.compose.ui.graphics.vector.ImageVector, String, Boolean>?,
+    containerColor: androidx.compose.ui.graphics.Color,
+    titleColor: androidx.compose.ui.graphics.Color,
+    detailColor: androidx.compose.ui.graphics.Color,
+    selectable: Boolean,
+    selected: Boolean,
+    toggleSelection: (Boolean) -> Unit,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val statusIcon: @Composable () -> Unit = {
+        status?.let { (image, description, isError) ->
+            Icon(
+                image,
+                contentDescription = description,
+                tint = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+    if (layout == DashboardListLayout.GRID) {
+        val shape = MaterialTheme.shapes.large.withClassicCorner(18.dp)
+        Surface(
+            modifier = modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            shape = shape,
+            tonalElevation = 2.dp,
+            color = containerColor
+        ) {
+            Box {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    icon(48.dp)
+                    // Two title lines and a version line on every tile keep each grid row even.
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = titleColor,
+                        textAlign = TextAlign.Center,
+                        minLines = 2,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = version.orEmpty(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = detailColor,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (selectable) {
+                    // Pulled into the corner so the checkbox square stays off the centered icon
+                    // on the narrowest tiles, level with the status icon opposite.
+                    Box(
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .offset(x = (-6).dp, y = (-6).dp)
+                    ) {
+                        HapticCheckbox(checked = selected, onCheckedChange = toggleSelection)
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                ) { statusIcon() }
+            }
+        }
+        return
+    }
+    val shape = MaterialTheme.shapes.medium.withClassicCorner(14.dp)
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 3.dp)
+            .clip(shape)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        shape = shape,
+        tonalElevation = 2.dp,
+        color = containerColor
+    ) {
+        Row(
+            modifier = Modifier.padding(
+                start = if (selectable) 4.dp else 12.dp,
+                end = 12.dp,
+                top = 10.dp,
+                bottom = 10.dp
+            ),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (selectable) HapticCheckbox(checked = selected, onCheckedChange = toggleSelection)
+            icon(32.dp)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = titleColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (detail.isNotBlank()) {
+                    Text(
+                        text = detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = detailColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            statusIcon()
+        }
+    }
+}
+
+/** Stands in for the catalog icon a local bundle does not have. */
+@Composable
+private fun LocalBundleIcon(modifier: Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                Icons.Outlined.Extension,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(0.55f)
+            )
+        }
+    }
+}
+
 @Composable
 private fun BundleActionPill(
     onClick: () -> Unit,
@@ -633,8 +848,28 @@ private fun BundleActionPill(
 
 @Composable
 fun BundleItemPlaceholder(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    layout: DashboardListLayout = DashboardListLayout.CARDS
 ) {
+    if (layout == DashboardListLayout.GRID) {
+        ShimmerBox(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(144.dp),
+            shape = MaterialTheme.shapes.large.withClassicCorner(18.dp)
+        )
+        return
+    }
+    if (layout == DashboardListLayout.COMPACT) {
+        ShimmerBox(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 3.dp)
+                .height(56.dp),
+            shape = MaterialTheme.shapes.medium.withClassicCorner(14.dp)
+        )
+        return
+    }
     val cardShape = MaterialTheme.shapes.large.withClassicCorner(18.dp)
     Surface(
         modifier = modifier

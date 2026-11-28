@@ -2846,4 +2846,16 @@ Details: %2$s</string>
     <string name="patch_selection_custom_sections">Custom sections</string>
     <string name="patch_section_expanded">Expanded</string>
     <string name="patch_section_collapsed">Collapsed</string>
+    <string name="apps_tab_layout">Apps tab layout</string>
+    <string name="apps_tab_layout_description">How the Apps tab shows your patched apps.</string>
+    <string name="bundles_tab_layout">Patch Bundles tab layout</string>
+    <string name="bundles_tab_layout_description">How the Patch Bundles tab shows your bundles.</string>
+    <string name="dashboard_layout_cards">Cards</string>
+    <string name="dashboard_layout_compact">Compact</string>
+    <string name="dashboard_layout_grid">Grid</string>
+    <string name="dashboard_layout_keywords">view list grid compact overview</string>
+    <string name="patch_selection_expand_categories_title">Expand custom sections</string>
+    <string name="patch_selection_expand_categories_description">Open patch selection with bundle categories expanded instead of collapsed. Changing this resets the categories you opened or closed yourself.</string>
+    <string name="patch_selection_categories_keywords">categories collapsed expanded</string>
+    <string name="patch_section_selected_count">%1$d selected</string>
 </resources>

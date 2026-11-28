@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import app.universal.patch.manager.R
 import app.universal.patch.manager.util.resolveAppDisplayLabel
 import app.universal.patch.manager.util.actualAppMetadataLabel
@@ -39,7 +40,9 @@ fun AppLabel(
     style: TextStyle = LocalTextStyle.current,
     centered: Boolean = false,
     defaultText: String? = stringResource(R.string.not_installed),
-    packageName: String? = packageInfo?.packageName
+    packageName: String? = packageInfo?.packageName,
+    maxLines: Int = Int.MAX_VALUE,
+    minLines: Int = 1
 ) {
     val context = LocalContext.current
     val appNames = koinInject<AppNameRepository>()
@@ -78,6 +81,9 @@ fun AppLabel(
                 shape = RoundedCornerShape(100)
             ),
         style = style,
-        textAlign = if (centered) TextAlign.Center else TextAlign.Start
+        textAlign = if (centered) TextAlign.Center else TextAlign.Start,
+        maxLines = maxLines,
+        minLines = minLines,
+        overflow = if (maxLines == Int.MAX_VALUE) TextOverflow.Clip else TextOverflow.Ellipsis
     )
 }

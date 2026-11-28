@@ -50,5 +50,9 @@ data class BundleDiscoveryState(
                 it.copy(bundlesScroll = it.bundlesScroll.normalized(), appsScroll = it.appsScroll.normalized())
             }
         }.getOrDefault(BundleDiscoveryState())
+
+        /** The saved state [saved] with its filters shown or hidden as [expanded], the rest kept. */
+        fun withFiltersExpanded(saved: String, expanded: Boolean): String =
+            decode(saved).copy(filtersExpanded = expanded).encode()
     }
 }

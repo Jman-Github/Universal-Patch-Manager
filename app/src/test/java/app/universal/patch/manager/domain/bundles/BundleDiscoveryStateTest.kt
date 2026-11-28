@@ -101,6 +101,23 @@ class BundleDiscoveryStateTest {
         } finally { scope.cancel() }
     }
 
+    @Test fun importingTheFiltersFlagKeepsTheRestOfTheBrowsingState() {
+        val saved = BundleDiscoveryState(
+            appsTab = true, filtersExpanded = true,
+            appsFilters = CatalogFilters(query = "video", release = "all"),
+            appsScroll = DiscoveryScrollPosition(12, 4)
+        )
+        val collapsed = BundleDiscoveryState.decode(
+            BundleDiscoveryState.withFiltersExpanded(saved.encode(), expanded = false)
+        )
+        assertEquals(saved.copy(filtersExpanded = false), collapsed)
+        // Nothing saved yet: the defaults, with only the flag changed.
+        assertEquals(
+            BundleDiscoveryState(filtersExpanded = false),
+            BundleDiscoveryState.decode(BundleDiscoveryState.withFiltersExpanded("", expanded = false))
+        )
+    }
+
     @Test fun aFailedWriteDoesNotStopLaterSaves() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val failure = CompletableDeferred<Unit>()

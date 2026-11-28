@@ -81,6 +81,7 @@ import androidx.compose.ui.unit.dp
 import app.universal.patch.manager.R
 import app.universal.patch.manager.data.platform.Filesystem
 import app.universal.patch.manager.domain.installer.RootInstaller
+import app.universal.patch.manager.domain.manager.DashboardListLayout
 import app.universal.patch.manager.ui.component.ConfirmDialog
 import app.universal.patch.manager.ui.component.AlertDialogExtended
 import app.universal.patch.manager.ui.component.AppTopBar
@@ -370,6 +371,40 @@ internal fun GeneralSettingsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
+                val appsTabLayout by prefs.appsTabLayout.getAsState()
+                val bundlesTabLayout by prefs.bundlesTabLayout.getAsState()
+                SettingsSearchHighlight(
+                    targetKey = R.string.apps_tab_layout,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    DashboardLayoutSetting(
+                        modifier = highlightModifier,
+                        title = R.string.apps_tab_layout,
+                        description = R.string.apps_tab_layout_description,
+                        value = appsTabLayout,
+                        onSelect = { layout ->
+                            viewModel.viewModelScope.launch { prefs.appsTabLayout.update(layout) }
+                        }
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.bundles_tab_layout,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    DashboardLayoutSetting(
+                        modifier = highlightModifier,
+                        title = R.string.bundles_tab_layout,
+                        description = R.string.bundles_tab_layout_description,
+                        value = bundlesTabLayout,
+                        onSelect = { layout ->
+                            viewModel.viewModelScope.launch { prefs.bundlesTabLayout.update(layout) }
+                        }
+                    )
+                }
+                ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
                     targetKey = R.string.hide_main_tab_labels,
                     activeKey = highlightTarget,
@@ -1073,6 +1108,48 @@ internal fun GeneralSettingsScreen(
                             }
                         }
                     )
+                }
+            }
+        }
+    }
+}
+
+/** Picks how a dashboard tab lists its entries: cards, compact rows or a grid. */
+@Composable
+private fun DashboardLayoutSetting(
+    modifier: Modifier,
+    @StringRes title: Int,
+    @StringRes description: Int,
+    value: DashboardListLayout,
+    onSelect: (DashboardListLayout) -> Unit
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(stringResource(title), style = MaterialTheme.typography.titleMedium)
+        Text(
+            stringResource(description),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(4.dp))
+        val options = DashboardListLayout.entries
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            options.forEachIndexed { index, option ->
+                val label = when (option) {
+                    DashboardListLayout.CARDS -> R.string.dashboard_layout_cards
+                    DashboardListLayout.COMPACT -> R.string.dashboard_layout_compact
+                    DashboardListLayout.GRID -> R.string.dashboard_layout_grid
+                }
+                SegmentedButton(
+                    selected = option == value,
+                    onClick = { if (option != value) onSelect(option) },
+                    shape = SegmentedButtonDefaults.itemShape(index, count = options.size)
+                ) {
+                    Text(stringResource(label), maxLines = 1)
                 }
             }
         }

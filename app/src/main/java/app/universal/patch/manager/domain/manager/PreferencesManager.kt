@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import app.universal.patch.manager.R
+import app.universal.patch.manager.domain.bundles.BundleDiscoveryState
 import app.universal.patch.manager.domain.manager.base.BasePreferencesManager
 import app.universal.patch.manager.domain.manager.base.EditorContext
 import app.universal.patch.manager.patcher.logger.PatcherLogMode
@@ -94,6 +95,8 @@ class PreferencesManager(
     val hideMainTabLabels = booleanPreference("hide_main_tab_labels", false)
     val showAppsTabUpdateCount = booleanPreference("show_apps_tab_update_count", true)
     val showBundlesTabUpdateCount = booleanPreference("show_bundles_tab_update_count", true)
+    val appsTabLayout = enumPreference("apps_tab_layout", DashboardListLayout.CARDS)
+    val bundlesTabLayout = enumPreference("bundles_tab_layout", DashboardListLayout.CARDS)
     val disableMainTabSwipe = booleanPreference("disable_main_tab_swipe", false)
     val disablePatchSelectionTabSwipe = booleanPreference("disable_patch_selection_tab_swipe", false)
     val preventAccidentalTouching = booleanPreference("prevent_accidental_touching", true)
@@ -399,6 +402,7 @@ class PreferencesManager(
     val patchSelectionFilterFlags = intPreference("patch_selection_filter_flags", -1)
     val patchSelectionShowNewPatches = booleanPreference("patch_selection_show_new_patches", true)
     val patchSelectionShowCustomSections = booleanPreference("patch_selection_show_custom_sections", true)
+    val patchSelectionExpandCategories = booleanPreference("patch_selection_expand_categories", false)
     val patchSelectionSectionOverrides = stringSetPreference("patch_selection_section_overrides", emptySet())
     val patchSelectionSortAlphabetical = booleanPreference("patch_selection_sort_alphabetical", false)
     val patchSelectionSortDescending = booleanPreference("patch_selection_sort_descending", false)
@@ -618,6 +622,7 @@ class PreferencesManager(
     val showSplitMergeResourceGraphExtraInfo = booleanPreference("show_split_merge_resource_graph_extra_info", false)
     val showCompactSplitMergeResourceGraphExtraInfo = booleanPreference("show_compact_split_merge_resource_graph_extra_info", false)
     val splitMergeInformationExpanded = booleanPreference("split_merge_information_expanded", true)
+    val splitInstallerLogExpanded = booleanPreference("split_installer_log_expanded", true)
     val splitMergeAutoExpandRunningSteps =
         booleanPreference("split_merge_auto_expand_running_steps", true)
     val splitMergeAutoExpandRunningStepsExclusive =
@@ -675,6 +680,9 @@ class PreferencesManager(
         val hideMainTabLabels: Boolean? = null,
         val showAppsTabUpdateCount: Boolean? = null,
         val showBundlesTabUpdateCount: Boolean? = null,
+        // Saved by name, so a backup naming a layout this version lacks still imports the rest.
+        val appsTabLayout: String? = null,
+        val bundlesTabLayout: String? = null,
         val disableMainTabSwipe: Boolean? = null,
         val disablePatchSelectionTabSwipe: Boolean? = null,
         val preventAccidentalTouching: Boolean? = null,
@@ -787,6 +795,7 @@ class PreferencesManager(
         val patchSelectionShowVersionTags: Boolean? = null,
         val patchSelectionShowOptionPreviews: Boolean? = null,
         val patchSelectionShowCustomSections: Boolean? = null,
+        val patchSelectionExpandCategories: Boolean? = null,
         val patchSelectionDisplayRestoreFlags: Int? = null,
         val patchBundleActionOrder: String? = null,
         val patchBundleHiddenActions: Set<String>? = null,
@@ -837,6 +846,7 @@ class PreferencesManager(
         val showSplitMergeResourceGraphExtraInfo: Boolean? = null,
         val showCompactSplitMergeResourceGraphExtraInfo: Boolean? = null,
         val splitMergeInformationExpanded: Boolean? = null,
+        val splitInstallerLogExpanded: Boolean? = null,
         val splitMergeAutoExpandRunningSteps: Boolean? = null,
         val splitMergeAutoExpandRunningStepsExclusive: Boolean? = null,
         val useCustomFilePicker: Boolean? = null,
@@ -845,8 +855,45 @@ class PreferencesManager(
         val patchBundleDiscoveryShowPrerelease: Boolean? = null,
         val patchBundleDiscoveryLatest: Boolean? = null,
         val patchBundleDiscoverySortMode: String? = null,
+        val patchBundleDiscoveryFiltersExpanded: Boolean? = null,
         val searchEngineHost: String? = null,
     )
+
+    /**
+     * Sets whether patch categories open expanded. Category sections opened or closed by hand were
+     * remembered relative to the old default, so they reset to the new one.
+     */
+    suspend fun setPatchCategoriesExpanded(expanded: Boolean) = edit {
+        applyPatchCategoriesExpanded(expanded)
+    }
+
+    private fun EditorContext.applyPatchCategoriesExpanded(expanded: Boolean) {
+        if (patchSelectionExpandCategories.value == expanded) return
+        patchSelectionExpandCategories.value = expanded
+        patchSelectionSectionOverrides.value =
+            patchSelectionSectionOverrides.value.withoutPatchCategoryOverrides()
+    }
+
+    /**
+     * Restores patch selection section states from a backup for the bundles in [restoredBundleUids],
+     * which take the backup's [overrides]; other bundles keep theirs. The backup was made while
+     * bundle categories defaulted to expanded when [backupExpandsCategories].
+     */
+    suspend fun importPatchSectionOverrides(
+        overrides: Set<String>,
+        restoredBundleUids: Set<Int>,
+        backupExpandsCategories: Boolean
+    ) = edit {
+        patchSelectionSectionOverrides.value = mergedSectionOverrides(
+            current = patchSelectionSectionOverrides.value,
+            imported = importedSectionOverrides(
+                overrides,
+                backupExpandsCategories = backupExpandsCategories,
+                expandsCategories = patchSelectionExpandCategories.value
+            ),
+            restoredBundleUids = restoredBundleUids
+        )
+    }
 
     suspend fun resetThemeSettings() = edit {
         expressiveDesign.value = expressiveDesign.default
@@ -937,6 +984,8 @@ class PreferencesManager(
             hideMainTabLabels = hideMainTabLabels.value,
             showAppsTabUpdateCount = showAppsTabUpdateCount.value,
             showBundlesTabUpdateCount = showBundlesTabUpdateCount.value,
+            appsTabLayout = appsTabLayout.value.name,
+            bundlesTabLayout = bundlesTabLayout.value.name,
             disableMainTabSwipe = disableMainTabSwipe.value,
             disablePatchSelectionTabSwipe = disablePatchSelectionTabSwipe.value,
             preventAccidentalTouching = preventAccidentalTouching.value,
@@ -1077,6 +1126,7 @@ class PreferencesManager(
             patchSelectionShowVersionTags = patchSelectionShowVersionTags.value,
             patchSelectionShowOptionPreviews = patchSelectionShowOptionPreviews.value,
             patchSelectionShowCustomSections = patchSelectionShowCustomSections.value,
+            patchSelectionExpandCategories = patchSelectionExpandCategories.value,
             patchSelectionDisplayRestoreFlags = patchSelectionDisplayRestoreFlags.value,
             patchBundleActionOrder = patchBundleActionOrder.value,
             patchBundleHiddenActions = patchBundleHiddenActions.value,
@@ -1137,6 +1187,7 @@ class PreferencesManager(
             showSplitMergeResourceGraphExtraInfo = showSplitMergeResourceGraphExtraInfo.value,
             showCompactSplitMergeResourceGraphExtraInfo = showCompactSplitMergeResourceGraphExtraInfo.value,
             splitMergeInformationExpanded = splitMergeInformationExpanded.value,
+            splitInstallerLogExpanded = splitInstallerLogExpanded.value,
             splitMergeAutoExpandRunningSteps = splitMergeAutoExpandRunningSteps.value,
             splitMergeAutoExpandRunningStepsExclusive = splitMergeAutoExpandRunningStepsExclusive.value,
             useCustomFilePicker = useCustomFilePicker.value,
@@ -1145,6 +1196,8 @@ class PreferencesManager(
             patchBundleDiscoveryShowPrerelease = patchBundleDiscoveryShowPrerelease.value,
             patchBundleDiscoveryLatest = patchBundleDiscoveryLatest.value,
             patchBundleDiscoverySortMode = patchBundleDiscoverySortMode.value,
+            patchBundleDiscoveryFiltersExpanded =
+                BundleDiscoveryState.decode(patchBundleDiscoveryState.value).filtersExpanded,
             searchEngineHost = searchEngineHost.value
         )
     }
@@ -1176,6 +1229,8 @@ class PreferencesManager(
         snapshot.hideMainTabLabels?.let { hideMainTabLabels.value = it }
         snapshot.showAppsTabUpdateCount?.let { showAppsTabUpdateCount.value = it }
         snapshot.showBundlesTabUpdateCount?.let { showBundlesTabUpdateCount.value = it }
+        snapshot.appsTabLayout?.let(DashboardListLayout::fromName)?.let { appsTabLayout.value = it }
+        snapshot.bundlesTabLayout?.let(DashboardListLayout::fromName)?.let { bundlesTabLayout.value = it }
         snapshot.disableMainTabSwipe?.let { disableMainTabSwipe.value = it }
         snapshot.disablePatchSelectionTabSwipe?.let { disablePatchSelectionTabSwipe.value = it }
         snapshot.preventAccidentalTouching?.let { preventAccidentalTouching.value = it }
@@ -1367,6 +1422,7 @@ class PreferencesManager(
         }
         snapshot.patchSelectionShowVersionTags?.let { patchSelectionShowVersionTags.value = it }
         snapshot.patchSelectionShowCustomSections?.let { patchSelectionShowCustomSections.value = it }
+        snapshot.patchSelectionExpandCategories?.let { applyPatchCategoriesExpanded(it) }
         snapshot.patchSelectionShowOptionPreviews?.let {
             patchSelectionShowOptionPreviews.value = it
         }
@@ -1384,6 +1440,10 @@ class PreferencesManager(
 
     private fun EditorContext.importDiscoverySettings(snapshot: SettingsSnapshot) {
         snapshot.patchBundleDiscoverySortMode?.let { patchBundleDiscoverySortMode.value = it }
+        snapshot.patchBundleDiscoveryFiltersExpanded?.let {
+            patchBundleDiscoveryState.value =
+                BundleDiscoveryState.withFiltersExpanded(patchBundleDiscoveryState.value, it)
+        }
         snapshot.youtubeAssetsSyncHeaderTransforms?.let { youtubeAssetsSyncHeaderTransforms.value = it }
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
         snapshot.downloaderPluginSourcesJson?.let { downloaderPluginSourcesJson.value = it }
@@ -1460,6 +1520,7 @@ class PreferencesManager(
         snapshot.showSplitMergeResourceGraphExtraInfo?.let { showSplitMergeResourceGraphExtraInfo.value = it }
         snapshot.showCompactSplitMergeResourceGraphExtraInfo?.let { showCompactSplitMergeResourceGraphExtraInfo.value = it }
         snapshot.splitMergeInformationExpanded?.let { splitMergeInformationExpanded.value = it }
+        snapshot.splitInstallerLogExpanded?.let { splitInstallerLogExpanded.value = it }
         snapshot.splitMergeAutoExpandRunningSteps?.let { splitMergeAutoExpandRunningSteps.value = it }
         snapshot.splitMergeAutoExpandRunningStepsExclusive?.let {
             splitMergeAutoExpandRunningStepsExclusive.value = it

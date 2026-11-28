@@ -510,7 +510,10 @@ private fun SplitInstallerRawLog(
     onExport: () -> Unit
 ) {
     var followLatest by remember(logSessionId) { mutableStateOf(true) }
-    var logExpanded by rememberSaveable(logSessionId) { mutableStateOf(true) }
+    val prefs = koinInject<PreferencesManager>()
+    val coroutineScope = rememberCoroutineScope()
+    // Saved, so the log stays open or closed across installs and goes into settings backups.
+    val logExpanded by prefs.splitInstallerLogExpanded.getAsState()
     val hasLogEntries by rememberUpdatedState(entries.isNotEmpty())
     val isLogDragged by scrollState.interactionSource.collectIsDraggedAsState()
     val showJumpToLatest by remember(scrollState, logSessionId) {
@@ -559,7 +562,7 @@ private fun SplitInstallerRawLog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(enabled = hasLogEntries) {
-                        logExpanded = !logExpanded
+                        coroutineScope.launch { prefs.splitInstallerLogExpanded.update(!logExpanded) }
                     },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
